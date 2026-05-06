@@ -4,8 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Wendy 溫蒂．貓與狗訓練日常</title>
-<link rel="icon" type="image/png" href="logo.png">
-<link rel="apple-touch-icon" href="logo.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#8b6f47">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Wendy 訓練">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
@@ -148,6 +154,44 @@
     border-radius: 10px;
     font-size: 12px;
   }
+
+  .card-menu-btn {
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    color: var(--text-soft);
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .card-menu-btn:hover { background: rgba(139,111,71,0.12); color: var(--brown-dark); }
+
+  .card-menu {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(61,47,31,0.18);
+    padding: 6px;
+    z-index: 50;
+    min-width: 160px;
+  }
+  .card-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .card-menu button:hover { background: var(--bg-soft); }
+  .card-menu button.danger { color: var(--work); }
+  .card-menu button.danger:hover { background: rgba(201,122,79,0.1); }
 
   .btn {
     background: var(--brown);
@@ -646,10 +690,13 @@ function _writeRaw(key, value) {
 }
 function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
-  // 寫到可同步的 key 時，更新 lastModified 並排程 push
+  // 寫到可同步的 key 時，且只有同步已啟用，才更新 lastModified 並排程 push
+  // （未啟用時若也標記 lastModified，會讓「全新裝置首次啟用同步」誤判自己比較新而推空資料）
   if (SYNCABLE_KEYS && SYNCABLE_KEYS.has(key)) {
-    localStorage.setItem(KEYS.lastModified, JSON.stringify(new Date().toISOString()));
-    if (typeof schedulePush === 'function') schedulePush();
+    if (typeof syncEnabled === 'function' && syncEnabled()) {
+      localStorage.setItem(KEYS.lastModified, JSON.stringify(new Date().toISOString()));
+      if (typeof schedulePush === 'function') schedulePush();
+    }
   }
 }
 function uid() {
@@ -795,6 +842,8 @@ async function pushToCloud() {
   setSyncStatus('syncing');
   try {
     const gistId = await findOrCreateSyncGist();
+    // 推之前把 lastModified 蓋成現在，確保雲端有時間戳給其他裝置比較
+    _writeRaw(KEYS.lastModified, new Date().toISOString());
     const payload = buildSyncPayload();
     await gistApi('PATCH', `/gists/${gistId}`, {
       files: { 'data.json': { content: JSON.stringify(payload, null, 2) } },
@@ -843,7 +892,15 @@ async function pullFromCloud(opts = {}) {
     const localTs = load(KEYS.lastModified, '');
     const remoteTs = remote.lastModified || '';
 
-    if (opts.forcePull || (remoteTs && remoteTs > localTs)) {
+    // 防呆：本機是空的（pets/sessions 都沒資料）但雲端有，無條件拉取
+    // 避免「全新裝置首次啟用」誤推空資料蓋掉雲端
+    const localPets = load(KEYS.pets, []);
+    const localSess = load(KEYS.sessions, []);
+    const localEmpty = (!localPets || localPets.length === 0) && (!localSess || localSess.length === 0);
+    const remoteHasData = (Array.isArray(remote.pets) && remote.pets.length > 0)
+                       || (Array.isArray(remote.sessions) && remote.sessions.length > 0);
+
+    if (opts.forcePull || (remoteTs && remoteTs > localTs) || (localEmpty && remoteHasData)) {
       applySyncPayload(remote);
       updateSyncSettings({ syncLastTime: new Date().toISOString() });
       setSyncStatus('ok');
@@ -1270,7 +1327,7 @@ function renderSessions() {
                 ${recCount > 0 ? ' · 已記錄 ' + recCount + ' 項' : ' · 尚未記錄'}
               </div>
             </div>
-            <span class="badge">›</span>
+            <button class="card-menu-btn" data-menu="${s.id}" title="更多動作">⋯</button>
           </div>
         </div>`;
     }).join('');
@@ -1278,9 +1335,60 @@ function renderSessions() {
   main.innerHTML = meta + body + `<button class="fab" id="fab">＋</button>`;
   document.getElementById('editPet').onclick = () => openPetForm(pet);
   main.querySelectorAll('.card[data-id]').forEach(el => {
-    el.onclick = () => go('session', { sessionId: el.dataset.id });
+    el.onclick = (e) => {
+      // 點到 ⋯ 按鈕時不要進入該堂課
+      if (e.target.classList.contains('card-menu-btn')) return;
+      go('session', { sessionId: el.dataset.id });
+    };
+  });
+  // ⋯ 按鈕：開選單（編輯 / 刪除）
+  main.querySelectorAll('.card-menu-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const sid = btn.dataset.menu;
+      const sess = getSession(sid);
+      if (!sess) return;
+      openSessionMenu(btn, sess);
+    };
   });
   document.getElementById('fab').onclick = () => openSessionForm();
+}
+
+function openSessionMenu(anchorBtn, sess) {
+  // 關掉舊的（如果有）
+  document.querySelectorAll('.card-menu').forEach(m => m.remove());
+  const rect = anchorBtn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'card-menu';
+  menu.style.position = 'fixed';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.right = (window.innerWidth - rect.right) + 'px';
+  menu.innerHTML = `
+    <button data-act="edit">✏️ 編輯課程資訊</button>
+    <button data-act="delete" class="danger">🗑 刪除這堂課</button>
+  `;
+  document.body.appendChild(menu);
+  // 點外面關閉
+  setTimeout(() => {
+    const close = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', close);
+      }
+    };
+    document.addEventListener('click', close);
+  }, 0);
+  menu.querySelector('[data-act="edit"]').onclick = () => {
+    menu.remove();
+    openSessionForm(sess);
+  };
+  menu.querySelector('[data-act="delete"]').onclick = () => {
+    menu.remove();
+    if (!confirm(`刪除 ${fmtDate(sess.date)} 這堂課的所有記錄？\n\n寵物資料與其他堂課不受影響。`)) return;
+    save(KEYS.sessions, load(KEYS.sessions, []).filter(s => s.id !== sess.id));
+    showNotice('已刪除課程');
+    render();
+  };
 }
 
 function openSessionForm(session = null) {
