@@ -1877,12 +1877,9 @@ function exportPdf(sess, pet) {
     Wendy 溫蒂．貓與狗訓練日常 · 產出時間：${new Date().toLocaleString('zh-TW')}
   </footer>
 
-  <script>
-    // 載入後自動跳出列印對話框
-    window.addEventListener('load', () => {
-      setTimeout(() => window.print(), 400);
-    });
-  </script>
+  <scr` + `ipt>
+    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
+  </scr` + `ipt>
 </body>
 </html>`;
 
