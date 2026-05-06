@@ -1,0 +1,16 @@
+{
+  "name": "Wendy 溫蒂．貓與狗訓練日常",
+  "short_name": "Wendy",
+  "description": "貓與狗訓練課程記錄、寵物照護日記",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f0e6d6",
+  "theme_color": "#8b6f47",
+  "orientation": "portrait",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
