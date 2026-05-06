@@ -62,6 +62,22 @@
   .icon-btn:hover { background: rgba(255,255,255,0.15); }
   .icon-btn:disabled { opacity: 0.3; cursor: default; }
 
+  .sync-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #999;
+    flex-shrink: 0;
+    margin: 0 4px;
+    cursor: help;
+    transition: background 0.3s;
+  }
+  .sync-dot.ok { background: #6b9e6e; }
+  .sync-dot.syncing { background: #c9a85a; animation: pulse 1.2s ease-in-out infinite; }
+  .sync-dot.pending { background: #c9a85a; }
+  .sync-dot.error { background: #c97a4f; }
+  .sync-dot.disabled { background: #999; opacity: 0.5; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
   main { padding: 16px; }
 
   .crumb {
@@ -494,6 +510,7 @@
   <header class="top">
     <button class="icon-btn" id="backBtn" title="返回上一層">‹</button>
     <h1 id="appTitle">Wendy 溫蒂．貓與狗訓練日常</h1>
+    <span class="sync-dot" id="syncDot" title="同步狀態（點開設定查看）"></span>
     <button class="icon-btn" id="homeBtn" title="回首頁">🏠</button>
     <button class="icon-btn" id="settingsBtn" title="設定">⚙</button>
   </header>
@@ -527,7 +544,16 @@ const KEYS = {
   itemsDog: 'petcare.trainingItems.dog',
   settings: 'petcare.settings',
   version: 'petcare.version',
+  lastModified: 'petcare.lastModified',  // 雲端同步用
 };
+
+// 哪些 key 會被同步到雲端（settings 不同步：含 PAT、device-specific）
+const SYNCABLE_KEYS = new Set([
+  'petcare.pets',
+  'petcare.sessions',
+  'petcare.trainingItems.cat',
+  'petcare.trainingItems.dog',
+]);
 
 const DEFAULT_DOG_ITEMS = [
   '坐下 Sit', '趴下 Down', '等等 Stay', '過來 Come', '跟隨散步 Heel',
@@ -578,8 +604,17 @@ function load(key, fallback) {
     return raw ? JSON.parse(raw) : fallback;
   } catch { return fallback; }
 }
+function _writeRaw(key, value) {
+  // 直接寫，不觸發 sync（用於 pull 從雲端蓋本機）
+  localStorage.setItem(key, JSON.stringify(value));
+}
 function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+  // 寫到可同步的 key 時，更新 lastModified 並排程 push
+  if (SYNCABLE_KEYS && SYNCABLE_KEYS.has(key)) {
+    localStorage.setItem(KEYS.lastModified, JSON.stringify(new Date().toISOString()));
+    if (typeof schedulePush === 'function') schedulePush();
+  }
 }
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -603,22 +638,21 @@ function buildReportUrl(settings, gistId) {
 }
 
 function initStorage() {
-  if (!localStorage.getItem(KEYS.version)) {
-    save(KEYS.version, 2);
-  }
-  if (!localStorage.getItem(KEYS.pets)) save(KEYS.pets, []);
-  if (!localStorage.getItem(KEYS.sessions)) save(KEYS.sessions, []);
-  if (!localStorage.getItem(KEYS.itemsCat)) save(KEYS.itemsCat, DEFAULT_CAT_ITEMS);
-  if (!localStorage.getItem(KEYS.itemsDog)) save(KEYS.itemsDog, DEFAULT_DOG_ITEMS);
-  if (!localStorage.getItem(KEYS.settings)) save(KEYS.settings, {
+  // 用 _writeRaw 避免種子初始化誤觸發雲端 push（不該認為這是「使用者改動」）
+  if (!localStorage.getItem(KEYS.version)) _writeRaw(KEYS.version, 2);
+  if (!localStorage.getItem(KEYS.pets)) _writeRaw(KEYS.pets, []);
+  if (!localStorage.getItem(KEYS.sessions)) _writeRaw(KEYS.sessions, []);
+  if (!localStorage.getItem(KEYS.itemsCat)) _writeRaw(KEYS.itemsCat, DEFAULT_CAT_ITEMS);
+  if (!localStorage.getItem(KEYS.itemsDog)) _writeRaw(KEYS.itemsDog, DEFAULT_DOG_ITEMS);
+  if (!localStorage.getItem(KEYS.settings)) _writeRaw(KEYS.settings, {
     githubPat: '',
     githubUser: 'wendypettrainer',
     githubRepo: 'pet-care',
   });
   // Migration: 任何舊格式（string[] / {name,steps}）→ v3 {name, methods[]}
-  save(KEYS.itemsCat, ensureItemShape(load(KEYS.itemsCat, [])));
-  save(KEYS.itemsDog, ensureItemShape(load(KEYS.itemsDog, [])));
-  save(KEYS.version, 3);
+  _writeRaw(KEYS.itemsCat, ensureItemShape(load(KEYS.itemsCat, [])));
+  _writeRaw(KEYS.itemsDog, ensureItemShape(load(KEYS.itemsDog, [])));
+  _writeRaw(KEYS.version, 3);
 }
 
 const state = {
@@ -628,6 +662,172 @@ const state = {
   petFilter: '',  // '' | 'dog' | 'cat'
   petQuery: '',
 };
+
+/* ============== CLOUD SYNC ============== */
+const SYNC = {
+  GIST_DESCRIPTION: 'Wendy 訓練資料同步 v1',
+  pushTimer: null,
+  pushing: false,
+  pulling: false,
+  status: 'idle',          // idle | pending | syncing | ok | error | offline | disabled
+  lastError: '',
+  statusListeners: [],
+};
+
+function syncEnabled() {
+  const s = load(KEYS.settings, {});
+  return !!s.syncEnabled && !!s.githubPat;
+}
+function setSyncStatus(status, errMsg) {
+  SYNC.status = status;
+  SYNC.lastError = errMsg || '';
+  SYNC.statusListeners.forEach(fn => { try { fn(); } catch(e){} });
+}
+function onSyncStatusChange(fn) { SYNC.statusListeners.push(fn); }
+function getSyncSettings() { return load(KEYS.settings, {}); }
+function updateSyncSettings(patch) {
+  const cur = load(KEYS.settings, {});
+  Object.assign(cur, patch);
+  // 用底層寫入避免被當成可同步 key（settings 不同步）
+  _writeRaw(KEYS.settings, cur);
+}
+
+async function gistApi(method, path, body) {
+  const s = load(KEYS.settings, {});
+  if (!s.githubPat) throw new Error('未設定 PAT');
+  const r = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: {
+      'Authorization': `Bearer ${s.githubPat}`,
+      'Accept': 'application/vnd.github+json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    throw new Error(`GitHub ${r.status}: ${txt.slice(0, 120)}`);
+  }
+  return r.json();
+}
+
+async function findOrCreateSyncGist() {
+  const s = load(KEYS.settings, {});
+  if (s.syncGistId) return s.syncGistId;
+  // 用 description 找既有 gist（其他裝置已建立）
+  const list = await gistApi('GET', '/gists?per_page=100');
+  const found = list.find(g => (g.description || '').startsWith(SYNC.GIST_DESCRIPTION));
+  if (found) {
+    updateSyncSettings({ syncGistId: found.id });
+    return found.id;
+  }
+  // 都沒有 → 建新的
+  const gist = await gistApi('POST', '/gists', {
+    description: SYNC.GIST_DESCRIPTION,
+    public: false,
+    files: { 'data.json': { content: '{}' } },
+  });
+  updateSyncSettings({ syncGistId: gist.id });
+  return gist.id;
+}
+
+function buildSyncPayload() {
+  return {
+    schemaVersion: 4,
+    lastModified: load(KEYS.lastModified, ''),
+    pets: load(KEYS.pets, []),
+    sessions: load(KEYS.sessions, []),
+    itemsCat: load(KEYS.itemsCat, []),
+    itemsDog: load(KEYS.itemsDog, []),
+  };
+}
+
+function applySyncPayload(remote) {
+  if (!remote || typeof remote !== 'object') return false;
+  // 用 _writeRaw 避免遞迴 push
+  if (Array.isArray(remote.pets)) _writeRaw(KEYS.pets, remote.pets);
+  if (Array.isArray(remote.sessions)) _writeRaw(KEYS.sessions, remote.sessions);
+  if (Array.isArray(remote.itemsCat)) _writeRaw(KEYS.itemsCat, remote.itemsCat);
+  if (Array.isArray(remote.itemsDog)) _writeRaw(KEYS.itemsDog, remote.itemsDog);
+  if (remote.lastModified) _writeRaw(KEYS.lastModified, remote.lastModified);
+  return true;
+}
+
+async function pushToCloud() {
+  if (!syncEnabled()) return;
+  if (SYNC.pushing) return;
+  SYNC.pushing = true;
+  setSyncStatus('syncing');
+  try {
+    const gistId = await findOrCreateSyncGist();
+    const payload = buildSyncPayload();
+    await gistApi('PATCH', `/gists/${gistId}`, {
+      files: { 'data.json': { content: JSON.stringify(payload, null, 2) } },
+    });
+    updateSyncSettings({ syncLastTime: new Date().toISOString() });
+    setSyncStatus('ok');
+  } catch (e) {
+    setSyncStatus('error', e.message);
+    console.warn('Sync push failed:', e);
+  } finally {
+    SYNC.pushing = false;
+  }
+}
+
+function schedulePush() {
+  if (!syncEnabled()) return;
+  setSyncStatus('pending');
+  clearTimeout(SYNC.pushTimer);
+  SYNC.pushTimer = setTimeout(pushToCloud, 3000);
+}
+
+async function pullFromCloud(opts = {}) {
+  if (!syncEnabled()) return;
+  if (SYNC.pulling) return;
+  SYNC.pulling = true;
+  setSyncStatus('syncing');
+  try {
+    const gistId = await findOrCreateSyncGist();
+    const gist = await gistApi('GET', `/gists/${gistId}`);
+    const file = gist.files && gist.files['data.json'];
+    if (!file || !file.content) {
+      // 雲端是空的 → 推本機上去
+      SYNC.pulling = false;
+      await pushToCloud();
+      return;
+    }
+    let content = file.content;
+    if (file.truncated && file.raw_url) {
+      const r = await fetch(file.raw_url);
+      content = await r.text();
+    }
+    let remote;
+    try { remote = JSON.parse(content || '{}'); }
+    catch { throw new Error('雲端資料解析失敗'); }
+
+    const localTs = load(KEYS.lastModified, '');
+    const remoteTs = remote.lastModified || '';
+
+    if (opts.forcePull || (remoteTs && remoteTs > localTs)) {
+      applySyncPayload(remote);
+      updateSyncSettings({ syncLastTime: new Date().toISOString() });
+      setSyncStatus('ok');
+      // 重新 render 以反映新資料
+      if (typeof render === 'function') render();
+    } else if (opts.forcePush || localTs > remoteTs) {
+      SYNC.pulling = false;
+      await pushToCloud();
+      return;
+    } else {
+      updateSyncSettings({ syncLastTime: new Date().toISOString() });
+      setSyncStatus('ok');
+    }
+  } catch (e) {
+    setSyncStatus('error', e.message);
+    console.warn('Sync pull failed:', e);
+  } finally {
+    SYNC.pulling = false;
+  }
+}
 
 /* ============== UTIL ============== */
 function fmtDate(s) {
@@ -717,6 +917,31 @@ function updateHeader() {
     title.textContent = '⚙ 設定';
   }
 }
+
+function refreshSyncDot() {
+  const dot = document.getElementById('syncDot');
+  if (!dot) return;
+  if (!syncEnabled()) {
+    dot.className = 'sync-dot disabled';
+    dot.title = '同步未啟用';
+    return;
+  }
+  const map = {
+    ok: { cls: 'ok', txt: '已同步' },
+    syncing: { cls: 'syncing', txt: '同步中⋯' },
+    pending: { cls: 'pending', txt: '即將同步' },
+    error: { cls: 'error', txt: '同步失敗：' + (SYNC.lastError || '') },
+    idle: { cls: 'disabled', txt: '尚未同步' },
+  };
+  const info = map[SYNC.status] || map.idle;
+  dot.className = 'sync-dot ' + info.cls;
+  dot.title = info.txt;
+}
+onSyncStatusChange(refreshSyncDot);
+document.getElementById('syncDot').onclick = () => {
+  state._returnView = state.view;
+  go('settings');
+};
 
 document.getElementById('backBtn').onclick = () => {
   if (state.view === 'sessions') go('pets');
@@ -1501,11 +1726,45 @@ function renderSettings() {
   const dogItems = load(KEYS.itemsDog, []);
   const catItems = load(KEYS.itemsCat, []);
 
+  const lastSyncTxt = s.syncLastTime
+    ? new Date(s.syncLastTime).toLocaleString('zh-TW')
+    : '從未同步';
+  const syncStatusTxt = !s.syncEnabled ? '未啟用'
+    : SYNC.status === 'ok' ? '✅ 已同步'
+    : SYNC.status === 'syncing' ? '🔄 同步中⋯'
+    : SYNC.status === 'pending' ? '⏳ 即將上傳'
+    : SYNC.status === 'error' ? '❌ ' + SYNC.lastError
+    : '⏳ 等待中';
+
   main.innerHTML = `
     <div class="autosave-banner">
       💾 訓練項目區會<b>自動儲存</b>（離開欄位即存）。GitHub 設定要按下方「儲存設定」鈕。
     </div>
-    <h3 style="color:var(--brown-dark); margin: 4px 0 10px; font-size:15px">GitHub 同步</h3>
+
+    <h3 style="color:var(--brown-dark); margin: 4px 0 10px; font-size:15px">☁️ 跨裝置同步</h3>
+    <div class="card" style="cursor:default">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="s_syncEnabled" ${s.syncEnabled?'checked':''}
+               style="width:18px; height:18px; accent-color:var(--brown);">
+        <span><b>開啟雲端同步</b>（讓 iPhone / iPad / Mac 共用同一份資料）</span>
+      </label>
+      <div class="card-meta" style="margin-top:10px">
+        狀態：<b>${syncStatusTxt}</b><br>
+        最後同步：${lastSyncTxt}<br>
+        ${s.syncGistId ? '雲端 Gist ID：<code style="font-size:11px">' + escapeHtml(s.syncGistId) + '</code>' : ''}
+      </div>
+      <div class="actions-row" style="margin-top:12px">
+        <button class="btn ghost" id="s_pullNow">⬇ 從雲端拉取</button>
+        <button class="btn ghost" id="s_pushNow">⬆ 推上雲端</button>
+      </div>
+      <p class="card-meta" style="margin-top:10px; line-height:1.6">
+        💡 <b>怎麼運作</b>：每次本機改動 3 秒後自動推到你的私人 Gist。其他裝置打開 App 時自動拉取。<br>
+        💡 <b>衝突規則</b>：以時間戳「最後存者為準」。請避免兩台同時編輯。<br>
+        💡 <b>需要</b>：下方 GitHub PAT 已設定（gist 權限）。
+      </p>
+    </div>
+
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">GitHub 同步</h3>
     <div class="card" style="cursor:default">
       <div class="field">
         <label>GitHub Personal Access Token（gist 權限）</label>
@@ -1572,13 +1831,52 @@ function renderSettings() {
   refreshUrlPreview();
 
   document.getElementById('s_save').onclick = () => {
+    const cur = load(KEYS.settings, {});
     save(KEYS.settings, {
+      ...cur,
       githubPat: document.getElementById('s_pat').value.trim(),
       githubUser: document.getElementById('s_user').value.trim(),
       githubRepo: document.getElementById('s_repo').value.trim(),
       pagesSubPath: document.getElementById('s_subpath').value.trim(),
     });
     showNotice('設定已儲存');
+  };
+
+  // 同步：開關
+  const syncCheckbox = document.getElementById('s_syncEnabled');
+  if (syncCheckbox) {
+    syncCheckbox.onchange = async () => {
+      const enabling = syncCheckbox.checked;
+      updateSyncSettings({ syncEnabled: enabling });
+      refreshSyncDot();
+      if (enabling) {
+        const settings = load(KEYS.settings, {});
+        if (!settings.githubPat) {
+          showNotice('請先在下方填入 GitHub PAT', 'err');
+          updateSyncSettings({ syncEnabled: false });
+          syncCheckbox.checked = false;
+          refreshSyncDot();
+          return;
+        }
+        showNotice('啟動同步⋯');
+        await pullFromCloud();
+        renderSettings();  // 重 render 顯示最新狀態
+      } else {
+        showNotice('同步已關閉');
+      }
+    };
+  }
+  document.getElementById('s_pullNow').onclick = async () => {
+    if (!syncEnabled()) { showNotice('請先開啟同步', 'err'); return; }
+    showNotice('從雲端拉取⋯');
+    await pullFromCloud({ forcePull: true });
+    renderSettings();
+  };
+  document.getElementById('s_pushNow').onclick = async () => {
+    if (!syncEnabled()) { showNotice('請先開啟同步', 'err'); return; }
+    showNotice('推上雲端⋯');
+    await pushToCloud();
+    renderSettings();
   };
 
   // Tab switching for item editor
@@ -1773,6 +2071,11 @@ function render() {
 
 initStorage();
 render();
+refreshSyncDot();
+// 載入後背景同步（不阻塞 UI）
+if (syncEnabled()) {
+  setTimeout(() => pullFromCloud(), 200);
+}
 </script>
 </body>
 </html>
