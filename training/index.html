@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Wendy 溫蒂．貓與狗訓練日常</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
@@ -48,6 +50,41 @@
     letter-spacing: 0.5px;
     flex: 1;
     text-align: center;
+  }
+
+  .breadcrumb {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.85);
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+  .breadcrumb::-webkit-scrollbar { display: none; }
+  .bc-link {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .bc-link:hover { background: rgba(255,255,255,0.18); }
+  .bc-current {
+    color: white;
+    font-weight: 600;
+    padding: 4px 6px;
+    flex-shrink: 0;
+  }
+  .bc-sep {
+    color: rgba(255,255,255,0.4);
+    flex-shrink: 0;
+    padding: 0 1px;
   }
   .icon-btn {
     background: transparent;
@@ -509,9 +546,8 @@
 <div class="app">
   <header class="top">
     <button class="icon-btn" id="backBtn" title="返回上一層">‹</button>
-    <h1 id="appTitle">Wendy 溫蒂．貓與狗訓練日常</h1>
+    <nav class="breadcrumb" id="breadcrumb"></nav>
     <span class="sync-dot" id="syncDot" title="同步狀態（點開設定查看）"></span>
-    <button class="icon-btn" id="homeBtn" title="回首頁">🏠</button>
     <button class="icon-btn" id="settingsBtn" title="設定">⚙</button>
   </header>
   <main id="main"></main>
@@ -899,23 +935,55 @@ function go(view, params = {}) {
 
 function updateHeader() {
   const back = document.getElementById('backBtn');
-  const home = document.getElementById('homeBtn');
-  const title = document.getElementById('appTitle');
-  // 在首頁時：隱藏返回 + 隱藏首頁按鈕（已在首頁）
+  const breadcrumb = document.getElementById('breadcrumb');
   const isHome = state.view === 'pets';
   back.style.visibility = isHome ? 'hidden' : 'visible';
-  home.style.visibility = isHome ? 'hidden' : 'visible';
+
+  // 組麵包屑：每段 { label, action?, petId?, current? }
+  const segs = [{ label: '🏠', action: 'brand' }];
   if (state.view === 'pets') {
-    title.textContent = 'Wendy 溫蒂．貓與狗訓練日常';
+    segs.push({ label: '寵物列表', current: true });
   } else if (state.view === 'sessions') {
+    segs.push({ label: '寵物列表', action: 'pets' });
     const p = getPet(state.petId);
-    title.textContent = p ? `${speciesEmoji(p.species)} ${p.name}` : '';
+    if (p) segs.push({ label: `${speciesEmoji(p.species)} ${p.name}`, current: true });
   } else if (state.view === 'session') {
+    segs.push({ label: '寵物列表', action: 'pets' });
     const s = getSession(state.sessionId);
-    title.textContent = s ? `📒 ${fmtDate(s.date)}` : '';
+    const p = s && getPet(s.petId);
+    if (p) segs.push({ label: `${speciesEmoji(p.species)} ${p.name}`, action: 'sessions', petId: p.id });
+    if (s) segs.push({ label: fmtDate(s.date), current: true });
   } else if (state.view === 'settings') {
-    title.textContent = '⚙ 設定';
+    segs.push({ label: '寵物列表', action: 'pets' });
+    segs.push({ label: '⚙ 設定', current: true });
   }
+
+  breadcrumb.innerHTML = segs.map((seg, i) => {
+    const sep = i > 0 ? '<span class="bc-sep">/</span>' : '';
+    if (seg.current) return sep + `<span class="bc-current">${escapeHtml(seg.label)}</span>`;
+    const dataAttr = seg.petId ? ` data-petid="${escapeAttr(seg.petId)}"` : '';
+    return sep + `<a class="bc-link" data-action="${seg.action}"${dataAttr}>${escapeHtml(seg.label)}</a>`;
+  }).join('');
+
+  breadcrumb.querySelectorAll('.bc-link').forEach(a => {
+    a.onclick = (e) => {
+      e.preventDefault();
+      const action = a.dataset.action;
+      if (action === 'brand') {
+        // 本機 file:// 模式跳上層只會看到資料夾，沒意義 → 退回 App 內首頁
+        if (window.location.protocol === 'file:') {
+          go('pets');
+          showNotice('本機模式：實際部署後此按鈕會跳到品牌首頁');
+        } else {
+          window.location.href = '../';
+        }
+      } else if (action === 'pets') {
+        go('pets');
+      } else if (action === 'sessions') {
+        go('sessions', { petId: a.dataset.petid });
+      }
+    };
+  });
 }
 
 function refreshSyncDot() {
@@ -948,7 +1016,6 @@ document.getElementById('backBtn').onclick = () => {
   else if (state.view === 'session') go('sessions', { petId: state.petId });
   else if (state.view === 'settings') go(state._returnView || 'pets');
 };
-document.getElementById('homeBtn').onclick = () => go('pets');
 document.getElementById('settingsBtn').onclick = () => {
   state._returnView = state.view;
   go('settings');
