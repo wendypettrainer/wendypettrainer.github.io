@@ -1102,7 +1102,7 @@ function renderPets() {
   // 計算各物種數量
   const dogCount = allPets.filter(p => p.species === 'dog').length;
   const catCount = allPets.filter(p => p.species === 'cat').length;
-  const showSearch = allPets.length > 5;
+  const showSearch = allPets.length > 0;
 
   // Tabs
   const tabs = `
