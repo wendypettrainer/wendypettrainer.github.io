@@ -12,7 +12,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Wendy 訓練">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
     --bg: #f0e6d6;
@@ -1644,142 +1643,258 @@ function renderSession() {
   });
 }
 
-/* ============== PDF EXPORT ============== */
+/* ============== PDF EXPORT (走瀏覽器列印對話框，中文完美) ============== */
 function exportPdf(sess, pet) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const W = 210, M = 18;
-  let y = M;
-
-  // Header: logo on left, date on right, brown accent line below
-  if (LOGO_DATA) {
-    const targetH = 18;
-    const targetW = Math.min(70, (LOGO_W / LOGO_H) * targetH);
-    doc.addImage(LOGO_DATA, 'PNG', M, 12, targetW, targetH);
-  } else {
-    doc.setTextColor(61, 47, 31);
-    doc.setFontSize(14);
-    doc.text('Wendy', M, 22);
-    doc.setFontSize(10);
-    doc.setTextColor(107, 84, 53);
-    doc.text('溫蒂．貓與狗訓練日常', M, 28);
-  }
-  doc.setTextColor(107, 84, 53);
-  doc.setFontSize(10);
-  doc.text('Session Report', W - M, 18, { align: 'right' });
-  doc.setFontSize(11);
-  doc.setTextColor(61, 47, 31);
-  doc.text(fmtDate(sess.date), W - M, 25, { align: 'right' });
-
-  // Brown accent line
-  doc.setDrawColor(139, 111, 71);
-  doc.setLineWidth(0.6);
-  doc.line(M, 36, W - M, 36);
-  y = 46;
-
-  // Pet info
-  doc.setTextColor(61, 47, 31);
-  doc.setFontSize(13);
-  const genderTxt = pet.gender === 'male' ? ' (M)' : pet.gender === 'female' ? ' (F)' : '';
-  doc.text(`${pet.species==='cat'?'[Cat]':'[Dog]'} ${pet.name}${genderTxt}`, M, y);
-  y += 6;
-  doc.setFontSize(10);
-  doc.setTextColor(107, 84, 53);
-  const meta = [
-    pet.breed,
-    pet.birth,
-    pet.neutered === 'yes' ? 'Neutered' : pet.neutered === 'no' ? 'Intact' : '',
-    pet.ownerName ? `Owner: ${pet.ownerName}` : '',
-    sess.location ? `Loc: ${sess.location}` : '',
-    sess.duration ? `${sess.duration} min` : '',
-  ].filter(Boolean).join('  |  ');
-  doc.text(meta, M, y);
-  y += 8;
-
-  // Items
-  doc.setTextColor(61, 47, 31);
-  doc.setFontSize(11);
-  doc.text('訓練項目 / Training Items', M, y);
-  y += 5;
-  doc.setDrawColor(201, 182, 147);
-  doc.line(M, y, W - M, y);
-  y += 4;
-
-  // 把方法 / steps 注入 records 給 PDF 用
   const items = ensureItemShape(pet.species === 'cat' ? load(KEYS.itemsCat, []) : load(KEYS.itemsDog, []));
   const itemMap = {};
   items.forEach(it => { itemMap[it.name] = it.methods || []; });
 
+  const speciesEmoji = pet.species === 'cat' ? '🐱' : '🐶';
+  const genderTxt = pet.gender === 'male' ? '♂' : pet.gender === 'female' ? '♀' : '';
+  const neuteredTxt = pet.neutered === 'yes' ? '已絕育' : pet.neutered === 'no' ? '未絕育' : '';
+  const metaParts = [
+    pet.breed,
+    genderTxt,
+    neuteredTxt,
+    pet.birth,
+  ].filter(Boolean).join(' · ');
+
   const records = (sess.records || []).filter(r => r.selected);
-  if (records.length === 0) {
-    doc.setFontSize(10);
-    doc.setTextColor(150, 130, 100);
-    doc.text('（這堂課還沒有勾選項目）', M, y + 4);
-    y += 10;
-  } else {
-    records.forEach(r => {
-      doc.setFontSize(10);
-      const ratingTxt = r.rating === 'good' ? '[Good]' : r.rating === 'ok' ? '[OK]' : r.rating === 'work' ? '[Need work]' : '';
-      doc.setTextColor(61, 47, 31);
-      doc.text('• ' + r.name, M + 2, y + 4);
-      if (r.rating === 'good') doc.setTextColor(107, 158, 110);
-      else if (r.rating === 'ok') doc.setTextColor(201, 168, 90);
-      else if (r.rating === 'work') doc.setTextColor(201, 122, 79);
-      doc.text(ratingTxt, W - M, y + 4, { align: 'right' });
-      y += 6;
-      // 對被勾選的每個方法：印「方法名稱」+ 該方法的 steps
-      const itMethods = itemMap[r.name] || [];
-      const checkedNames = r.methods || [];
-      checkedNames.forEach(mn => {
-        const m = itMethods.find(im => im.name === mn);
-        doc.setFontSize(9);
-        doc.setTextColor(139, 111, 71);
-        doc.text(`> Method: ${mn}`, M + 6, y + 3);
-        y += 5;
-        if (m && m.steps && m.steps.trim()) {
-          doc.setTextColor(107, 84, 53);
-          const stepLines = doc.splitTextToSize(m.steps.trim(), W - M*2 - 12);
-          doc.text(stepLines, M + 12, y + 1);
-          y += stepLines.length * 4 + 2;
-        }
-        if (y > 270) { doc.addPage(); y = M; }
-      });
-      // Pet note
-      if (r.petNote && r.petNote.trim()) {
-        doc.setFontSize(9);
-        doc.setTextColor(139, 111, 71);
-        doc.text(`[For ${pet.name}]`, M + 6, y + 3);
-        const noteLines = doc.splitTextToSize(r.petNote.trim(), W - M*2 - 30);
-        doc.text(noteLines, M + 30, y + 3);
-        y += 3 + noteLines.length * 4 + 2;
-      }
-      if (y > 270) { doc.addPage(); y = M; }
+  const recordsHtml = records.length === 0
+    ? `<p style="color:#999; text-align:center; padding:16px;">（這堂課還沒有勾選項目）</p>`
+    : records.map(r => {
+        const itMethods = itemMap[r.name] || [];
+        const checkedNames = r.methods || [];
+        const ratingCls = r.rating === 'good' ? 'good' : r.rating === 'ok' ? 'ok' : r.rating === 'work' ? 'work' : 'none';
+        const ratingTxt = r.rating === 'good' ? '😊 表現好' : r.rating === 'ok' ? '😐 普通' : r.rating === 'work' ? '💪 需加強' : '已練習';
+        const methodsHtml = checkedNames.map(mn => {
+          const m = itMethods.find(im => im.name === mn);
+          const stepsTxt = (m && m.steps || '').trim();
+          return `
+            <div class="item-method">
+              <div class="item-label">🎯 方法：${escapeHtml(mn || '（未命名方法）')}</div>
+              ${stepsTxt ? `<div class="item-method-steps">${escapeHtml(stepsTxt)}</div>` : ''}
+            </div>`;
+        }).join('');
+        const noteHtml = (r.petNote && r.petNote.trim())
+          ? `<div class="item-petnote">
+               <div class="item-label">💭 針對 ${escapeHtml(pet.name)} 的調整</div>
+               ${escapeHtml(r.petNote)}
+             </div>`
+          : '';
+        return `
+          <div class="item">
+            <div class="item-row">
+              <span class="item-name">${escapeHtml(r.name)}</span>
+              <span class="rating ${ratingCls}">${ratingTxt}</span>
+            </div>
+            ${methodsHtml}
+            ${noteHtml}
+          </div>`;
+      }).join('');
+
+  // 用 LOGO_DATA（base64）或絕對 URL 引 logo
+  const logoSrc = LOGO_DATA || (window.location.protocol.startsWith('http')
+    ? window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'logo.png'
+    : '');
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>${escapeHtml(pet.name)}_${sess.date}</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
+                 "Noto Sans TC", "Heiti TC", sans-serif;
+    color: #3d2f1f;
+    line-height: 1.6;
+    background: white;
+    font-size: 13pt;
+  }
+  body { padding: 0; }
+
+  header.brand {
+    text-align: center;
+    padding-bottom: 12pt;
+    margin-bottom: 14pt;
+    border-bottom: 2px solid #8b6f47;
+  }
+  header.brand img { max-width: 200pt; height: auto; }
+  header.brand .sub {
+    font-size: 9pt; color: #8b6f47; letter-spacing: 1px;
+    margin-top: 6pt;
+  }
+
+  .pet-card {
+    background: #f7f0e3;
+    border-radius: 8pt;
+    padding: 12pt 14pt;
+    margin-bottom: 14pt;
+  }
+  .pet-name {
+    font-size: 16pt; font-weight: 600;
+    color: #6b5435; margin-bottom: 4pt;
+  }
+  .pet-meta { font-size: 11pt; color: #6b5435; }
+  .session-meta {
+    display: flex; gap: 14pt; flex-wrap: wrap;
+    margin-top: 10pt; padding-top: 10pt;
+    border-top: 1px solid #c9b693;
+    font-size: 11pt; color: #6b5435;
+  }
+
+  h2 {
+    color: #6b5435; font-size: 13pt;
+    margin: 16pt 0 8pt;
+    padding-bottom: 4pt;
+    border-bottom: 2px solid #c9b693;
+  }
+
+  .item {
+    background: #f7f0e3;
+    border-radius: 8pt;
+    padding: 10pt 12pt;
+    margin-bottom: 8pt;
+    page-break-inside: avoid;
+  }
+  .item-row {
+    display: flex; justify-content: space-between;
+    align-items: center; gap: 10pt;
+  }
+  .item-name { font-weight: 500; flex: 1; }
+  .rating {
+    font-size: 9.5pt; padding: 2pt 8pt; border-radius: 10pt;
+    color: white; white-space: nowrap;
+  }
+  .rating.good { background: #6b9e6e; }
+  .rating.ok { background: #c9a85a; }
+  .rating.work { background: #c97a4f; }
+  .rating.none { background: #c9b693; color: #6b5435; }
+
+  .item-method {
+    background: white;
+    padding: 8pt 10pt;
+    border-radius: 6pt;
+    border-left: 3px solid #8b6f47;
+    margin-top: 6pt;
+    font-size: 11pt;
+  }
+  .item-method-steps {
+    margin-top: 4pt;
+    color: #6b5435;
+    white-space: pre-wrap;
+  }
+  .item-petnote {
+    background: rgba(201, 182, 147, 0.3);
+    padding: 8pt 10pt;
+    border-radius: 6pt;
+    margin-top: 6pt;
+    color: #6b5435;
+    white-space: pre-wrap;
+    font-size: 11pt;
+  }
+  .item-label {
+    font-size: 9pt; color: #8b6f47;
+    font-weight: 600; letter-spacing: 0.5px;
+    margin-bottom: 3pt;
+  }
+
+  .homework {
+    background: #f7f0e3;
+    border-left: 4px solid #8b6f47;
+    padding: 10pt 12pt;
+    border-radius: 6pt;
+    white-space: pre-wrap;
+  }
+
+  footer {
+    text-align: center; margin-top: 20pt;
+    padding-top: 10pt;
+    font-size: 9pt; color: #8b6f47;
+    border-top: 1px solid #c9b693;
+  }
+
+  /* 列印控制條（不會被印出來） */
+  .print-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: #8b6f47; color: white;
+    padding: 10pt 14pt;
+    display: flex; gap: 12pt; align-items: center; justify-content: center;
+    z-index: 100;
+    font-size: 11pt;
+  }
+  .print-bar button {
+    background: white; color: #6b5435;
+    border: none; padding: 6pt 14pt; border-radius: 6pt;
+    cursor: pointer; font-size: 11pt; font-weight: 600;
+  }
+  .print-bar button:hover { background: #f7f0e3; }
+  body { padding-top: 56pt; }
+
+  @media print {
+    .print-bar { display: none !important; }
+    body { padding-top: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-bar">
+    💡 點「列印」→ 目的地選「另存為 PDF」→ 中文完美呈現
+    <button onclick="window.print()">🖨 列印 / 存 PDF</button>
+    <button onclick="window.close()">關閉</button>
+  </div>
+
+  <header class="brand">
+    ${logoSrc ? `<img src="${logoSrc}" alt="Wendy">` : '<h1 style="color:#6b5435">Wendy 溫蒂．貓與狗訓練日常</h1>'}
+    <div class="sub">Cat &amp; Dog Training Session Report · ${fmtDate(sess.date)}</div>
+  </header>
+
+  <div class="pet-card">
+    <div class="pet-name">${speciesEmoji} ${escapeHtml(pet.name)}</div>
+    <div class="pet-meta">
+      ${escapeHtml(metaParts || (pet.species==='cat'?'貓':'狗'))}
+      ${pet.ownerName ? ' · 飼主：' + escapeHtml(pet.ownerName) : ''}
+    </div>
+    <div class="session-meta">
+      <span>📅 ${fmtDate(sess.date)}</span>
+      ${sess.location ? `<span>📍 ${escapeHtml(sess.location)}</span>` : ''}
+      ${sess.duration ? `<span>⏱ ${sess.duration} 分鐘</span>` : ''}
+    </div>
+  </div>
+
+  <h2>🎯 本堂訓練項目</h2>
+  ${recordsHtml}
+
+  ${sess.homework ? `
+    <h2>📝 本週飼主作業</h2>
+    <div class="homework">${escapeHtml(sess.homework)}</div>
+  ` : ''}
+
+  <footer>
+    Wendy 溫蒂．貓與狗訓練日常 · 產出時間：${new Date().toLocaleString('zh-TW')}
+  </footer>
+
+  <script>
+    // 載入後自動跳出列印對話框
+    window.addEventListener('load', () => {
+      setTimeout(() => window.print(), 400);
     });
+  </script>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    showNotice('請允許跳出視窗以下載 PDF', 'err');
+    return;
   }
-  y += 4;
-
-  // Homework
-  if (sess.homework) {
-    doc.setTextColor(61, 47, 31);
-    doc.setFontSize(11);
-    doc.text('本週飼主作業 / Homework', M, y);
-    y += 5;
-    doc.line(M, y, W - M, y);
-    y += 4;
-    doc.setFontSize(10);
-    const lines = doc.splitTextToSize(sess.homework, W - M*2);
-    doc.text(lines, M + 2, y + 4);
-    y += 4 + lines.length * 5;
-  }
-
-  // Footer
-  doc.setFontSize(8);
-  doc.setTextColor(150, 130, 100);
-  doc.text('Wendy 溫蒂．貓與狗訓練日常', M, 287);
-
-  const fname = `${pet.name}_${sess.date}.pdf`;
-  doc.save(fname);
-  showNotice('已下載 ' + fname);
+  w.document.write(html);
+  w.document.close();
+  w.document.title = `${pet.name}_${sess.date}`;
+  showNotice('已開新分頁 → 列印對話框會自動跳出，選「另存為 PDF」');
 }
 
 /* ============== GIST SHARE ============== */
