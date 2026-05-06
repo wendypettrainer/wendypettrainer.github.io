@@ -19,6 +19,78 @@
     -webkit-font-smoothing:antialiased;
   }
   .container{max-width:720px; margin:0 auto; padding:16px;}
+
+  /* Top nav (麵包屑 + 同步狀態 + 設定) */
+  .top-nav {
+    background: var(--accent);
+    color: var(--header-bg);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+  .top-nav .breadcrumb {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.85);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+  .top-nav .breadcrumb::-webkit-scrollbar { display: none; }
+  .top-nav .bc-link {
+    color: inherit;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .top-nav .bc-link:hover { background: rgba(255,255,255,0.18); }
+  .top-nav .bc-current {
+    color: white;
+    font-weight: 600;
+    padding: 4px 6px;
+    flex-shrink: 0;
+  }
+  .top-nav .bc-sep {
+    color: rgba(255,255,255,0.4);
+    padding: 0 1px;
+    flex-shrink: 0;
+  }
+  .top-nav .sync-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #999;
+    margin: 0 4px;
+    cursor: help;
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .top-nav .sync-dot.ok { background: #6b9e6e; }
+  .top-nav .sync-dot.syncing { background: #c9a85a; animation: pulse 1.2s ease-in-out infinite; }
+  .top-nav .sync-dot.pending { background: #c9a85a; }
+  .top-nav .sync-dot.error { background: #c97a4f; }
+  .top-nav .sync-dot.disabled { background: #999; opacity: 0.5; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+  .top-nav .icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--header-bg);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .top-nav .icon-btn:hover { background: rgba(255,255,255,0.15); }
   .header{
     background:var(--header-bg); border-radius:12px; padding:16px 20px;
     display:flex; align-items:center; justify-content:space-between;
@@ -463,6 +535,15 @@
 </style>
 </head>
 <body>
+<header class="top-nav" id="topNav">
+  <nav class="breadcrumb" id="breadcrumb">
+    <a class="bc-link" id="bcBrand" title="回品牌首頁">🏠</a>
+    <span class="bc-sep">/</span>
+    <span class="bc-current">照護日記</span>
+  </nav>
+  <span class="sync-dot disabled" id="syncDot" title="同步狀態（點開設定查看）"></span>
+  <button class="icon-btn" id="settingsBtn" title="設定" type="button">⚙</button>
+</header>
 <div class="container">
 
   <div class="header">
@@ -760,7 +841,12 @@ function getData(){
 }
 function saveData(data){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-  catch(e){ toast('儲存失敗，可能空間不足'); }
+  catch(e){ toast('儲存失敗，可能空間不足'); return; }
+  // 雲端同步：只有啟用時才標 lastModified 與排程 push
+  if (typeof teddySyncEnabled === 'function' && teddySyncEnabled()) {
+    localStorage.setItem(TEDDY_SYNC.LAST_MOD_KEY, new Date().toISOString());
+    if (typeof teddySchedulePush === 'function') teddySchedulePush();
+  }
 }
 function ensureData(){
   let data = getData();
@@ -1169,6 +1255,164 @@ const GITHUB_PAT_KEY = 'teddy_github_pat';
 function getPat(){ return localStorage.getItem(GITHUB_PAT_KEY) || ''; }
 function setPat(v){ localStorage.setItem(GITHUB_PAT_KEY, v); }
 
+// === Cross-Device Cloud Sync (跨裝置同步) ===
+const TEDDY_SYNC = {
+  GIST_DESCRIPTION: 'Wendy 照護資料同步 v1',
+  ENABLED_KEY: 'teddy_sync_enabled',
+  GIST_ID_KEY: 'teddy_sync_gist_id',
+  LAST_MOD_KEY: 'teddy_sync_last_modified',
+  LAST_TIME_KEY: 'teddy_sync_last_time',
+  pushTimer: null,
+  pushing: false,
+  pulling: false,
+  status: 'idle',
+  lastError: '',
+  statusListeners: [],
+};
+
+function teddySyncEnabled() {
+  return localStorage.getItem(TEDDY_SYNC.ENABLED_KEY) === '1' && !!getPat();
+}
+function setTeddySyncEnabled(on) {
+  if (on) localStorage.setItem(TEDDY_SYNC.ENABLED_KEY, '1');
+  else localStorage.removeItem(TEDDY_SYNC.ENABLED_KEY);
+}
+function setTeddySyncStatus(status, errMsg) {
+  TEDDY_SYNC.status = status;
+  TEDDY_SYNC.lastError = errMsg || '';
+  TEDDY_SYNC.statusListeners.forEach(fn => { try { fn(); } catch(e){} });
+}
+function onTeddySyncStatusChange(fn) { TEDDY_SYNC.statusListeners.push(fn); }
+
+async function findOrCreateTeddySyncGist() {
+  let gistId = localStorage.getItem(TEDDY_SYNC.GIST_ID_KEY);
+  if (gistId) return gistId;
+  const list = await gistApi('GET', '/gists?per_page=100');
+  const found = (list || []).find(g => (g.description || '').startsWith(TEDDY_SYNC.GIST_DESCRIPTION));
+  if (found) {
+    localStorage.setItem(TEDDY_SYNC.GIST_ID_KEY, found.id);
+    return found.id;
+  }
+  const result = await gistApi('POST', '/gists', {
+    description: TEDDY_SYNC.GIST_DESCRIPTION,
+    public: false,
+    files: { 'data.json': { content: '{}' } },
+  });
+  localStorage.setItem(TEDDY_SYNC.GIST_ID_KEY, result.id);
+  return result.id;
+}
+
+function buildTeddySyncPayload() {
+  const data = getData() || {};
+  return {
+    schemaVersion: 1,
+    lastModified: localStorage.getItem(TEDDY_SYNC.LAST_MOD_KEY) || '',
+    teddy_data_v2: data,
+  };
+}
+
+function applyTeddySyncPayload(remote) {
+  if (!remote || typeof remote !== 'object') return false;
+  if (remote.teddy_data_v2 && typeof remote.teddy_data_v2 === 'object') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.teddy_data_v2));
+  }
+  if (remote.lastModified) {
+    localStorage.setItem(TEDDY_SYNC.LAST_MOD_KEY, remote.lastModified);
+  }
+  return true;
+}
+
+async function teddyPushToCloud() {
+  if (!teddySyncEnabled()) return;
+  if (TEDDY_SYNC.pushing) return;
+  TEDDY_SYNC.pushing = true;
+  setTeddySyncStatus('syncing');
+  try {
+    const gistId = await findOrCreateTeddySyncGist();
+    // 推之前蓋成現在時間，給其他裝置正確時間戳比較
+    localStorage.setItem(TEDDY_SYNC.LAST_MOD_KEY, new Date().toISOString());
+    const payload = buildTeddySyncPayload();
+    await gistApi('PATCH', '/gists/' + gistId, {
+      files: { 'data.json': { content: JSON.stringify(payload, null, 2) } },
+    });
+    localStorage.setItem(TEDDY_SYNC.LAST_TIME_KEY, new Date().toISOString());
+    setTeddySyncStatus('ok');
+  } catch (e) {
+    setTeddySyncStatus('error', e.message || String(e));
+    console.warn('Teddy sync push failed:', e);
+  } finally {
+    TEDDY_SYNC.pushing = false;
+  }
+}
+
+function teddySchedulePush() {
+  if (!teddySyncEnabled()) return;
+  setTeddySyncStatus('pending');
+  clearTimeout(TEDDY_SYNC.pushTimer);
+  TEDDY_SYNC.pushTimer = setTimeout(teddyPushToCloud, 3000);
+}
+
+async function teddyPullFromCloud(opts) {
+  opts = opts || {};
+  if (!teddySyncEnabled()) return;
+  if (TEDDY_SYNC.pulling) return;
+  TEDDY_SYNC.pulling = true;
+  setTeddySyncStatus('syncing');
+  try {
+    const gistId = await findOrCreateTeddySyncGist();
+    const gist = await gistApi('GET', '/gists/' + gistId);
+    const file = gist && gist.files && gist.files['data.json'];
+    if (!file || !file.content) {
+      // 雲端空 → 推本機上去
+      TEDDY_SYNC.pulling = false;
+      await teddyPushToCloud();
+      return;
+    }
+    let content = file.content;
+    if (file.truncated && file.raw_url) {
+      const r = await fetch(file.raw_url);
+      content = await r.text();
+    }
+    let remote;
+    try { remote = JSON.parse(content || '{}'); }
+    catch { throw new Error('雲端資料解析失敗'); }
+
+    const localTs = localStorage.getItem(TEDDY_SYNC.LAST_MOD_KEY) || '';
+    const remoteTs = remote.lastModified || '';
+
+    // 防呆：本機 pets 是空的、雲端有資料 → 強制 pull（不可能誤推空資料蓋掉雲端）
+    const localData = getData();
+    const localEmpty = !localData || !Array.isArray(localData.pets) || localData.pets.length === 0;
+    const remoteData = remote.teddy_data_v2 || {};
+    const remoteHasData = Array.isArray(remoteData.pets) && remoteData.pets.length > 0;
+
+    if (opts.forcePull || (remoteTs && remoteTs > localTs) || (localEmpty && remoteHasData)) {
+      applyTeddySyncPayload(remote);
+      localStorage.setItem(TEDDY_SYNC.LAST_TIME_KEY, new Date().toISOString());
+      setTeddySyncStatus('ok');
+      // 重新 render UI
+      try {
+        if (typeof refreshPetUI === 'function') refreshPetUI();
+        const dateEl = document.getElementById('date');
+        if (dateEl && dateEl.value && typeof loadDay === 'function') loadDay(dateEl.value);
+        if (typeof renderDateHistory === 'function') renderDateHistory();
+      } catch(e) { console.warn('Re-render after sync pull:', e); }
+    } else if (opts.forcePush || localTs > remoteTs) {
+      TEDDY_SYNC.pulling = false;
+      await teddyPushToCloud();
+      return;
+    } else {
+      localStorage.setItem(TEDDY_SYNC.LAST_TIME_KEY, new Date().toISOString());
+      setTeddySyncStatus('ok');
+    }
+  } catch (e) {
+    setTeddySyncStatus('error', e.message || String(e));
+    console.warn('Teddy sync pull failed:', e);
+  } finally {
+    TEDDY_SYNC.pulling = false;
+  }
+}
+
 async function gistApi(method, path, body){
   const pat = getPat();
   const headers = {
@@ -1396,6 +1640,94 @@ function copyShareUrl(){
 }
 
 // === Viewer 模式（客戶看的頁面）===
+// === 設定 modal（含跨裝置同步 + PAT）===
+function openTeddySettings(){
+  const pat = getPat();
+  const enabled = teddySyncEnabled();
+  const hasGistId = !!localStorage.getItem(TEDDY_SYNC.GIST_ID_KEY);
+  const lastTime = localStorage.getItem(TEDDY_SYNC.LAST_TIME_KEY);
+  const lastTimeText = lastTime ? new Date(lastTime).toLocaleString('zh-TW') : '從未同步';
+  const statusText = !enabled ? '未啟用'
+    : TEDDY_SYNC.status === 'ok' ? '✅ 已同步'
+    : TEDDY_SYNC.status === 'syncing' ? '🔄 同步中⋯'
+    : TEDDY_SYNC.status === 'pending' ? '⏳ 即將上傳'
+    : TEDDY_SYNC.status === 'error' ? '❌ ' + TEDDY_SYNC.lastError
+    : '⏳ 等待中';
+
+  $('petModalTitle').textContent = '⚙ 設定';
+  $('petModalBody').innerHTML = `
+    <div style="margin-bottom:18px">
+      <h3 style="margin:0 0 10px; font-size:15px; color:var(--accent)">☁️ 跨裝置同步</h3>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px 0;">
+        <input type="checkbox" id="ts_enabled" ${enabled?'checked':''} style="width:18px; height:18px; accent-color:var(--accent);">
+        <span><b>開啟雲端同步</b>（讓 iPhone / iPad / Mac 共用同一份資料）</span>
+      </label>
+      <p style="font-size:13px; color:var(--muted); margin:8px 0 0; line-height:1.6;">
+        狀態：<b>${statusText}</b><br>
+        最後同步：${lastTimeText}<br>
+        ${hasGistId ? '雲端 Gist ID：<code style="font-size:11px">' + (localStorage.getItem(TEDDY_SYNC.GIST_ID_KEY)||'') + '</code>' : ''}
+      </p>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button type="button" class="secondary" onclick="teddyForcePullClicked()" style="flex:1">⬇ 從雲端拉取</button>
+        <button type="button" class="secondary" onclick="teddyForcePushClicked()" style="flex:1">⬆ 推上雲端</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin:10px 0 0; line-height:1.6;">
+        💡 每次本機改動 3 秒後自動推到你的私人 Gist，其他裝置打開 App 時自動拉。<br>
+        💡 衝突規則：「最後存者為準」。請避免兩台同時編輯。
+      </p>
+    </div>
+    <div>
+      <h3 style="margin:0 0 10px; font-size:15px; color:var(--accent)">GitHub Personal Access Token</h3>
+      <input type="password" id="ts_pat" value="${(pat||'').replace(/"/g,'&quot;')}" placeholder="ghp_..." style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:6px; font-family:inherit;">
+      <p style="font-size:12px; color:var(--muted); margin:8px 0 0;">需要 gist 權限。同步與「上傳客戶連結」共用此 token。</p>
+    </div>
+  `;
+  $('petModalActions').innerHTML = `
+    <button type="button" class="secondary" onclick="closePetManager()">取消</button>
+    <button type="button" onclick="saveTeddySettings()">儲存</button>
+  `;
+  $('petModal').style.display = 'flex';
+}
+
+function saveTeddySettings(){
+  const newPat = $('ts_pat').value.trim();
+  setPat(newPat);
+  const wantEnable = $('ts_enabled').checked;
+  if (wantEnable && !newPat) {
+    toast('⚠️ 請先填 PAT 才能啟用同步');
+    setTeddySyncEnabled(false);
+    refreshTeddySyncDot();
+    return;
+  }
+  const wasEnabled = teddySyncEnabled();
+  setTeddySyncEnabled(wantEnable);
+  refreshTeddySyncDot();
+  closePetManager();
+  if (wantEnable && !wasEnabled) {
+    // 剛啟用 → 自動拉一次
+    toast('啟動同步⋯');
+    teddyPullFromCloud();
+  } else if (!wantEnable) {
+    toast('同步已關閉');
+  } else {
+    toast('設定已儲存');
+  }
+}
+
+async function teddyForcePullClicked(){
+  if (!teddySyncEnabled()) { toast('⚠️ 請先勾啟用'); return; }
+  toast('從雲端拉取⋯');
+  await teddyPullFromCloud({ forcePull: true });
+  // 重 render modal 讓使用者看到最新狀態
+  openTeddySettings();
+}
+async function teddyForcePushClicked(){
+  if (!teddySyncEnabled()) { toast('⚠️ 請先勾啟用'); return; }
+  toast('推上雲端⋯');
+  await teddyPushToCloud();
+  openTeddySettings();
+}
+
 async function enterViewerMode(gistId){
   document.body.classList.add('multiday-mode');
   document.body.classList.add('viewer-only');
@@ -1908,6 +2240,27 @@ body{background:var(--bg);}
   toast('✅ HTML 已下載');
 }
 
+// === Top-nav wiring (麵包屑 + 同步狀態 + 設定按鈕) ===
+function refreshTeddySyncDot() {
+  const dot = document.getElementById('syncDot');
+  if (!dot) return;
+  if (!teddySyncEnabled()) {
+    dot.className = 'sync-dot disabled';
+    dot.title = '同步未啟用';
+    return;
+  }
+  const map = {
+    ok: { cls: 'ok', txt: '已同步' },
+    syncing: { cls: 'syncing', txt: '同步中⋯' },
+    pending: { cls: 'pending', txt: '即將同步' },
+    error: { cls: 'error', txt: '同步失敗：' + (TEDDY_SYNC.lastError || '') },
+    idle: { cls: 'disabled', txt: '尚未同步' },
+  };
+  const info = map[TEDDY_SYNC.status] || map.idle;
+  dot.className = 'sync-dot ' + info.cls;
+  dot.title = info.txt;
+}
+
 // === 初始化 ===
 window.addEventListener('DOMContentLoaded', ()=>{
   // Viewer 模式：URL 帶 ?view=GIST_ID
@@ -1927,6 +2280,28 @@ window.addEventListener('DOMContentLoaded', ()=>{
   loadDay($('date').value);
   loadPhotos();
   updateHistoryHint();
+
+  // Top-nav wiring
+  const bcBrand = document.getElementById('bcBrand');
+  if (bcBrand) {
+    bcBrand.onclick = () => {
+      if (window.location.protocol === 'file:') {
+        toast('本機模式：實際部署後此按鈕會跳到品牌首頁');
+      } else {
+        window.location.href = '../';
+      }
+    };
+  }
+  const settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) {
+    settingsBtn.onclick = () => openTeddySettings();
+  }
+  const dot = document.getElementById('syncDot');
+  if (dot) dot.onclick = () => openTeddySettings();
+  onTeddySyncStatusChange(refreshTeddySyncDot);
+  refreshTeddySyncDot();
+  // 啟用過 → 背景拉雲端
+  if (teddySyncEnabled()) setTimeout(() => teddyPullFromCloud(), 200);
 
   // 切換日期 → 載入該天紀錄 + 照片
   $('date').addEventListener('change', ()=>{
