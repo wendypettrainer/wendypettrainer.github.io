@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>泰迪照護每日紀錄</title>
+<style>
+  :root{
+    --bg:#faf6f0; --card:#ffffff; --header-bg:#f0e6d6;
+    --accent:#8b6f47; --accent-soft:#b89674;
+    --text:#2d2620; --muted:#8a7e6f; --border:#e0d4c0;
+    --input-bg:#fafafa; --warn:#fff8e1; --warn-bd:#f0d878;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    background:var(--bg); color:var(--text); font-size:16px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .container{max-width:720px; margin:0 auto; padding:16px;}
+  .header{
+    background:var(--header-bg); border-radius:12px; padding:16px 20px;
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:16px; gap:12px;
+  }
+  .header h1{margin:0; font-size:24px; font-weight:800; letter-spacing:1px; display:flex; align-items:baseline; flex-wrap:wrap; gap:4px;}
+  .pet-selector{
+    font-size:24px; font-weight:800; letter-spacing:1px;
+    background:transparent; border:none; padding:0 6px;
+    color:var(--accent); font-family:inherit; cursor:pointer;
+    border-bottom:2px dashed var(--accent-soft);
+  }
+  .pet-selector:active{transform:scale(.98);}
+  .pet-selector .caret{font-size:12px; vertical-align:middle; opacity:.6; margin-left:2px;}
+  .pet-card{
+    display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border:1.5px solid var(--border); border-radius:10px;
+    margin-bottom:8px; cursor:pointer; background:white;
+  }
+  .pet-card.active{border-color:var(--accent); background:var(--header-bg);}
+  .pet-card .pet-emoji{font-size:24px; flex:0 0 auto;}
+  .pet-card .pet-info{flex:1; min-width:0;}
+  .pet-card .pet-info .pet-name{font-weight:700; font-size:16px;}
+  .pet-card .pet-info .pet-detail{font-size:12px; color:var(--muted); margin-top:2px;}
+  .pet-card .pet-actions{display:flex; gap:4px;}
+  .pet-card .pet-actions button{
+    flex:0 0 auto; padding:4px 10px; font-size:13px;
+    background:transparent; color:var(--muted);
+    border:1px solid var(--border); border-radius:6px;
+  }
+  .pet-card .pet-actions button:hover{color:var(--accent);}
+  .pet-form .row{margin-bottom:10px;}
+  .pet-form .row > .lbl{flex:0 0 56px;}
+  .pet-form input[type=text], .pet-form textarea{
+    background:var(--input-bg);
+  }
+  .header .date-input{
+    margin-top:6px; font-size:14px; padding:4px 8px; color:var(--muted);
+    background:transparent; border:1px dashed var(--accent-soft); border-radius:6px;
+    font-family:inherit;
+  }
+  .brand{
+    text-align:right; font-weight:800; font-size:20px; color:var(--accent);
+    line-height:1.1;
+  }
+  .brand .sub{font-size:10px; color:var(--muted); font-weight:500; margin-top:4px; letter-spacing:1px;}
+  .brand .logo{font-size:28px;}
+  .brand .logo-img{
+    display:block; max-width:88px; max-height:60px; width:auto; height:auto;
+    margin:0 0 4px auto; object-fit:contain;
+  }
+  .section{
+    background:var(--card); border-radius:12px; margin-bottom:12px;
+    overflow:hidden; border:1px solid var(--border);
+  }
+  .section-title{
+    background:var(--header-bg); padding:10px 16px; font-weight:700;
+    font-size:15px; text-align:center; letter-spacing:1px;
+  }
+  .section-body{padding:14px 16px;}
+  .row{display:flex; gap:10px; align-items:flex-start; margin-bottom:10px;}
+  .row:last-child{margin-bottom:0;}
+  .row > .lbl{
+    flex:0 0 56px; background:var(--input-bg); padding:8px;
+    border-radius:6px; font-weight:700; text-align:center; font-size:14px;
+    align-self:stretch; display:flex; align-items:center; justify-content:center;
+  }
+  .row .field{flex:1; min-width:0;}
+  input[type=text], input[type=number], textarea, select{
+    width:100%; padding:10px 12px; border:1px solid var(--border);
+    border-radius:8px; background:var(--input-bg); font-size:16px;
+    font-family:inherit; color:var(--text);
+  }
+  input[type=number]{ -moz-appearance:textfield; }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  textarea{min-height:72px; resize:vertical;}
+  .water-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .water-grid .cell{text-align:center;}
+  .water-grid .cell label{display:block; font-size:12px; color:var(--muted); margin-bottom:4px;}
+  .water-grid input{text-align:center;}
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:0;}
+  .two-col > div{padding:14px 16px;}
+  .two-col > div:first-child{border-right:1px solid var(--border);}
+  .col-title{font-weight:700; text-align:center; margin-bottom:10px; font-size:15px; letter-spacing:1px;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{
+    display:inline-flex; align-items:center; gap:4px; padding:7px 12px;
+    border:1.5px solid var(--border); border-radius:18px; background:white;
+    font-size:13px; cursor:pointer; user-select:none; transition:all .15s;
+  }
+  .chip input{display:none;}
+  .chip:has(input:checked){
+    background:var(--accent); color:white; border-color:var(--accent);
+  }
+  .num-with-unit{display:flex; gap:6px; align-items:center;}
+  .num-with-unit input{flex:1;}
+  .num-with-unit .unit{font-size:14px; color:var(--muted);}
+
+  /* 日期歷史 chips */
+  .date-history{
+    display:flex; gap:6px; margin:8px 0 12px;
+    overflow-x:auto; padding-bottom:4px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .date-history:empty{ margin:0; }
+  .date-chip{
+    flex:0 0 auto; white-space:nowrap;
+    padding:5px 12px; font-size:12px;
+    background:var(--input-bg); border:1px solid var(--border);
+    border-radius:14px; cursor:pointer; color:var(--muted);
+    font-family:inherit;
+  }
+  .date-chip.active{
+    background:var(--accent); color:white; border-color:var(--accent);
+    font-weight:700;
+  }
+  .date-chip.today-empty{
+    background:white; border-style:dashed; color:var(--accent-soft);
+  }
+
+  /* 嘔吐有/無 收合控制 */
+  #vomitDetails{display:none; margin-top:10px;}
+  #bodySection:has(input[name="vomit_status"][value="有"]:checked) #vomitDetails{
+    display:block;
+  }
+  .actions{display:flex; gap:8px; margin-top:16px;}
+  button{
+    flex:1; padding:14px; border-radius:10px; border:none;
+    background:var(--accent); color:white; font-size:16px; font-weight:700;
+    cursor:pointer; font-family:inherit;
+  }
+  button.secondary{
+    background:white; color:var(--accent); border:1.5px solid var(--accent);
+  }
+  button:active{transform:scale(.98);}
+  .share-result{
+    margin-top:12px; padding:14px; background:white;
+    border:1px solid var(--border); border-radius:10px; display:none;
+  }
+  .share-result.show{display:block;}
+  .share-url{
+    word-break:break-all; font-family:ui-monospace,monospace;
+    font-size:12px; background:var(--input-bg); padding:10px;
+    border-radius:6px; margin-bottom:8px; max-height:96px; overflow-y:auto;
+    color:var(--muted);
+  }
+  .photo-grid{
+    display:flex; flex-wrap:wrap; gap:8px;
+  }
+  .photo{
+    position:relative; height:120px; flex:0 0 auto;
+    border-radius:8px; overflow:hidden; background:var(--input-bg);
+  }
+  .photo img{
+    height:100%; width:auto; display:block;
+  }
+  .photo .remove{
+    position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6);
+    color:white; border-radius:50%; width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    border:none; cursor:pointer; padding:0; font-size:14px; line-height:1;
+  }
+  .photo-add{
+    border:2px dashed var(--border); display:flex; align-items:center;
+    justify-content:center; flex-direction:column; cursor:pointer;
+    color:var(--muted); font-size:12px;
+    width:120px; height:120px; flex:0 0 auto;
+    border-radius:8px;
+  }
+  .photo-add input{display:none;}
+  .photo-add .plus{font-size:24px; line-height:1;}
+  .photo-note{font-size:12px; color:var(--muted); margin-top:8px;}
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:#2d2620; color:white; padding:10px 18px; border-radius:8px;
+    opacity:0; transition:opacity .25s; z-index:1000; pointer-events:none;
+    font-size:14px;
+  }
+  .toast.show{opacity:1;}
+
+  /* 多日選擇彈窗 */
+  .modal{
+    position:fixed; inset:0; background:rgba(0,0,0,.5);
+    display:flex !important; align-items:center; justify-content:center;
+    z-index:2000; padding:16px;
+  }
+  .modal[style*="none"]{display:none !important;}
+  .modal-card{
+    background:white; border-radius:12px; width:100%; max-width:480px;
+    max-height:80vh; display:flex; flex-direction:column; overflow:hidden;
+  }
+  .modal-header{
+    padding:14px 18px; border-bottom:1px solid var(--border);
+    font-weight:700; font-size:16px;
+  }
+  .modal-body{
+    padding:8px 18px; overflow-y:auto; flex:1;
+  }
+  .modal-body label{
+    display:flex; align-items:center; gap:10px; padding:8px 0;
+    border-bottom:1px solid var(--border); cursor:pointer;
+  }
+  .modal-body label:last-child{border-bottom:none;}
+  .modal-body label input{width:18px; height:18px;}
+  .modal-body .summary{font-size:12px; color:var(--muted); margin-left:auto;}
+  .modal-actions{
+    display:flex; gap:8px; padding:12px 18px;
+    border-top:1px solid var(--border);
+  }
+  .modal-actions button{flex:1; padding:12px;}
+  .modal-toolbar{
+    display:flex; gap:8px; padding:6px 18px 0;
+  }
+  .modal-toolbar button{
+    flex:0 0 auto; padding:4px 10px; font-size:13px; font-weight:500;
+    background:transparent; color:var(--accent); border:1px solid var(--border);
+    border-radius:6px;
+  }
+
+  /* 多日報告檢視 */
+  body.multiday-mode .container, body.multiday-mode #toast{display:none;}
+  body.viewer-only{ background:var(--bg); }
+  body.viewer-only .container, body.viewer-only #petModal, body.viewer-only #multiModal{
+    display:none !important;
+  }
+  #multiReport{
+    max-width:760px; margin:0 auto; padding:16px;
+  }
+  .report-toolbar{
+    position:sticky; top:0; background:var(--bg); padding:8px 0 12px;
+    display:flex; gap:8px; z-index:10; margin-bottom:8px;
+  }
+  .report-toolbar button{padding:10px 14px; font-size:14px;}
+  .report-cover{
+    background:white; border:1px solid var(--border); border-radius:12px;
+    padding:24px 20px; text-align:center; margin-bottom:12px;
+  }
+  .report-cover .cover-logo{
+    max-width:120px; max-height:80px; margin:0 auto 16px;
+  }
+  .report-cover h1{
+    font-size:28px; margin:0 0 8px; letter-spacing:2px;
+  }
+  .report-cover .pet{
+    font-size:22px; color:var(--accent); font-weight:700; margin:8px 0;
+  }
+  .report-cover .period{
+    font-size:16px; color:var(--muted); margin:8px 0 24px;
+  }
+  .report-cover .stats{
+    display:grid; grid-template-columns:repeat(2,1fr); gap:8px;
+    text-align:left; max-width:360px; margin:0 auto;
+  }
+  .report-cover .stats .stat{
+    background:var(--input-bg); padding:10px 14px; border-radius:8px;
+  }
+  .report-cover .stats .stat .label{font-size:12px; color:var(--muted);}
+  .report-cover .stats .stat .value{font-size:18px; font-weight:700; color:var(--text);}
+  .report-cover .signoff{
+    margin-top:32px; font-size:13px; color:var(--muted); line-height:1.7;
+  }
+  .day-card{
+    background:white; border:1px solid var(--border); border-radius:12px;
+    padding:18px 22px; margin-bottom:12px;
+    page-break-inside:avoid; break-inside:avoid-page;
+  }
+  .day-card + .day-card{ page-break-before:always; break-before:page; }
+  .day-card h2{
+    margin:0 0 12px; font-size:20px; padding-bottom:8px;
+    border-bottom:2px solid var(--header-bg);
+  }
+  .day-card .day-row{
+    display:flex; gap:8px; padding:6px 0; font-size:14px;
+    border-bottom:1px dashed var(--border);
+  }
+  .day-card .day-row:last-child{border-bottom:none;}
+  .day-card .day-row .key{
+    flex:0 0 76px; font-weight:700; color:var(--accent);
+  }
+  .day-card .day-row .val{flex:1;}
+  .day-card .empty{color:var(--muted); font-style:italic;}
+
+  /* 表格式多日報告 */
+  .report-table-wrap{
+    background:white; border-radius:10px; overflow:auto;
+    margin-bottom:12px; border:1px solid var(--border);
+  }
+  .report-table{
+    width:100%; border-collapse:collapse; font-size:13px;
+  }
+  .report-table th, .report-table td{
+    border:1px solid var(--border); padding:8px 10px;
+    text-align:left; vertical-align:top;
+    word-break:break-word;
+  }
+  .report-table thead th{
+    background:var(--header-bg); font-weight:700;
+    text-align:center; white-space:nowrap;
+  }
+  .report-table tbody th{
+    background:var(--input-bg); font-weight:700;
+    color:var(--accent); text-align:center;
+    white-space:nowrap; width:1%;
+  }
+  .report-table td.empty{ color:#ccc; text-align:center; }
+  .report-table td.highlight{ background:#fff8e1; }
+  .report-orient-toggle{
+    display:inline-flex; gap:0; border-radius:6px; overflow:hidden;
+    border:1.5px solid var(--accent); margin-left:auto;
+  }
+  .report-orient-toggle button{
+    padding:6px 12px; font-size:13px; background:white;
+    color:var(--accent); border:none; border-radius:0;
+    flex:0 0 auto; cursor:pointer;
+  }
+  .report-orient-toggle button.active{
+    background:var(--accent); color:white;
+  }
+
+  @media print{
+    body.multiday-mode #multiReport{padding:0; max-width:none;}
+    body.multiday-mode .report-toolbar{display:none !important;}
+    body.multiday-mode .report-cover, body.multiday-mode .day-card{
+      border:none; box-shadow:none;
+    }
+    body.multiday-mode .report-cover{
+      padding:14px 16px; margin-bottom:8px;
+    }
+    body.multiday-mode .report-cover h1{ font-size:18pt; }
+    body.multiday-mode .report-cover .pet{ font-size:14pt; }
+    body.multiday-mode .report-cover .stats .value{ font-size:13pt; }
+    body.multiday-mode .report-cover .signoff{ margin-top:14px; font-size:9pt; }
+    body.multiday-mode .report-table-wrap{
+      border:none !important; overflow:visible !important;
+    }
+    body.multiday-mode .report-table{
+      font-size:9pt; page-break-inside:auto;
+    }
+    body.multiday-mode .report-table th,
+    body.multiday-mode .report-table td{ padding:4px 6px; }
+    body.multiday-mode .report-table tr{ page-break-inside:avoid; }
+    body.multiday-mode .report-table thead{ display:table-header-group; }
+  }
+  .notice{
+    background:var(--warn); border:1px solid var(--warn-bd); padding:10px 12px;
+    border-radius:8px; margin-bottom:12px; font-size:14px; display:none;
+  }
+  /* 唯讀模式 */
+  .readonly .actions, .readonly #photo-section, .readonly .row .lbl + .field input::placeholder,
+  .readonly .row .lbl + .field textarea::placeholder { /* keep placeholder hidden */ }
+  .readonly input, .readonly textarea, .readonly select{
+    background:transparent; border:none; padding-left:0; pointer-events:none;
+    color:var(--text);
+  }
+  .readonly input[type=date]{display:none;}
+  .readonly .date-input{display:none;}
+  .readonly .chip{pointer-events:none;}
+  .readonly .chip:not(:has(input:checked)){display:none;}
+  .readonly .actions, .readonly #reset-btn, .readonly .share-result{display:none !important;}
+  .readonly #photo-section{display:none;}
+  .print-bar{
+    display:flex; justify-content:flex-end; gap:8px; margin-bottom:12px;
+  }
+  .print-btn{
+    flex:0 0 auto; padding:10px 16px; font-size:14px;
+    background:white; color:var(--accent); border:1.5px solid var(--accent);
+    border-radius:8px; cursor:pointer; font-weight:700; font-family:inherit;
+  }
+  .print-btn:active{transform:scale(.98);}
+  /* 列印樣式 — 目標：直式 A4 單頁 */
+  @media print{
+    @page{ size:A4 portrait; margin:8mm; }
+    /* 強制保留背景色（瀏覽器預設會省墨拿掉） */
+    *, *::before, *::after{
+      -webkit-print-color-adjust:exact !important;
+      print-color-adjust:exact !important;
+      color-adjust:exact !important;
+    }
+    html, body{
+      margin:0 !important; padding:0 !important;
+      width:auto !important; min-height:auto !important;
+    }
+    body{ background:white; font-size:9pt; line-height:1.3; }
+    .container{
+      max-width:100% !important; width:100% !important;
+      margin:0 !important; padding:0 !important;
+    }
+    .header, .section{
+      break-inside:avoid; page-break-inside:avoid; box-shadow:none;
+      margin-bottom:4px;
+    }
+    .header{ padding:6px 12px; }
+    .header h1{ font-size:14pt; }
+    .pet-selector{ font-size:14pt !important; border-bottom:none !important; padding:0 !important; }
+    .pet-selector .caret{ display:none !important; }
+    .brand{ font-size:11pt; }
+    .brand .logo-img{ max-width:56px; max-height:38px; }
+    .brand .sub{ font-size:8pt; }
+    .section-title{ padding:3px 12px; font-size:10pt; }
+    .section-body{ padding:5px 12px; }
+    .row{ margin-bottom:3px; }
+    .row > .lbl{ flex:0 0 48px; padding:2px 4px; font-size:9pt; }
+    .chip{ padding:1px 8px; font-size:9pt; border-color:#999 !important; }
+    textarea{ min-height:auto !important; }
+    .actions, .share-result, .photo-note, .toast,
+    #reset-btn, .print-bar, .notice, #historyHint, #multiModal{ display:none !important; }
+    /* 照片：保留原始比例，每張高度固定 28mm，橫排自動換行 */
+    .photo-add, .photo .remove{ display:none !important; }
+    .photo-grid{
+      display:flex !important; flex-wrap:wrap; gap:3px;
+    }
+    .photo{
+      height:28mm !important; width:auto !important;
+      flex:0 0 auto; aspect-ratio:auto !important;
+      break-inside:avoid; page-break-inside:avoid;
+      border:1px solid #ccc; background:white !important;
+    }
+    .photo img{
+      height:100% !important; width:auto !important;
+      max-width:none !important; object-fit:contain;
+    }
+    #photo-section .section-body{ padding:5px 12px; }
+    input, textarea, select{
+      background:transparent !important; border:none !important;
+      padding-left:0 !important; padding-top:1px !important; padding-bottom:1px !important;
+      color:#000 !important; font-size:9pt !important;
+    }
+    .chip:not(:has(input:checked)){ display:none; }
+    .date-input{ border:none !important; padding:0 !important; font-size:9pt !important; }
+    /* 防止任何元素橫向溢出 */
+    *{ max-width:100%; }
+  }
+  @media (max-width:520px){
+    .container{padding:10px;}
+    .header{padding:12px 14px;}
+    .header h1{font-size:20px;}
+    .brand{font-size:18px;}
+    .two-col{grid-template-columns:1fr;}
+    .two-col > div:first-child{border-right:none; border-bottom:1px solid var(--border);}
+    .row > .lbl{flex:0 0 48px; font-size:13px;}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div style="min-width:0; flex:1;">
+      <h1>
+        <button type="button" class="pet-selector" onclick="openPetManager()">
+          🐾 <span id="currentPetName">泰迪</span> <span class="caret">▼</span>
+        </button>
+        每日紀錄
+      </h1>
+      <div id="currentPetMeta" style="font-size:12px; color:var(--muted); margin-top:2px;"></div>
+      <input type="date" id="date" class="date-input">
+    </div>
+    <div class="brand">
+      <img src="logo.png" alt="Wendy" class="logo-img"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="logo" style="display:none;">🐶🐱</div>
+      Wendy
+      <div class="sub">溫蒂．貓與狗訓練日常</div>
+    </div>
+  </div>
+
+  <div id="dateHistory" class="date-history"></div>
+
+  <!-- 飲食 / 飲水 / 零食 -->
+  <div class="section">
+    <div class="section-title">飲食 / 飲水 / 零食</div>
+    <div class="section-body">
+
+      <div class="row">
+        <div class="lbl">正餐</div>
+        <div class="field">
+          <input type="text" id="meal" placeholder="例：罐 20g + 少許水吃完">
+          <div class="chips" style="margin-top:8px;">
+            <label class="chip"><input type="checkbox" id="meal_done"> 吃完</label>
+            <label class="chip"><input type="checkbox" id="meal_partial"> 吃部分</label>
+            <label class="chip"><input type="checkbox" id="meal_no"> 沒吃</label>
+            <label class="chip"><input type="checkbox" id="meal_water"> 加水</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="lbl">飲水</div>
+        <div class="field">
+          <div class="chips">
+            <label class="chip"><input type="checkbox" id="water_1f"> 一樓</label>
+            <label class="chip"><input type="checkbox" id="water_master"> 主臥</label>
+            <label class="chip"><input type="checkbox" id="water_3f"> 三樓</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="lbl">零食</div>
+        <div class="field">
+          <input type="text" id="snack" placeholder="例：肉泥 2/3 條">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 餵藥 -->
+  <div class="section">
+    <div class="section-title">餵藥</div>
+    <div class="section-body">
+      <div class="row">
+        <div class="lbl">藥品</div>
+        <div class="field">
+          <input type="text" id="med_name" placeholder="例：藥名 / 劑量">
+        </div>
+      </div>
+      <div class="chips" style="margin-top:4px;">
+        <label class="chip"><input type="checkbox" id="med_done"> 已餵</label>
+        <label class="chip"><input type="checkbox" id="med_smooth"> 順利</label>
+        <label class="chip"><input type="checkbox" id="med_diff"> 不易餵</label>
+        <label class="chip"><input type="checkbox" id="med_skip"> 未餵</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 精神 / 排泄 -->
+  <div class="section">
+    <div class="two-col">
+      <div>
+        <div class="col-title">精神</div>
+        <div class="chips" style="justify-content:center; margin-bottom:10px;">
+          <label class="chip"><input type="radio" name="mood" value="好"> 好</label>
+          <label class="chip"><input type="radio" name="mood" value="普通"> 普通</label>
+          <label class="chip"><input type="radio" name="mood" value="不佳"> 不佳</label>
+          <label class="chip"><input type="radio" name="mood" value="嗜睡"> 嗜睡</label>
+        </div>
+        <textarea id="mood_note" placeholder="補充說明（選填）"></textarea>
+      </div>
+      <div>
+        <div class="col-title">排泄</div>
+        <div class="row">
+          <div class="lbl">便</div>
+          <div class="field num-with-unit">
+            <input type="number" id="poop_count" min="0" placeholder="0">
+            <span class="unit">顆</span>
+          </div>
+        </div>
+        <div class="row">
+          <div class="lbl">尿</div>
+          <div class="field num-with-unit">
+            <input type="number" id="pee_count" min="0" placeholder="0">
+            <span class="unit">塊</span>
+          </div>
+        </div>
+        <div class="chips">
+          <label class="chip"><input type="checkbox" id="poop_normal"> 形狀正常</label>
+          <label class="chip"><input type="checkbox" id="poop_soft"> 軟便</label>
+          <label class="chip"><input type="checkbox" id="poop_hard"> 硬便</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 身體狀況 -->
+  <div class="section" id="bodySection">
+    <div class="section-title">身體狀況</div>
+    <div class="section-body">
+      <div class="row">
+        <div class="lbl">嘔吐</div>
+        <div class="field chips">
+          <label class="chip"><input type="radio" name="vomit_status" value="無"> 無</label>
+          <label class="chip"><input type="radio" name="vomit_status" value="有"> 有</label>
+        </div>
+      </div>
+      <div id="vomitDetails">
+        <div class="row">
+          <div class="lbl">次數</div>
+          <div class="field num-with-unit">
+            <input type="number" id="vomit_count" min="0" placeholder="0">
+            <span class="unit">次</span>
+          </div>
+        </div>
+        <div class="chips">
+          <label class="chip"><input type="checkbox" id="vomit_hairball"> 毛球</label>
+          <label class="chip"><input type="checkbox" id="vomit_food"> 食物</label>
+          <label class="chip"><input type="checkbox" id="vomit_yellow"> 黃水/胃液</label>
+          <label class="chip"><input type="checkbox" id="vomit_blood"> 有血</label>
+        </div>
+        <textarea id="vomit_note" placeholder="嘔吐物描述（選填）" style="margin-top:8px;"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 備註 -->
+  <div class="section">
+    <div class="section-title">備註</div>
+    <div class="section-body">
+      <textarea id="note" placeholder="例：ciao 肉泥-貝柱口味不吃"></textarea>
+    </div>
+  </div>
+
+  <!-- 照片 -->
+  <div class="section" id="photo-section">
+    <div class="section-title">照片（僅本機儲存）</div>
+    <div class="section-body">
+      <div class="photo-grid" id="photoGrid"></div>
+      <div class="photo-note">⚠️ 照片只儲存在這台裝置的瀏覽器，不會放進分享連結。換手機或清快取會消失。</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" class="secondary" onclick="resetForm()">🗑️ 清空當日</button>
+    <button type="button" onclick="manualSave()">💾 存檔今日</button>
+  </div>
+
+  <div class="actions" style="margin-top:8px;">
+    <button type="button" class="secondary" onclick="window.print()" style="flex:1;">📄 存成 PDF</button>
+  </div>
+
+  <div class="actions" style="margin-top:8px;">
+    <button type="button" class="secondary" onclick="openMultiPicker()" style="flex:1;">📑 彙整多日報告</button>
+    <button type="button" class="secondary" onclick="exportPetCsv()" style="flex:1;">📊 匯出 Excel</button>
+  </div>
+
+  <div class="actions" style="margin-top:8px;">
+    <button type="button" onclick="syncToGist()" style="flex:1;">🔗 上傳客戶連結</button>
+  </div>
+
+  <div id="saveStatus" style="text-align:center; font-size:11px; color:var(--muted); margin-top:10px;">系統會自動存檔，無需手動操作</div>
+</div>
+
+<!-- 寵物管理彈窗 -->
+<div id="petModal" class="modal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header" id="petModalTitle">寵物管理</div>
+    <div class="modal-body" id="petModalBody"></div>
+    <div class="modal-actions" id="petModalActions"></div>
+  </div>
+</div>
+
+<!-- 多日報告選擇彈窗 -->
+<div id="multiModal" class="modal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">選擇要彙整的日期</div>
+    <div class="modal-body" id="multiList"></div>
+    <div class="modal-actions">
+      <button type="button" class="secondary" onclick="closeMultiPicker()">取消</button>
+      <button type="button" onclick="generateMultiReport()">產生報告</button>
+    </div>
+  </div>
+</div>
+
+<!-- 多日報告檢視 -->
+<div id="multiReport" style="display:none;"></div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// 短鍵命名（為了縮短 localStorage 體積）
+const FIELD_MAP = {
+  date:'d',
+  meal:'m', meal_done:'md', meal_partial:'mp', meal_no:'mn', meal_water:'mw',
+  water_1f:'w1', water_master:'wm', water_3f:'w3',
+  snack:'s',
+  med_name:'mn2', med_done:'mdd', med_smooth:'ms', med_diff:'mdf', med_skip:'msk',
+  mood:'mo', mood_note:'mon',
+  poop_count:'pc', pee_count:'uc',
+  poop_normal:'pn', poop_soft:'ps', poop_hard:'ph',
+  vomit_status:'vs',
+  vomit_count:'vc', vomit_hairball:'vh', vomit_food:'vf', vomit_yellow:'vy', vomit_blood:'vb', vomit_note:'vn',
+  note:'n'
+};
+const REVERSE = Object.fromEntries(Object.entries(FIELD_MAP).map(([k,v])=>[v,k]));
+
+function $(id){ return document.getElementById(id); }
+function getValue(id){
+  // 先嘗試 radio group（依 name 找）
+  const radioGroup = document.querySelectorAll(`input[type="radio"][name="${id}"]`);
+  if(radioGroup.length > 0){
+    const r = document.querySelector(`input[type="radio"][name="${id}"]:checked`);
+    return r ? r.value : '';
+  }
+  const el = $(id);
+  if(!el) return '';
+  if(el.type==='checkbox') return el.checked? 1 : 0;
+  return el.value;
+}
+function setValue(id, v){
+  const radioGroup = document.querySelectorAll(`input[type="radio"][name="${id}"]`);
+  if(radioGroup.length > 0){
+    radioGroup.forEach(r => r.checked = (r.value === v));
+    return;
+  }
+  const el = $(id);
+  if(!el) return;
+  if(el.type==='checkbox') el.checked = !!v;
+  else el.value = v ?? '';
+}
+function collect(){
+  const out = {};
+  for(const [full, short] of Object.entries(FIELD_MAP)){
+    const v = getValue(full);
+    if(v!=='' && v!==0 && v!==false && v!=null) out[short] = v;
+  }
+  return out;
+}
+function apply(data){
+  for(const [short, v] of Object.entries(data)){
+    const full = REVERSE[short];
+    if(full) setValue(full, v);
+  }
+}
+
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+// === 資料層 v2：多寵物 ===
+const STORAGE_KEY = 'teddy_data_v2';
+// 舊版 keys（用於遷移）
+const LEGACY_RECORDS_KEY = 'teddy_records';
+const LEGACY_PET_NAME_KEY = 'teddy_pet_name';
+const LEGACY_PHOTO_PREFIX = 'teddy_photos_';
+const LEGACY_DRAFT_KEY = 'teddy_draft';
+
+function genId(){ return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+function speciesEmoji(s){ return s==='狗'?'🐶':s==='貓'?'🐱':'🐾'; }
+
+function getData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  } catch(e){}
+  return null;
+}
+function saveData(data){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+  catch(e){ toast('儲存失敗，可能空間不足'); }
+}
+function ensureData(){
+  let data = getData();
+  if(data) return data;
+  // 第一次：嘗試從舊版遷移
+  data = { pets:[], current_pet_id:null, records:{}, photos:{} };
+  const oldName = localStorage.getItem(LEGACY_PET_NAME_KEY);
+  const oldRecords = (()=>{ try{ return JSON.parse(localStorage.getItem(LEGACY_RECORDS_KEY)||'{}'); }catch(e){ return {}; } })();
+  // 收集舊版所有照片 keys
+  const oldPhotos = {};
+  for(let i=0; i<localStorage.length; i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith(LEGACY_PHOTO_PREFIX)){
+      const date = k.substring(LEGACY_PHOTO_PREFIX.length);
+      try{ oldPhotos[date] = JSON.parse(localStorage.getItem(k)); }catch(e){}
+    }
+  }
+  // 若舊資料存在則建立第一隻
+  const hasLegacy = oldName || Object.keys(oldRecords).length || Object.keys(oldPhotos).length;
+  if(hasLegacy){
+    const id = genId();
+    data.pets.push({
+      id, name: oldName || '泰迪', species:'貓', owner:'', notes:''
+    });
+    data.current_pet_id = id;
+    data.records[id] = oldRecords;
+    data.photos[id] = oldPhotos;
+  } else {
+    // 全新使用者：建立預設一隻
+    const id = genId();
+    data.pets.push({ id, name:'泰迪', species:'貓', owner:'', notes:'' });
+    data.current_pet_id = id;
+  }
+  saveData(data);
+  return data;
+}
+
+function getCurrentPet(){
+  const data = getData();
+  if(!data || !data.pets.length) return null;
+  return data.pets.find(p => p.id === data.current_pet_id) || data.pets[0];
+}
+function setCurrentPet(petId){
+  const data = getData();
+  data.current_pet_id = petId;
+  saveData(data);
+  refreshPetUI();
+  loadDay($('date').value);
+  loadPhotos();
+  updateHistoryHint();
+}
+function refreshPetUI(){
+  const pet = getCurrentPet();
+  if(!pet) return;
+  $('currentPetName').textContent = pet.name;
+  const meta = [];
+  if(pet.owner) meta.push(`飼主：${pet.owner}`);
+  if(pet.species) meta.push(pet.species);
+  if(pet.notes) meta.push(`📝 ${pet.notes}`);
+  $('currentPetMeta').textContent = meta.join('・');
+}
+
+// === 照片：依寵物 + 日期分桶 ===
+function getPetPhotos(petId, date){
+  const data = getData();
+  return (data?.photos?.[petId]?.[date]) || [];
+}
+function setPetPhotos(petId, date, photos){
+  const data = getData();
+  if(!data.photos[petId]) data.photos[petId] = {};
+  if(photos.length === 0) delete data.photos[petId][date];
+  else data.photos[petId][date] = photos;
+  saveData(data);
+}
+function loadPhotos(){
+  const grid = $('photoGrid');
+  if(!grid) return;
+  grid.innerHTML = '';
+  const pet = getCurrentPet();
+  const date = $('date').value;
+  if(!pet || !date) return;
+  const photos = getPetPhotos(pet.id, date);
+  photos.forEach((src, idx)=>{
+    const div = document.createElement('div');
+    div.className = 'photo';
+    div.innerHTML = `<img src="${src}" alt=""><button class="remove" onclick="removePhoto(${idx})" type="button">×</button>`;
+    grid.appendChild(div);
+  });
+  const add = document.createElement('label');
+  add.className = 'photo-add';
+  add.innerHTML = `<div class="plus">＋</div><div>加照片</div>
+    <input type="file" accept="image/*" capture="environment" onchange="addPhoto(event)">`;
+  grid.appendChild(add);
+}
+function addPhoto(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const pet = getCurrentPet(), date = $('date').value;
+  if(!pet || !date) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      // 壓縮：最長邊 800px、JPEG 0.7
+      const max = 800;
+      const ratio = Math.min(max / img.width, max / img.height, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      const photos = getPetPhotos(pet.id, date);
+      photos.push(dataUrl);
+      setPetPhotos(pet.id, date, photos);
+      loadPhotos();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+function removePhoto(idx){
+  if(!confirm('刪除這張照片？')) return;
+  const pet = getCurrentPet(), date = $('date').value;
+  if(!pet || !date) return;
+  const photos = getPetPhotos(pet.id, date);
+  photos.splice(idx, 1);
+  setPetPhotos(pet.id, date, photos);
+  loadPhotos();
+}
+
+function clearFormFields(){
+  document.querySelectorAll('input[type=text],input[type=number],textarea').forEach(el=>{
+    el.value='';
+  });
+  document.querySelectorAll('input[type=checkbox],input[type=radio]').forEach(el=>el.checked=false);
+}
+function resetForm(){
+  const date = $('date').value;
+  const pet = getCurrentPet();
+  if(!pet) return;
+  if(!confirm(`確定要清空 ${pet.name} ${date} 這天的紀錄？（照片不會刪除）`)) return;
+  const data = getData();
+  if(data.records[pet.id]) delete data.records[pet.id][date];
+  saveData(data);
+  clearFormFields();
+  renderDateHistory();
+  toast('已清空當日');
+  // 同步到雲端（讓客戶看到這天也被移除）
+  if(_autoSyncTimer) clearTimeout(_autoSyncTimer);
+  autoSyncToGist();
+}
+
+// === 紀錄：依寵物 + 日期 ===
+function getRecords(){
+  const data = getData();
+  const pet = getCurrentPet();
+  if(!pet) return {};
+  return data.records[pet.id] || {};
+}
+function saveCurrentDay(){
+  const date = $('date').value;
+  if(!date) return;
+  const pet = getCurrentPet();
+  if(!pet) return;
+  const data = getData();
+  if(!data.records[pet.id]) data.records[pet.id] = {};
+  const formData = collect();
+  const meaningful = Object.entries(formData).filter(([k])=> k!=='d');
+  if(meaningful.length === 0){
+    delete data.records[pet.id][date];
+  } else {
+    data.records[pet.id][date] = formData;
+  }
+  saveData(data);
+  updateHistoryHint();
+  // 顯示自動存檔時間（手動存檔有自己的訊息，不要被覆蓋）
+  const time = new Date().toLocaleTimeString('zh-TW', {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  if(meaningful.length > 0){
+    showSaveStatus(`✓ 已自動存檔 ${time}`);
+  }
+}
+function loadDay(date){
+  clearFormFields();
+  const records = getRecords();
+  const r = records[date];
+  if(r){
+    apply(r);
+    $('date').value = date;
+  }
+}
+
+// === 存檔狀態指示 ===
+let saveStatusTimer = null;
+function showSaveStatus(msg, color){
+  const el = $('saveStatus');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = color || 'var(--accent)';
+  if(saveStatusTimer) clearTimeout(saveStatusTimer);
+  saveStatusTimer = setTimeout(()=>{
+    el.textContent = '系統會自動存檔，無需手動操作';
+    el.style.color = 'var(--muted)';
+  }, 2500);
+}
+
+// 手動存檔：寫入歷史 + 立刻同步雲端，但「不清空表單」
+// 原因：清空+autosave 的組合會導致同日續填時吃掉先前資料
+function manualSave(){
+  const pet = getCurrentPet();
+  const date = $('date').value;
+  saveCurrentDay();
+  const records = getRecords();
+  if(records[date]){
+    toast(`✅ 已存檔 ${pet.name} ${date}`);
+    showSaveStatus(`✅ 已存檔 ${date}（表單保留，可繼續補充）`);
+    // 立刻觸發雲端同步
+    if(_autoSyncTimer) clearTimeout(_autoSyncTimer);
+    autoSyncToGist();
+    // 更新 chips（這天的紀錄狀態變了）
+    renderDateHistory();
+  } else {
+    toast('今日表單沒有資料可存');
+    showSaveStatus('⚠️ 今日無資料，未存檔', '#c08000');
+  }
+}
+function updateHistoryHint(){
+  // 已被 renderDateHistory 取代，保留空殼避免老程式呼叫出錯
+  renderDateHistory();
+}
+
+let _lastChipsKey = null;
+function renderDateHistory(){
+  const el = $('dateHistory');
+  if(!el) return;
+  const records = getRecords();
+  const dates = Object.keys(records).sort().reverse();
+  const today = new Date().toISOString().slice(0,10);
+  const currentDate = $('date').value;
+  // 快取：避免每次按鍵都重繪（會打斷 chips 的水平捲動位置）
+  const key = JSON.stringify([dates, currentDate, today]);
+  if(_lastChipsKey === key) return;
+  _lastChipsKey = key;
+  let html = '';
+  // 若今天還沒有紀錄，顯示「今天 (空)」
+  if(!dates.includes(today)){
+    const cls = `date-chip today-empty ${currentDate===today?'active':''}`;
+    html += `<button type="button" class="${cls}" onclick="switchToDate('${today}')">今天 (空)</button>`;
+  }
+  html += dates.map(d => {
+    const dt = new Date(d + 'T00:00:00');
+    const w = ['日','一','二','三','四','五','六'][dt.getDay()];
+    const isCurrent = d === currentDate;
+    const isToday = d === today;
+    return `<button type="button" class="date-chip ${isCurrent?'active':''}" onclick="switchToDate('${d}')">${dt.getMonth()+1}/${dt.getDate()} 週${w}${isToday?' (今)':''}</button>`;
+  }).join('');
+  el.innerHTML = html;
+}
+
+function switchToDate(date){
+  $('date').value = date;
+  loadDay(date);
+  loadPhotos();
+  renderDateHistory();
+}
+
+// === 多日報告 ===
+function openMultiPicker(){
+  const records = getRecords();
+  const dates = Object.keys(records).sort();
+  if(dates.length === 0){
+    toast('還沒有任何紀錄');
+    return;
+  }
+  const list = $('multiList');
+  list.innerHTML = `
+    <div class="modal-toolbar">
+      <button type="button" onclick="toggleAllDates(true)">全選</button>
+      <button type="button" onclick="toggleAllDates(false)">全不選</button>
+    </div>
+  ` + dates.map(d => {
+    const data = records[d];
+    const summary = makeShortSummary(data);
+    return `<label>
+      <input type="checkbox" class="date-pick" value="${d}" checked>
+      <span>${d}</span>
+      <span class="summary">${summary}</span>
+    </label>`;
+  }).join('');
+  $('multiModal').style.display = 'flex';
+}
+function closeMultiPicker(){
+  $('multiModal').style.display = 'none';
+}
+function toggleAllDates(on){
+  document.querySelectorAll('.date-pick').forEach(cb => cb.checked = on);
+}
+function makeShortSummary(data){
+  const parts = [];
+  if(data.pc) parts.push(`便${data.pc}`);
+  if(data.uc) parts.push(`尿${data.uc}`);
+  if(data.vs === '有'){
+    parts.push(`吐${data.vc || ''}`);
+  } else if(!data.vs && data.vc){
+    parts.push(`吐${data.vc}`);
+  }
+  return parts.join('・');
+}
+
+// 欄位 → 顯示值
+function renderRecord(date, data){
+  const rows = [];
+  // 飲食
+  const foodParts = [];
+  if(data.m) foodParts.push(data.m);
+  if(data.md) foodParts.push('✓吃完');
+  if(data.mp) foodParts.push('✓吃部分');
+  if(data.mn) foodParts.push('✗沒吃');
+  if(data.mw) foodParts.push('✓加水');
+  if(foodParts.length) rows.push({k:'正餐', v:foodParts.join('、')});
+  // 飲水
+  const waterParts = [];
+  if(data.w1) waterParts.push('一樓');
+  if(data.wm) waterParts.push('主臥');
+  if(data.w3) waterParts.push('三樓');
+  if(waterParts.length) rows.push({k:'飲水', v:waterParts.join('、')});
+  // 零食
+  if(data.s) rows.push({k:'零食', v:data.s});
+  // 餵藥
+  const medParts = [];
+  if(data.mn2) medParts.push(data.mn2);
+  if(data.mdd) medParts.push('已餵');
+  if(data.ms) medParts.push('順利');
+  if(data.mdf) medParts.push('不易餵');
+  if(data.msk) medParts.push('未餵');
+  if(medParts.length) rows.push({k:'餵藥', v:medParts.join('、')});
+  // 精神
+  const moodParts = [];
+  if(data.mo) moodParts.push(data.mo);
+  if(data.mon) moodParts.push(data.mon);
+  if(moodParts.length) rows.push({k:'精神', v:moodParts.join('，')});
+  // 排泄
+  const excrParts = [];
+  if(data.pc) excrParts.push(`便 ${data.pc} 顆`);
+  if(data.uc) excrParts.push(`尿 ${data.uc} 塊`);
+  if(data.pn) excrParts.push('形狀正常');
+  if(data.ps) excrParts.push('軟便');
+  if(data.ph) excrParts.push('硬便');
+  if(excrParts.length) rows.push({k:'排泄', v:excrParts.join('、')});
+  // 身體狀況（嘔吐有/無）
+  if(data.vs === '無'){
+    rows.push({k:'身體狀況', v:'嘔吐：無'});
+  } else if(data.vs === '有' || (!data.vs && (data.vc||data.vh||data.vf||data.vy||data.vb||data.vn))){
+    const bodyParts = ['嘔吐：有'];
+    if(data.vc) bodyParts.push(`${data.vc} 次`);
+    if(data.vh) bodyParts.push('毛球');
+    if(data.vf) bodyParts.push('食物');
+    if(data.vy) bodyParts.push('黃水/胃液');
+    if(data.vb) bodyParts.push('有血');
+    if(data.vn) bodyParts.push(`(${data.vn})`);
+    rows.push({k:'身體狀況', v:bodyParts.join('、')});
+  }
+  // 備註
+  if(data.n) rows.push({k:'備註', v:data.n});
+
+  const dayLabel = formatDate(date);
+  if(rows.length === 0){
+    return `<div class="day-card"><h2>${dayLabel}</h2><div class="empty">這天沒有紀錄</div></div>`;
+  }
+  return `<div class="day-card">
+    <h2>${dayLabel}</h2>
+    ${rows.map(r=>`<div class="day-row"><div class="key">${r.k}</div><div class="val">${escapeHtml(r.v)}</div></div>`).join('')}
+  </div>`;
+}
+function formatDate(d){
+  // 2026-05-04 → 2026/5/4 (週一)
+  const dt = new Date(d + 'T00:00:00');
+  const w = ['日','一','二','三','四','五','六'][dt.getDay()];
+  return `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}（週${w}）`;
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function buildCover(petName, dates, records, pet){
+  const start = dates[0], end = dates[dates.length-1];
+  const emoji = pet ? speciesEmoji(pet.species) : '🐾';
+  const ownerLine = pet?.owner ? `<div style="color:var(--muted); font-size:14px; margin-top:4px;">飼主：${escapeHtml(pet.owner)}</div>` : '';
+  return `<div class="report-cover">
+    <img src="logo.png" alt="" class="cover-logo" onerror="this.style.display='none'">
+    <h1>到府照護紀錄</h1>
+    <div class="pet">${emoji} ${escapeHtml(petName || '寵物')}</div>
+    ${ownerLine}
+    <div class="period">${formatDate(start)} ～ ${formatDate(end)}</div>
+    <div class="signoff">
+      由 Wendy 溫蒂．貓與狗訓練日常 製作<br>
+      ${new Date().toLocaleDateString('zh-TW')}
+    </div>
+  </div>`;
+}
+
+// === GitHub Gist 同步 ===
+const GITHUB_PAT_KEY = 'teddy_github_pat';
+function getPat(){ return localStorage.getItem(GITHUB_PAT_KEY) || ''; }
+function setPat(v){ localStorage.setItem(GITHUB_PAT_KEY, v); }
+
+async function gistApi(method, path, body){
+  const pat = getPat();
+  const headers = {
+    'Accept':'application/vnd.github+json',
+    'X-GitHub-Api-Version':'2022-11-28'
+  };
+  if(pat) headers['Authorization'] = `Bearer ${pat}`;
+  const opts = { method, headers };
+  if(body){
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(`https://api.github.com${path}`, opts);
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// 純上傳邏輯（無 UI），給 manual 和 auto 共用
+async function _doSyncToGist(pet){
+  const data = getData();
+  // 重要：從新讀出來的 data 裡找到對應 pet，要修改的是這一份，否則 saveData 不會包含我們的修改
+  const petInData = data.pets.find(p => p.id === pet.id);
+  if(!petInData) throw new Error('找不到寵物');
+  const records = data.records[petInData.id] || {};
+  if(Object.keys(records).length === 0){
+    throw new Error('還沒有紀錄');
+  }
+  const payload = {
+    version: 1,
+    pet: { name:petInData.name, species:petInData.species, owner:petInData.owner||'', notes:petInData.notes||'' },
+    records: records,
+    lastUpdate: new Date().toISOString()
+  };
+  const fileName = `${petInData.name || 'pet'}_照護紀錄.json`;
+  const content = JSON.stringify(payload, null, 2);
+  let gistId = petInData.gistId;
+  let createdNew = false;
+  if(!gistId){
+    const result = await gistApi('POST', '/gists', {
+      description:`${petInData.name} 照護紀錄（由 Wendy 維護）`,
+      public:false,
+      files:{ [fileName]:{ content } }
+    });
+    gistId = result.id;
+    petInData.gistId = gistId;
+    createdNew = true;
+  } else {
+    try{
+      await gistApi('PATCH', `/gists/${gistId}`, {
+        files:{ [fileName]:{ content } }
+      });
+    } catch(e){
+      // Gist 可能被使用者手動刪了；fallback 建新的
+      if(String(e.message).includes('404') || String(e.message).includes('Not Found')){
+        const result = await gistApi('POST', '/gists', {
+          description:`${petInData.name} 照護紀錄（由 Wendy 維護）`,
+          public:false,
+          files:{ [fileName]:{ content } }
+        });
+        gistId = result.id;
+        petInData.gistId = gistId;
+        createdNew = true;
+      } else {
+        throw e;
+      }
+    }
+  }
+  // 不論 create / patch / 重建，gistId 都寫回 localStorage
+  saveData(data);
+  // 也更新 caller 傳進來的 pet 物件參考
+  pet.gistId = gistId;
+  return location.origin + location.pathname + `?view=${gistId}`;
+}
+
+// 手動上傳（含完整 UI 回饋）
+async function syncToGist(){
+  const pet = getCurrentPet();
+  if(!pet){ toast('沒有寵物'); return; }
+  if(!getPat()){ openPatSetup(); return; }
+  toast('上傳中…');
+  try{
+    const url = await _doSyncToGist(pet);
+    showShareLinkResult(pet, url);
+  } catch(e){
+    if(String(e.message).includes('Bad credentials') || String(e.message).includes('401')){
+      toast('Token 失效，請重設');
+      setPat('');
+      openPatSetup();
+    } else if(e.message === '還沒有紀錄'){
+      toast(`${pet.name} 還沒有紀錄`);
+    } else {
+      toast('❌ 上傳失敗：' + e.message);
+    }
+  }
+}
+
+// === 自動背景同步 ===
+let _autoSyncTimer = null;
+let _autoSyncing = false;
+
+function scheduleAutoSync(){
+  // 每次改動都重排定時器（debounce 15 秒）
+  if(_autoSyncTimer) clearTimeout(_autoSyncTimer);
+  _autoSyncTimer = setTimeout(autoSyncToGist, 15000);
+}
+
+async function autoSyncToGist(){
+  if(_autoSyncing) return;
+  const pet = getCurrentPet();
+  if(!pet) return;
+  // 條件：必須有 PAT + 寵物已經做過第一次上傳（有 gistId）
+  if(!getPat() || !pet.gistId) return;
+  _autoSyncing = true;
+  showSaveStatus('🔄 同步客戶連結中…');
+  try{
+    await _doSyncToGist(pet);
+    showSaveStatus(`✅ 已同步 ${new Date().toLocaleTimeString('zh-TW',{hour12:false,hour:'2-digit',minute:'2-digit'})}`);
+  } catch(e){
+    if(String(e.message).includes('Bad credentials')){
+      showSaveStatus('⚠️ Token 失效，請重新上傳', '#c08000');
+    } else {
+      showSaveStatus('⚠️ 同步失敗，自動重試中', '#c08000');
+      // 60 秒後重試一次
+      setTimeout(()=>{ _autoSyncing = false; scheduleAutoSync(); }, 60000);
+      return;
+    }
+  }
+  _autoSyncing = false;
+}
+
+async function fetchGist(gistId){
+  // 客戶端可以匿名讀 secret gist（有 ID 就行）
+  // 防快取策略（避免觸發 CORS preflight，只用「簡單請求」+ URL 時間戳 + cache:no-store）
+  const cacheBust = Date.now();
+  const res = await fetch(`https://api.github.com/gists/${gistId}?_=${cacheBust}`, {
+    cache: 'no-store',
+    headers:{ 'Accept':'application/vnd.github+json' }
+  });
+  if(!res.ok) throw new Error(`無法讀取 (${res.status})`);
+  const gist = await res.json();
+  const file = Object.values(gist.files)[0];
+  let content = file.content;
+  if(file.truncated && file.raw_url){
+    const sep = file.raw_url.includes('?') ? '&' : '?';
+    const r = await fetch(file.raw_url + sep + `_=${cacheBust}`, { cache:'no-store' });
+    content = await r.text();
+  }
+  return JSON.parse(content);
+}
+
+function openPatSetup(){
+  $('petModalTitle').textContent = '🔗 設定 GitHub 連結';
+  $('petModalBody').innerHTML = `
+    <div style="font-size:14px; line-height:1.7;">
+      <p style="margin-top:0;">第一次使用客戶連結，需要一張 <b>GitHub 個人權杖（PAT）</b>。一次設定，之後不用再設。</p>
+      <ol style="padding-left:22px;">
+        <li>點 <a href="https://github.com/settings/tokens/new?scopes=gist&description=Pet%20Care" target="_blank" style="color:var(--accent); text-decoration:underline;">這個連結</a> 開新權杖頁（已預選 <code>gist</code> 權限）</li>
+        <li>「Expiration」選 <b>No expiration</b></li>
+        <li>滑到底，按綠色 <b>Generate token</b></li>
+        <li>複製產出的 <code>ghp_...</code> 字串</li>
+        <li>貼回下面 ↓</li>
+      </ol>
+      <input type="password" id="patInput" placeholder="貼上 ghp_... 開頭的 Token" style="margin-top:8px;">
+      <p style="font-size:12px; color:var(--muted); margin-top:10px;">
+        ⚠️ Token 只會存在這支手機的瀏覽器，不會送到任何別的地方。<br>
+        ⚠️ 權限僅限「Gist」，被偷也只能改你的 Gist，無法動其他資料。
+      </p>
+    </div>
+  `;
+  $('petModalActions').innerHTML = `
+    <button type="button" class="secondary" onclick="closePetManager()">取消</button>
+    <button type="button" onclick="savePatAndContinue()">儲存並驗證</button>
+  `;
+  $('petModal').style.display = 'flex';
+}
+
+async function savePatAndContinue(){
+  const pat = $('patInput').value.trim();
+  if(!pat){ toast('請貼 Token'); return; }
+  if(!pat.startsWith('ghp_') && !pat.startsWith('github_pat_')){
+    if(!confirm('Token 看起來不是 GitHub 格式，仍要繼續？')) return;
+  }
+  setPat(pat);
+  toast('驗證中…');
+  try{
+    await gistApi('GET', '/gists?per_page=1');
+    toast('✅ Token 有效');
+    closePetManager();
+    syncToGist();
+  } catch(e){
+    setPat('');
+    toast('Token 無效：' + e.message);
+  }
+}
+
+function showShareLinkResult(pet, url){
+  $('petModalTitle').textContent = '📤 客戶連結已就緒';
+  $('petModalBody').innerHTML = `
+    <div style="font-size:14px;">
+      <div style="margin-bottom:10px;">${escapeHtml(pet.name)} 累積到目前的紀錄連結：</div>
+      <div id="shareUrlText" style="background:var(--input-bg); padding:10px; border-radius:6px; word-break:break-all; font-family:ui-monospace,monospace; font-size:11px; margin-bottom:12px; max-height:90px; overflow-y:auto;">${escapeHtml(url)}</div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" onclick="copyShareUrl()" style="flex:1;">📋 複製連結</button>
+        <button type="button" class="secondary" onclick="window.open('${url}','_blank')" style="flex:1;">👁️ 預覽</button>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin-top:14px; line-height:1.6;">
+        ✓ 客戶之後每次點同一個連結，會看到你最新上傳的累積紀錄<br>
+        ✓ <b>此後你的所有改動會自動同步到這個連結</b>（停手 15 秒後背景上傳）<br>
+        ✓ URL 不變，客戶不用換
+      </p>
+    </div>
+  `;
+  $('petModalActions').innerHTML = `
+    <button type="button" class="secondary" onclick="closePetManager()">關閉</button>
+  `;
+  $('petModal').style.display = 'flex';
+}
+
+function copyShareUrl(){
+  const url = $('shareUrlText').textContent;
+  navigator.clipboard.writeText(url).then(()=>toast('✅ 已複製'));
+}
+
+// === Viewer 模式（客戶看的頁面）===
+async function enterViewerMode(gistId){
+  document.body.classList.add('multiday-mode');
+  document.body.classList.add('viewer-only');
+  const reportEl = $('multiReport');
+  reportEl.style.display = 'block';
+  reportEl.innerHTML = `<div style="text-align:center; padding:60px 20px; color:var(--muted);">
+    <div style="font-size:32px; margin-bottom:12px;">⏳</div>
+    <div>載入照護紀錄中…</div>
+  </div>`;
+  try{
+    const data = await fetchGist(gistId);
+    renderViewerReport(data, gistId);
+  } catch(e){
+    reportEl.innerHTML = `<div style="text-align:center; padding:60px 20px; color:#c33;">
+      <div style="font-size:32px; margin-bottom:12px;">⚠️</div>
+      <h3>無法載入紀錄</h3>
+      <p style="color:var(--muted);">${escapeHtml(e.message)}</p>
+      <p style="font-size:13px; color:var(--muted);">請確認連結正確，或聯繫提供連結的人。</p>
+    </div>`;
+  }
+}
+
+function renderViewerReport(data, gistId){
+  const pet = data.pet || { name:'寵物', species:'', owner:'', notes:'' };
+  const records = data.records || {};
+  const dates = Object.keys(records).sort();
+  if(dates.length === 0){
+    $('multiReport').innerHTML = `<div style="text-align:center; padding:60px 20px; color:var(--muted);">目前還沒有紀錄</div>`;
+    return;
+  }
+  // 預設依日期數量決定方向
+  let orient = dates.length > 14 ? 'vertical' : 'horizontal';
+  const cover = buildCover(pet.name, dates, records, pet);
+  const updateInfo = data.lastUpdate ? `<div style="text-align:center; font-size:12px; color:var(--muted); margin-bottom:8px;">最後更新：${new Date(data.lastUpdate).toLocaleString('zh-TW')}</div>` : '';
+
+  function paint(){
+    const table = buildMultiTable(dates, records, orient);
+    $('multiReport').innerHTML = `
+      <div class="report-toolbar">
+        <button type="button" onclick="window.print()">📄 列印 / 存 PDF</button>
+        <button type="button" class="secondary" onclick="location.reload()">🔄 重新整理</button>
+        <div class="report-orient-toggle">
+          <button type="button" class="${orient==='horizontal'?'active':''}" onclick="window._setViewerOrient('horizontal')">橫式</button>
+          <button type="button" class="${orient==='vertical'?'active':''}" onclick="window._setViewerOrient('vertical')">直式</button>
+        </div>
+      </div>
+      ${updateInfo}
+      ${cover}
+      ${table}
+    `;
+  }
+  window._setViewerOrient = (o)=>{ orient = o; paint(); };
+  paint();
+}
+
+// === Excel (CSV) 匯出：當前寵物全部紀錄 ===
+function exportPetCsv(){
+  const pet = getCurrentPet();
+  if(!pet){ toast('沒有寵物'); return; }
+  const records = getRecords();
+  const dates = Object.keys(records).sort();
+  if(dates.length === 0){ toast('這隻還沒有紀錄'); return; }
+
+  const data = getData();
+  const photoBucket = data.photos[pet.id] || {};
+
+  // 標題列
+  const headers = [
+    '日期', '星期',
+    '正餐描述', '吃完', '吃部分', '沒吃', '加水',
+    '飲水_一樓', '飲水_主臥', '飲水_三樓',
+    '零食',
+    '藥品', '已餵', '順利', '不易餵', '未餵',
+    '精神', '精神描述',
+    '便_顆數', '便_形狀正常', '便_軟便', '便_硬便',
+    '尿_塊數',
+    '嘔吐', '嘔吐次數', '嘔吐_毛球', '嘔吐_食物', '嘔吐_黃水胃液', '嘔吐_有血', '嘔吐物描述',
+    '備註',
+    '照片數'
+  ];
+
+  const yn = v => v ? 'V' : '';
+  const rows = dates.map(d => {
+    const r = records[d] || {};
+    const dt = new Date(d + 'T00:00:00');
+    const w = ['日','一','二','三','四','五','六'][dt.getDay()];
+    const photos = photoBucket[d] || [];
+    return [
+      d, '週'+w,
+      r.m||'', yn(r.md), yn(r.mp), yn(r.mn), yn(r.mw),
+      yn(r.w1), yn(r.wm), yn(r.w3),
+      r.s||'',
+      r.mn2||'', yn(r.mdd), yn(r.ms), yn(r.mdf), yn(r.msk),
+      r.mo||'', r.mon||'',
+      r.pc||'', yn(r.pn), yn(r.ps), yn(r.ph),
+      r.uc||'',
+      r.vs||'', r.vc||'', yn(r.vh), yn(r.vf), yn(r.vy), yn(r.vb), r.vn||'',
+      r.n||'',
+      photos.length || ''
+    ];
+  });
+
+  // CSV escape：含逗號/雙引號/換行的欄位需用 "" 包起來，內部 " 變成 ""
+  const esc = v => {
+    const s = String(v ?? '');
+    return /[,"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  // 加 UTF-8 BOM，Excel 才能正確讀中文
+  const csv = '﻿' + [headers, ...rows]
+    .map(row => row.map(esc).join(','))
+    .join('\r\n');
+
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0,10);
+  // 檔名：寵物名_照護紀錄_匯出日期.csv
+  a.href = url;
+  a.download = `${pet.name}_照護紀錄_${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast(`✅ ${pet.name} ${dates.length} 天紀錄已匯出`);
+}
+
+// === 寵物管理 UI ===
+function openPetManager(){
+  renderPetList();
+  $('petModal').style.display = 'flex';
+}
+function closePetManager(){
+  $('petModal').style.display = 'none';
+}
+function renderPetList(){
+  const data = ensureData();
+  const current = data.current_pet_id;
+  $('petModalTitle').textContent = '寵物管理';
+  $('petModalBody').innerHTML = data.pets.map(p => {
+    const isActive = p.id === current;
+    const meta = [];
+    if(p.species) meta.push(p.species);
+    if(p.owner) meta.push(`飼主 ${escapeHtml(p.owner)}`);
+    return `<div class="pet-card ${isActive?'active':''}" onclick="switchPet('${p.id}')">
+      <div class="pet-emoji">${speciesEmoji(p.species)}</div>
+      <div class="pet-info">
+        <div class="pet-name">${escapeHtml(p.name)}${isActive?' <span style="font-size:12px;color:var(--accent);">（使用中）</span>':''}</div>
+        ${meta.length?`<div class="pet-detail">${meta.join('・')}</div>`:''}
+        ${p.notes?`<div class="pet-detail">📝 ${escapeHtml(p.notes)}</div>`:''}
+      </div>
+      <div class="pet-actions" onclick="event.stopPropagation()">
+        <button type="button" onclick="showPetForm('${p.id}')">編輯</button>
+        ${data.pets.length > 1 ? `<button type="button" onclick="deletePet('${p.id}')">刪除</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  $('petModalActions').innerHTML = `
+    <button type="button" class="secondary" onclick="closePetManager()">關閉</button>
+    <button type="button" onclick="showPetForm()">+ 新增寵物</button>
+  `;
+}
+function switchPet(petId){
+  setCurrentPet(petId);
+  toast(`已切換到 ${getCurrentPet().name}`);
+  closePetManager();
+}
+function showPetForm(petId){
+  const data = ensureData();
+  const editing = petId ? data.pets.find(p=>p.id===petId) : null;
+  $('petModalTitle').textContent = editing ? '編輯寵物' : '新增寵物';
+  $('petModalBody').innerHTML = `
+    <div class="pet-form">
+      <div class="row"><div class="lbl">名字</div><div class="field">
+        <input type="text" id="petFormName" value="${editing?escapeHtml(editing.name):''}" placeholder="例：泰迪">
+      </div></div>
+      <div class="row"><div class="lbl">種類</div><div class="field chips">
+        <label class="chip"><input type="radio" name="petFormSpecies" value="貓" ${editing?.species==='貓'?'checked':''}> 🐱 貓</label>
+        <label class="chip"><input type="radio" name="petFormSpecies" value="狗" ${editing?.species==='狗'?'checked':''}> 🐶 狗</label>
+        <label class="chip"><input type="radio" name="petFormSpecies" value="其他" ${editing?.species==='其他'?'checked':''}> 🐾 其他</label>
+      </div></div>
+      <div class="row"><div class="lbl">飼主</div><div class="field">
+        <input type="text" id="petFormOwner" value="${editing?escapeHtml(editing.owner||''):''}" placeholder="選填">
+      </div></div>
+      <div class="row"><div class="lbl">備註</div><div class="field">
+        <textarea id="petFormNotes" placeholder="飲食/藥物/過敏/特殊需求...">${editing?escapeHtml(editing.notes||''):''}</textarea>
+      </div></div>
+      ${editing ? `
+        <div style="margin-top:18px; padding-top:14px; border-top:1px dashed var(--border); display:flex; flex-direction:column; gap:8px;">
+          <button type="button" class="secondary" onclick="importFromShareLink('${editing.id}')" style="width:100%; padding:10px;">🔗 從現有客戶連結匯入（換裝置時用）</button>
+          <button type="button" class="secondary" onclick="clearPetRecords('${editing.id}')" style="width:100%; padding:10px; color:#c44; border-color:#c44;">🗑️ 清空這隻寵物的所有紀錄與照片（保留設定）</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  $('petModalActions').innerHTML = `
+    <button type="button" class="secondary" onclick="renderPetList()">← 返回</button>
+    <button type="button" onclick="savePetForm('${editing?editing.id:''}')">${editing?'儲存':'新增'}</button>
+  `;
+}
+
+// 從現有客戶連結匯入（跨裝置接續用）
+async function importFromShareLink(petId){
+  const input = prompt('貼上現有客戶連結（或 Gist ID）：\n例如 https://...?view=abc123\n或 abc123');
+  if(!input) return;
+  // 解析 gistId：可吃完整 URL 或純 ID
+  let gistId = input.trim();
+  const m = gistId.match(/[?&]view=([a-f0-9]+)/i);
+  if(m) gistId = m[1];
+  if(!/^[a-f0-9]{20,}$/i.test(gistId)){
+    toast('連結格式不對，無法解析 Gist ID');
+    return;
+  }
+  toast('匯入中…');
+  try{
+    const cloud = await fetchGist(gistId);
+    if(!cloud || !cloud.records){
+      throw new Error('Gist 內容格式不對');
+    }
+    const data = ensureData();
+    const pet = data.pets.find(p=>p.id===petId);
+    if(!pet) throw new Error('找不到寵物');
+    const localCount = Object.keys(data.records[petId] || {}).length;
+    const cloudCount = Object.keys(cloud.records).length;
+    if(localCount > 0){
+      const ok = confirm(
+        `本地有 ${localCount} 天紀錄，雲端有 ${cloudCount} 天。\n` +
+        `匯入會用雲端資料覆蓋本地紀錄與寵物設定。\n` +
+        `照片不會被影響（雲端不存照片）。\n\n繼續？`
+      );
+      if(!ok) return;
+    }
+    // 套用：寵物設定（雲端優先）+ gistId + records
+    pet.gistId = gistId;
+    if(cloud.pet){
+      if(cloud.pet.name) pet.name = cloud.pet.name;
+      if(cloud.pet.species) pet.species = cloud.pet.species;
+      if(cloud.pet.owner !== undefined) pet.owner = cloud.pet.owner;
+      if(cloud.pet.notes !== undefined) pet.notes = cloud.pet.notes;
+    }
+    data.records[petId] = cloud.records;
+    saveData(data);
+    refreshPetUI();
+    loadDay($('date').value);
+    loadPhotos();
+    renderDateHistory();
+    renderPetList();
+    toast(`✅ 已匯入 ${cloudCount} 天紀錄`);
+  } catch(e){
+    toast('❌ 匯入失敗：' + e.message);
+  }
+}
+
+function clearPetRecords(petId){
+  const data = ensureData();
+  const pet = data.pets.find(p=>p.id===petId);
+  if(!pet) return;
+  const recordCount = Object.keys(data.records[petId] || {}).length;
+  const photoCount = Object.values(data.photos[petId] || {}).reduce((s,arr)=>s+arr.length, 0);
+  if(recordCount === 0 && photoCount === 0){
+    toast('已經沒有紀錄了');
+    return;
+  }
+  const msg = `確定清空「${pet.name}」的 ${recordCount} 天紀錄、${photoCount} 張照片？\n\n保留：寵物名字、種類、飼主、備註\n清掉：所有日期紀錄、所有照片\n\n⚠️ 雲端 Gist 不會自動清，需要的話到 https://gist.github.com 手動刪`;
+  if(!confirm(msg)) return;
+  data.records[petId] = {};
+  data.photos[petId] = {};
+  saveData(data);
+  // 重新整理畫面
+  if(petId === getCurrentPet()?.id){
+    clearFormFields();
+    renderDateHistory();
+  }
+  toast(`已清空 ${pet.name} 的所有紀錄`);
+  renderPetList();
+}
+function savePetForm(editingId){
+  const name = $('petFormName').value.trim();
+  if(!name){ toast('請填名字'); return; }
+  const speciesRadio = document.querySelector('input[name="petFormSpecies"]:checked');
+  const species = speciesRadio ? speciesRadio.value : '其他';
+  const owner = $('petFormOwner').value.trim();
+  const notes = $('petFormNotes').value.trim();
+  const data = ensureData();
+  if(editingId){
+    const p = data.pets.find(x=>x.id===editingId);
+    if(p){ p.name = name; p.species = species; p.owner = owner; p.notes = notes; }
+  } else {
+    const id = genId();
+    data.pets.push({ id, name, species, owner, notes });
+    data.current_pet_id = id;  // 新增後切過去
+  }
+  saveData(data);
+  refreshPetUI();
+  loadDay($('date').value);
+  loadPhotos();
+  updateHistoryHint();
+  renderPetList();
+  toast(editingId?'已更新':'已新增');
+}
+function deletePet(petId){
+  const data = ensureData();
+  if(data.pets.length <= 1){ toast('至少要有一隻寵物'); return; }
+  const pet = data.pets.find(p=>p.id===petId);
+  if(!pet) return;
+  const recordCount = Object.keys(data.records[petId]||{}).length;
+  const photoCount = Object.values(data.photos[petId]||{}).reduce((s,arr)=>s+arr.length, 0);
+  const warning = (recordCount||photoCount) ? `\n\n⚠️ 將同時刪除 ${recordCount} 天紀錄、${photoCount} 張照片，無法復原` : '';
+  if(!confirm(`確定刪除「${pet.name}」？${warning}`)) return;
+  data.pets = data.pets.filter(p=>p.id!==petId);
+  delete data.records[petId];
+  delete data.photos[petId];
+  if(data.current_pet_id === petId) data.current_pet_id = data.pets[0].id;
+  saveData(data);
+  refreshPetUI();
+  loadDay($('date').value);
+  loadPhotos();
+  updateHistoryHint();
+  renderPetList();
+  toast('已刪除');
+}
+
+// === 表格式多日報告：欄位格式化器 ===
+function fmtMeal(r){
+  const p = [];
+  if(r.m) p.push(escapeHtml(r.m));
+  if(r.md) p.push('✓吃完');
+  if(r.mp) p.push('✓部分');
+  if(r.mn) p.push('✗沒吃');
+  if(r.mw) p.push('+水');
+  return p.join('・');
+}
+function fmtWater(r){
+  const w = [];
+  if(r.w1) w.push('1樓');
+  if(r.wm) w.push('主臥');
+  if(r.w3) w.push('3樓');
+  return w.join('・');
+}
+function fmtMed(r){
+  const p = [];
+  if(r.mn2) p.push(escapeHtml(r.mn2));
+  if(r.mdd) p.push('已餵');
+  if(r.ms) p.push('順利');
+  if(r.mdf) p.push('不易餵');
+  if(r.msk) p.push('未餵');
+  return p.join('・');
+}
+function fmtMood(r){
+  const p = [];
+  if(r.mo) p.push(r.mo);
+  if(r.mon) p.push(escapeHtml(r.mon));
+  return p.join('・');
+}
+function fmtPoop(r){
+  const p = [];
+  if(r.pc) p.push(`${r.pc} 顆`);
+  if(r.pn) p.push('正常');
+  if(r.ps) p.push('軟');
+  if(r.ph) p.push('硬');
+  return p.join('・');
+}
+function fmtPee(r){ return r.uc ? `${r.uc} 塊` : ''; }
+function fmtVomit(r){
+  if(r.vs === '無') return '<span style="color:#888;">無</span>';
+  if(r.vs === '有' || (!r.vs && (r.vc||r.vh||r.vf||r.vy||r.vb||r.vn))){
+    const p = ['<b style="color:#c44;">有</b>'];
+    if(r.vc) p.push(`${r.vc}次`);
+    if(r.vh) p.push('毛球');
+    if(r.vf) p.push('食物');
+    if(r.vy) p.push('黃水');
+    if(r.vb) p.push('血');
+    if(r.vn) p.push(`(${escapeHtml(r.vn)})`);
+    return p.join('・');
+  }
+  return '';
+}
+function fmtNote(r){ return r.n ? escapeHtml(r.n) : ''; }
+function fmtDateShort(d){
+  const dt = new Date(d + 'T00:00:00');
+  const w = ['日','一','二','三','四','五','六'][dt.getDay()];
+  return `${dt.getMonth()+1}/${dt.getDate()}<br><span style="font-size:.85em;color:var(--muted);font-weight:normal;">週${w}</span>`;
+}
+
+const ROW_DEFS = [
+  { label:'正餐', fn:fmtMeal },
+  { label:'飲水', fn:fmtWater },
+  { label:'零食', fn:r=>r.s?escapeHtml(r.s):'' },
+  { label:'餵藥', fn:fmtMed },
+  { label:'精神', fn:fmtMood },
+  { label:'便便', fn:fmtPoop },
+  { label:'排尿', fn:fmtPee },
+  { label:'嘔吐', fn:fmtVomit },
+  { label:'備註', fn:fmtNote },
+];
+
+function buildMultiTable(dates, records, orientation){
+  const cell = v => v ? `<td>${v}</td>` : `<td class="empty">—</td>`;
+  if(orientation === 'horizontal'){
+    // 項目當列 × 日期當欄
+    const headerCells = dates.map(d=>`<th>${fmtDateShort(d)}</th>`).join('');
+    const bodyRows = ROW_DEFS.map(def => {
+      const tds = dates.map(d => {
+        const r = records[d] || {};
+        return cell(def.fn(r));
+      }).join('');
+      return `<tr><th>${def.label}</th>${tds}</tr>`;
+    }).join('');
+    return `<div class="report-table-wrap">
+      <table class="report-table">
+        <thead><tr><th>項目</th>${headerCells}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>`;
+  } else {
+    // 日期當列 × 項目當欄
+    const headerCells = ROW_DEFS.map(d=>`<th>${d.label}</th>`).join('');
+    const bodyRows = dates.map(d => {
+      const r = records[d] || {};
+      const tds = ROW_DEFS.map(def => cell(def.fn(r))).join('');
+      return `<tr><th>${fmtDateShort(d)}</th>${tds}</tr>`;
+    }).join('');
+    return `<div class="report-table-wrap">
+      <table class="report-table">
+        <thead><tr><th>日期</th>${headerCells}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>`;
+  }
+}
+
+let currentReportOrientation = 'horizontal';
+let currentReportDates = [];
+
+function generateMultiReport(){
+  const picked = Array.from(document.querySelectorAll('.date-pick:checked')).map(c=>c.value).sort();
+  if(picked.length === 0){
+    toast('至少選一天');
+    return;
+  }
+  currentReportDates = picked;
+  // 自動建議：超過 14 天用直式
+  if(picked.length > 14) currentReportOrientation = 'vertical';
+  renderReportContent();
+  $('multiReport').style.display = 'block';
+  document.body.classList.add('multiday-mode');
+  closeMultiPicker();
+  window.scrollTo({top:0});
+}
+function setReportOrientation(o){
+  currentReportOrientation = o;
+  renderReportContent();
+}
+function renderReportContent(){
+  const records = getRecords();
+  const pet = getCurrentPet();
+  const petName = pet?.name || '寵物';
+  const cover = buildCover(petName, currentReportDates, records, pet);
+  const table = buildMultiTable(currentReportDates, records, currentReportOrientation);
+  const html = `
+    <div class="report-toolbar">
+      <button type="button" class="secondary" onclick="exitMultiReport()">← 返回</button>
+      <button type="button" onclick="window.print()">📄 列印 / 存 PDF</button>
+      <button type="button" class="secondary" onclick="downloadHtmlReport()">📁 下載 HTML 檔</button>
+      <div class="report-orient-toggle">
+        <button type="button" class="${currentReportOrientation==='horizontal'?'active':''}" onclick="setReportOrientation('horizontal')">橫式</button>
+        <button type="button" class="${currentReportOrientation==='vertical'?'active':''}" onclick="setReportOrientation('vertical')">直式</button>
+      </div>
+    </div>
+    ${cover}
+    ${table}
+  `;
+  $('multiReport').innerHTML = html;
+}
+function exitMultiReport(){
+  document.body.classList.remove('multiday-mode');
+  $('multiReport').style.display = 'none';
+  $('multiReport').innerHTML = '';
+}
+
+// 下載自包含 HTML 報告
+function downloadHtmlReport(){
+  // 取出當前 multiReport 的內容（去除 toolbar）
+  const tmp = $('multiReport').cloneNode(true);
+  const tb = tmp.querySelector('.report-toolbar');
+  if(tb) tb.remove();
+  // 把 logo.png 嘗試讀進來轉 base64（同源才會成功）
+  const styles = Array.from(document.querySelectorAll('style')).map(s=>s.textContent).join('\n');
+  const petName = getCurrentPet()?.name || '寵物';
+  const html = `<!DOCTYPE html>
+<html lang="zh-TW"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(petName)} 照護紀錄</title>
+<style>${styles}
+body{background:var(--bg);}
+#multiReport{display:block !important;}
+</style></head><body class="multiday-mode">
+<div id="multiReport">${tmp.innerHTML}</div>
+</body></html>`;
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `${petName}_照護紀錄_${today}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('✅ HTML 已下載');
+}
+
+// === 初始化 ===
+window.addEventListener('DOMContentLoaded', ()=>{
+  // Viewer 模式：URL 帶 ?view=GIST_ID
+  const params = new URLSearchParams(location.search);
+  const gistId = params.get('view');
+  if(gistId){
+    enterViewerMode(gistId);
+    return;
+  }
+
+  // 確保資料結構存在（含舊版資料遷移）
+  ensureData();
+  refreshPetUI();
+  // 預設今天
+  $('date').valueAsDate = new Date();
+  // 載入今天的紀錄（若有）
+  loadDay($('date').value);
+  loadPhotos();
+  updateHistoryHint();
+
+  // 切換日期 → 載入該天紀錄 + 照片
+  $('date').addEventListener('change', ()=>{
+    loadDay($('date').value);
+    loadPhotos();
+  });
+
+  // 自動儲存 + 自動同步（排除寵物彈窗內的編輯）
+  document.addEventListener('input', (e)=>{
+    if(e.target.closest('#petModal')) return;
+    saveCurrentDay();
+    scheduleAutoSync();
+  });
+  document.addEventListener('change', (e)=>{
+    if(e.target.closest('#petModal')) return;
+    saveCurrentDay();
+    scheduleAutoSync();
+  });
+});
+</script>
+</body>
+</html>

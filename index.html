@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wendy 溫蒂．貓與狗訓練日常</title>
+<style>
+  :root {
+    --bg: #f0e6d6;
+    --bg-soft: #f7f0e3;
+    --brown: #8b6f47;
+    --brown-dark: #6b5435;
+    --brown-light: #c9b693;
+    --text: #3d2f1f;
+    --text-soft: #6b5435;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+                 "Microsoft JhengHei", sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+  }
+  header.brand {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  header.brand img {
+    max-width: 360px;
+    width: 80%;
+    height: auto;
+  }
+  header.brand h1 {
+    color: var(--brown-dark);
+    font-size: 22px;
+    margin-top: 8px;
+  }
+  .tagline {
+    color: var(--text-soft);
+    font-size: 14px;
+    margin-top: 8px;
+    letter-spacing: 1px;
+  }
+  .tools {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media (min-width: 600px) {
+    .tools { grid-template-columns: 1fr 1fr; }
+  }
+  .tool-card {
+    display: block;
+    background: var(--bg-soft);
+    color: var(--text);
+    text-decoration: none;
+    border-radius: 14px;
+    padding: 24px 20px;
+    box-shadow: 0 2px 8px rgba(139,111,71,0.15);
+    border: 2px solid transparent;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .tool-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--brown);
+    box-shadow: 0 6px 16px rgba(139,111,71,0.25);
+  }
+  .tool-icon {
+    font-size: 36px;
+    margin-bottom: 8px;
+  }
+  .tool-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--brown-dark);
+    margin-bottom: 6px;
+  }
+  .tool-desc {
+    font-size: 13px;
+    color: var(--text-soft);
+    line-height: 1.5;
+  }
+  .footer {
+    text-align: center;
+    margin-top: 48px;
+    font-size: 12px;
+    color: var(--text-soft);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="brand">
+    <img src="logo.png" alt="Wendy 溫蒂．貓與狗訓練日常"
+         onerror="this.outerHTML='<h1>Wendy 溫蒂．貓與狗訓練日常</h1>'">
+    <div class="tagline">Cat &amp; Dog Training · Pet Care</div>
+  </header>
+
+  <div class="tools">
+    <a class="tool-card" href="training/">
+      <div class="tool-icon">📒</div>
+      <div class="tool-title">訓練課程記錄</div>
+      <div class="tool-desc">寵物資料、課程記錄、訓練項目與方法、一鍵分享報告給飼主</div>
+    </a>
+    <a class="tool-card" href="care/">
+      <div class="tool-icon">🩺</div>
+      <div class="tool-title">照護日記</div>
+      <div class="tool-desc">每日照護紀錄與雲端分享</div>
+    </a>
+  </div>
+
+  <div class="footer">
+    Wendy 溫蒂．貓與狗訓練日常
+  </div>
+</div>
+</body>
+</html>
