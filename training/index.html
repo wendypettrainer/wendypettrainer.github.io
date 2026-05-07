@@ -7,7 +7,7 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#8b6f47">
+<meta name="theme-color" content="#f0e6d6">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -1239,7 +1239,11 @@ function openPetForm(pet = null) {
         <input id="f_contact" type="text" value="${escapeAttr(data.ownerContact)}" placeholder="可選">
       </div>
       <div class="field">
-        <label>備註（個性 / 過敏 / 特殊狀況）</label>
+        <label>⚠️ 目前困擾行為（客戶想解決的問題）</label>
+        <textarea id="f_concerns" placeholder="例：吠叫、撲人、不上廁所、護食⋯">${escapeHtml(data.concerns || '')}</textarea>
+      </div>
+      <div class="field">
+        <label>備註（個性 / 過敏 / 特殊狀況 / 健康 / 家庭環境⋯）</label>
         <textarea id="f_notes">${escapeHtml(data.notes)}</textarea>
       </div>
       <div class="modal-actions">
@@ -1264,6 +1268,7 @@ function openPetForm(pet = null) {
       neutered: overlay.querySelector('#f_neutered').value,
       ownerName: overlay.querySelector('#f_owner').value.trim(),
       ownerContact: overlay.querySelector('#f_contact').value.trim(),
+      concerns: overlay.querySelector('#f_concerns').value.trim(),
       notes: overlay.querySelector('#f_notes').value.trim(),
       createdAt: data.createdAt || new Date().toISOString(),
     };
@@ -1302,7 +1307,8 @@ function renderSessions() {
         飼主 ${escapeHtml(pet.ownerName || '—')}
         ${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
       </div>
-      ${pet.notes ? `<div class="card-meta" style="margin-top:6px">📝 ${escapeHtml(pet.notes)}</div>` : ''}
+      ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
+      ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
       <div style="margin-top:10px; display:flex; gap:8px">
         <button class="small-btn" id="editPet">編輯寵物資料</button>
       </div>
@@ -2091,12 +2097,14 @@ function renderSettings() {
     <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">資料管理</h3>
     <div class="card" style="cursor:default">
       <div class="actions-row">
+        <button class="btn" id="csvImport">📥 從 CSV 匯入寵物</button>
         <button class="btn ghost" id="exportData">匯出全部資料 (JSON)</button>
         <button class="btn ghost" id="importData">匯入 JSON</button>
         <button class="btn danger" id="resetItems">重設清單為預設</button>
       </div>
       <p class="card-meta" style="margin-top:10px">
-        匯出可備份，匯入會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
+        💡 <b>從 CSV 匯入寵物</b>：把 Google 表單 / SurveyCake 報名表的 CSV 直接匯成寵物資料，可選欄位對應、批次標物種、額外欄位合併到備註。<br>
+        匯出 JSON 可備份，匯入 JSON 會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
       </p>
     </div>
   `;
@@ -2283,6 +2291,8 @@ function renderSettings() {
   renderItemEditor();
 
   // Data management
+  document.getElementById('csvImport').onclick = () => openCsvImport();
+
   document.getElementById('exportData').onclick = () => {
     const dump = {
       version: 1,
@@ -2326,6 +2336,269 @@ function renderSettings() {
     if (!confirm('將兩份清單還原為預設？你的自訂項目會消失。')) return;
     save(KEYS.itemsDog, DEFAULT_DOG_ITEMS);
     save(KEYS.itemsCat, DEFAULT_CAT_ITEMS);
+    render();
+  };
+}
+
+/* ============== CSV IMPORT ============== */
+// 簡單但堅實的 CSV 解析器：處理引號、轉義引號、多行儲存格、CRLF
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuote = false;
+  let i = 0;
+  const N = text.length;
+  while (i < N) {
+    const c = text[i];
+    if (inQuote) {
+      if (c === '"' && text[i+1] === '"') { cell += '"'; i += 2; continue; }
+      if (c === '"') { inQuote = false; i++; continue; }
+      cell += c;
+      i++;
+    } else {
+      if (c === '"') { inQuote = true; i++; continue; }
+      if (c === ',') { row.push(cell); cell = ''; i++; continue; }
+      if (c === '\r' || c === '\n') {
+        if (c === '\r' && text[i+1] === '\n') i++;
+        row.push(cell); cell = '';
+        if (row.length > 1 || (row[0] && row[0] !== '')) rows.push(row);
+        row = [];
+        i++;
+        continue;
+      }
+      cell += c;
+      i++;
+    }
+  }
+  if (cell !== '' || row.length > 0) {
+    row.push(cell);
+    if (row.length > 1 || (row[0] && row[0] !== '')) rows.push(row);
+  }
+  return rows;
+}
+
+// App 欄位選項
+const CSV_FIELD_OPTIONS = [
+  { value: '', label: '— 不匯入 —' },
+  { value: 'name', label: '名字 ★' },
+  { value: 'breed', label: '品種' },
+  { value: 'gender', label: '性別' },
+  { value: 'neutered', label: '絕育' },
+  { value: 'birth', label: '出生年月 / 月齡' },
+  { value: 'ownerName', label: '飼主姓名' },
+  { value: 'ownerContact', label: '飼主聯絡' },
+  { value: 'concerns', label: '⚠️ 困擾行為（客戶想解決的問題）' },
+  { value: 'notes', label: '合併進備註（可多選）' },
+];
+
+// 自動偵測欄名 → App 欄位（精確匹配優先，避免誤判）
+function autoMapColumn(colName) {
+  const s = colName || '';
+  // 飼主姓名（不能是「飼主在 X 上的名字」這種社群帳號欄位）
+  if (/^飼主.*姓名$|^飼主名$|^主人.*姓名$|^主人名$/i.test(s)) return 'ownerName';
+  // 飼主聯絡（優先電話 > Email；Email 因可能用作識別、放備註更實用，這裡只抓電話）
+  if (/聯絡電話|^電話|^手機|^phone$/i.test(s)) return 'ownerContact';
+  // 寵物名字（嚴格：開頭必須是「寵物」）
+  if (/^寵物.*名(字|稱)?$|^pet.*name$|^name$/i.test(s)) return 'name';
+  // 寵物品種（嚴格：開頭必須是「寵物」）
+  if (/^寵物.*品種$|^breed$/i.test(s)) return 'breed';
+  // 性別
+  if (/^寵物.*性別$|^性別$|^sex$|^gender$/i.test(s)) return 'gender';
+  // 絕育（只抓「是否絕育」這個 yes/no 問題，後續「絕育的原因」等都歸備註）
+  if (/^是否絕育/i.test(s)) return 'neutered';
+  // 出生（嚴格：「出生」開頭、寵物的出生）
+  if (/^寵物.*出生|^出生|^生日|^birth/i.test(s)) return 'birth';
+  // 困擾行為（客戶填寫的目前最想解決的問題）
+  if (/困擾.*行為|目前.*困擾|想解決|問題.*行為|concerns?$/i.test(s)) return 'concerns';
+  // 其他全部歸備註
+  return 'notes';
+}
+
+// 值轉換（性別、絕育用）
+function normalizeGender(v) {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (/^(男|公|male|m|♂)/i.test(s)) return 'male';
+  if (/^(女|母|female|f|♀)/i.test(s)) return 'female';
+  return '';
+}
+function normalizeNeutered(v) {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (/^(是|已|yes|y|true|已結|已絕)/i.test(s)) return 'yes';
+  if (/^(否|未|no|n|false|沒|還沒)/i.test(s)) return 'no';
+  return '';
+}
+
+let CSV_IMPORT_STATE = null;  // { rows, headers, mapping, batchSpecies }
+
+function openCsvImport() {
+  CSV_IMPORT_STATE = { rows: null, headers: null, mapping: {}, batchSpecies: 'dog' };
+  const overlay = openModal(`
+    <div class="modal" style="max-width:720px">
+      <h2>📥 從 CSV 匯入寵物</h2>
+      <div class="field">
+        <label>選 CSV 檔（從 Google 表單 / SurveyCake 下載）</label>
+        <input id="csvFile" type="file" accept=".csv,text/csv" style="padding:8px;">
+      </div>
+      <div id="csvImportContent"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="csv_cancel">關閉</button>
+      </div>
+    </div>
+  `);
+  overlay.querySelector('#csv_cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#csvFile').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length < 2) {
+        showNotice('CSV 只有標題列，沒有資料', 'err');
+        return;
+      }
+      CSV_IMPORT_STATE.headers = rows[0];
+      CSV_IMPORT_STATE.rows = rows.slice(1);
+      // 自動偵測 mapping
+      CSV_IMPORT_STATE.mapping = {};
+      CSV_IMPORT_STATE.headers.forEach((h, i) => {
+        CSV_IMPORT_STATE.mapping[i] = autoMapColumn(h);
+      });
+      renderCsvMapping(overlay);
+    } catch (err) {
+      showNotice('CSV 解析失敗：' + err.message, 'err');
+    }
+  };
+}
+
+function renderCsvMapping(overlay) {
+  const { headers, rows, mapping, batchSpecies } = CSV_IMPORT_STATE;
+  const optionsHtml = CSV_FIELD_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+  const rowsHtml = headers.map((h, i) => {
+    const sample = (rows[0] && rows[0][i] || '').slice(0, 40);
+    const opts = CSV_FIELD_OPTIONS.map(o =>
+      `<option value="${o.value}" ${mapping[i]===o.value?'selected':''}>${o.label}</option>`
+    ).join('');
+    return `
+      <tr>
+        <td style="padding:6px 8px; border-bottom:1px solid var(--brown-light); max-width:240px; word-break:break-all;">
+          <div style="font-weight:500">${escapeHtml(h)}</div>
+          <div style="font-size:11px; color:var(--text-soft)">範例：${escapeHtml(sample)}${sample.length>=40?'⋯':''}</div>
+        </td>
+        <td style="padding:6px 8px; border-bottom:1px solid var(--brown-light);">
+          <select data-col="${i}" style="padding:6px 8px; border:1px solid var(--brown-light); border-radius:6px; font-size:13px; min-width:160px;">${opts}</select>
+        </td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('csvImportContent').innerHTML = `
+    <div class="notice" style="margin-bottom:12px">
+      偵測到 <b>${rows.length}</b> 筆資料，<b>${headers.length}</b> 個欄位。下方確認對應、選物種，再預覽匯入。
+    </div>
+
+    <div class="field">
+      <label>這批寵物全部是？</label>
+      <div class="radio-group">
+        <label class="radio-opt"><input type="radio" name="batchSpecies" value="dog" ${batchSpecies==='dog'?'checked':''}> 🐶 狗</label>
+        <label class="radio-opt"><input type="radio" name="batchSpecies" value="cat" ${batchSpecies==='cat'?'checked':''}> 🐱 貓</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>欄位對應（★ 為必填）</label>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg-soft)">
+            <th style="text-align:left; padding:6px 8px;">CSV 欄位</th>
+            <th style="text-align:left; padding:6px 8px;">匯入到 App 的⋯</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+
+    <div class="actions-row">
+      <button class="btn" id="csv_preview">下一步：預覽 →</button>
+    </div>
+  `;
+  // 綁定
+  overlay.querySelectorAll('select[data-col]').forEach(sel => {
+    sel.onchange = () => {
+      const col = parseInt(sel.dataset.col);
+      mapping[col] = sel.value;
+    };
+  });
+  overlay.querySelectorAll('input[name="batchSpecies"]').forEach(r => {
+    r.onchange = () => { CSV_IMPORT_STATE.batchSpecies = r.value; };
+  });
+  document.getElementById('csv_preview').onclick = () => renderCsvPreview(overlay);
+}
+
+// 把一個 CSV 列轉成 pet 物件
+function csvRowToPet(row, headers, mapping, batchSpecies) {
+  const pet = {
+    id: uid(),
+    species: batchSpecies,
+    name: '', breed: '', gender: '', neutered: '', birth: '',
+    ownerName: '', ownerContact: '',
+    concerns: '', notes: '',
+    createdAt: new Date().toISOString(),
+  };
+  const noteParts = [];
+  headers.forEach((h, i) => {
+    const target = mapping[i];
+    const raw = (row[i] || '').trim();
+    if (!raw) return;
+    if (!target) return;
+    if (target === 'gender') pet.gender = normalizeGender(raw);
+    else if (target === 'neutered') pet.neutered = normalizeNeutered(raw);
+    else if (target === 'notes') noteParts.push(`【${h}】${raw}`);
+    else if (target in pet) pet[target] = raw;
+  });
+  pet.notes = noteParts.join('\n');
+  return pet;
+}
+
+function renderCsvPreview(overlay) {
+  const { headers, rows, mapping, batchSpecies } = CSV_IMPORT_STATE;
+  // 必須有 name 對應
+  const hasName = Object.values(mapping).includes('name');
+  if (!hasName) {
+    showNotice('⚠️ 必須有一個欄位對應到「名字」', 'err');
+    return;
+  }
+  const previewPets = rows.slice(0, 3).map(r => csvRowToPet(r, headers, mapping, batchSpecies));
+  const allPets = rows.map(r => csvRowToPet(r, headers, mapping, batchSpecies));
+  const validCount = allPets.filter(p => p.name).length;
+  const skippedCount = allPets.length - validCount;
+
+  const previewHtml = previewPets.map(p => `
+    <div class="card" style="cursor:default; margin-bottom:8px;">
+      <div class="card-title">${speciesEmoji(p.species)} ${escapeHtml(p.name||'(空白名字、會被略過)')}</div>
+      <div class="card-meta">${escapeHtml(petTagline(p))} · 飼主：${escapeHtml(p.ownerName||'—')}${p.ownerContact?' · '+escapeHtml(p.ownerContact):''}</div>
+      ${p.notes ? `<div class="card-meta" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--brown-light); white-space:pre-wrap; max-height:120px; overflow-y:auto;">${escapeHtml(p.notes)}</div>` : ''}
+    </div>
+  `).join('');
+
+  document.getElementById('csvImportContent').innerHTML = `
+    <div class="notice" style="margin-bottom:12px">
+      準備匯入 <b>${validCount}</b> 隻寵物${skippedCount?`（${skippedCount} 筆名字空白會略過）`:''}。下方是前 3 筆預覽：
+    </div>
+    ${previewHtml}
+    <div class="actions-row" style="margin-top:14px">
+      <button class="btn ghost" id="csv_back">← 重新對應</button>
+      <button class="btn" id="csv_confirm">✓ 確認匯入 ${validCount} 筆</button>
+    </div>
+  `;
+  document.getElementById('csv_back').onclick = () => renderCsvMapping(overlay);
+  document.getElementById('csv_confirm').onclick = () => {
+    const newPets = allPets.filter(p => p.name);
+    const cur = load(KEYS.pets, []);
+    save(KEYS.pets, cur.concat(newPets));
+    showNotice(`✅ 已匯入 ${newPets.length} 隻寵物`);
+    overlay.remove();
     render();
   };
 }
