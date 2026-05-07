@@ -2895,12 +2895,14 @@ function renderSettings() {
     <div class="card" style="cursor:default">
       <div class="actions-row">
         <button class="btn" id="csvImport">📥 從 CSV 匯入寵物</button>
+        <button class="btn" id="emailImport">📧 從 Email 內容匯入單筆</button>
         <button class="btn ghost" id="exportData">匯出全部資料 (JSON)</button>
         <button class="btn ghost" id="importData">匯入 JSON</button>
         <button class="btn danger" id="resetItems">重設清單為預設</button>
       </div>
       <p class="card-meta" style="margin-top:10px">
-        💡 <b>從 CSV 匯入寵物</b>：把 Google 表單 / SurveyCake 報名表的 CSV 直接匯成寵物資料，可選欄位對應、批次標物種、額外欄位合併到備註。<br>
+        💡 <b>從 CSV 匯入寵物</b>：批次匯入。需要表單後台的 CSV 下載權限。<br>
+        💡 <b>從 Email 內容匯入單筆</b>：把 SurveyCake 通知 email 全選複製貼上，自動辨識欄位、單筆建檔。沒 CSV 下載權限時用這個。<br>
         匯出 JSON 可備份，匯入 JSON 會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
       </p>
     </div>
@@ -3115,6 +3117,7 @@ function renderSettings() {
 
   // Data management
   document.getElementById('csvImport').onclick = () => openCsvImport();
+  document.getElementById('emailImport').onclick = () => openEmailImport();
 
   document.getElementById('exportData').onclick = () => {
     const dump = {
@@ -3163,6 +3166,157 @@ function renderSettings() {
     if (!confirm('將兩份清單還原為預設？你的自訂項目會消失。')) return;
     save(KEYS.itemsDog, DEFAULT_DOG_ITEMS);
     save(KEYS.itemsCat, DEFAULT_CAT_ITEMS);
+    render();
+  };
+}
+
+/* ============== EMAIL 單筆匯入 (SurveyCake / Google 表單通知信) ============== */
+function parseSurveyCakeEmail(text) {
+  if (!text) return null;
+  // 1. 剝掉 markdown email link：[a@b](mailto:a@b) → a@b
+  text = text.replace(/\[([^\]]+)\]\(mailto:[^)]+\)/g, '$1');
+  // 2. 拆行、去空白、過濾空行
+  const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  // 3. 嚴格交替：偶數行=問題、奇數行=答案
+  const qa = [];
+  for (let i = 0; i < lines.length; i += 2) {
+    if (i + 1 < lines.length) qa.push([lines[i], lines[i + 1]]);
+  }
+  if (qa.length === 0) return null;
+
+  // 4. 物種偵測：問題裡「狗狗」vs「貓貓」誰多
+  const dogScore = (text.match(/狗狗/g) || []).length;
+  const catScore = (text.match(/貓貓/g) || []).length;
+  const species = catScore > dogScore ? 'cat' : 'dog';
+
+  const result = {
+    species,
+    name: '', breed: '', birth: '', gender: '', neutered: '',
+    ownerName: '', ownerContact: '', ownerAddress: '',
+    concerns: '', notes: '',
+  };
+  const noteLines = [];
+
+  function detectField(q) {
+    // 嚴格 regex：盡量綁問題的「主語」+「關鍵字」，避免命中含有相同字的其他問題
+    if (/^(狗狗|貓貓|寵物)名稱$|^名字$/.test(q)) return 'name';
+    if (/^(狗狗|貓貓|寵物)?品種$/.test(q)) return 'breed';
+    if (/^(狗狗|貓貓|寵物)?年齡|^狗狗年齡\/生日$|^生日$|^出生/.test(q)) return 'birth';
+    if (/^性別$|^(狗狗|貓貓|寵物)性別$/.test(q)) return 'genderInfo';
+    if (/^主要飼養人姓名$|^飼主姓名$|^姓名$/.test(q)) return 'ownerName';
+    if (/^聯絡電話$|^電話$|^手機$|^聯繫電話$/.test(q)) return 'ownerContact';
+    if (/^居住地址$|^地址$|^住址$/.test(q)) return 'ownerAddress';
+    if (/困擾您的行為|^困擾行為$|請詳述目前.*困擾/.test(q)) return 'concerns';
+    return null;
+  }
+
+  for (const [q, a] of qa) {
+    const field = detectField(q);
+    if (field === 'genderInfo') {
+      // "男生（未結紮）" → gender + neutered (空值才填，避免覆蓋)
+      if (!result.gender) {
+        if (/男生|男孩|^男|^公|♂|male/i.test(a)) result.gender = 'male';
+        else if (/女生|女孩|^女|^母|♀|female/i.test(a)) result.gender = 'female';
+      }
+      if (!result.neutered) {
+        if (/未結紮|未絕育|不結紮|不絕育|沒結紮|沒絕育/.test(a)) result.neutered = 'no';
+        else if (/已結紮|已絕育|結紮|絕育/.test(a)) result.neutered = 'yes';
+      }
+    } else if (field && !result[field]) {
+      // 第一次遇到該欄位才填，已填的當作不認識的問題進 notes（first-match-wins）
+      result[field] = a;
+    } else {
+      // 不認識的問題 OR 重複出現的同欄位 → 進備註
+      noteLines.push(`【${q}】${a}`);
+    }
+  }
+  result.notes = noteLines.join('\n');
+  return result;
+}
+
+function openEmailImport() {
+  const html = `
+    <div class="modal" style="max-width:680px">
+      <h2>📧 從 Email 內容匯入單筆寵物</h2>
+      <p class="card-meta" style="margin-bottom:10px">
+        把 SurveyCake / Google 表單的通知 email 內容**全部**複製貼到下方，自動辨識欄位。<br>
+        識別不到的欄位（疫苗、散步、餵食習慣⋯）會合併進「備註」保留。
+      </p>
+      <div class="field">
+        <label>Email 原始內容</label>
+        <textarea id="em_text" rows="10" placeholder="貼上 email 內容，例：
+狗狗名稱
+Gabu
+狗狗品種
+黃金獵犬
+..."></textarea>
+      </div>
+      <div class="actions-row">
+        <button class="btn ghost" id="em_cancel">取消</button>
+        <button class="btn" id="em_parse">解析 →</button>
+      </div>
+      <div id="em_preview" style="margin-top:14px; display:none"></div>
+    </div>
+  `;
+  const overlay = openModal(html);
+  overlay.querySelector('#em_cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#em_parse').onclick = () => {
+    const txt = overlay.querySelector('#em_text').value;
+    if (!txt.trim()) { showNotice('請先貼上 email 內容', 'err'); return; }
+    const parsed = parseSurveyCakeEmail(txt);
+    if (!parsed || !parsed.name) {
+      showNotice('解析失敗，沒抓到寵物名稱。請檢查貼的內容是否完整', 'err');
+      return;
+    }
+    renderEmailPreview(overlay, parsed);
+  };
+}
+
+function renderEmailPreview(overlay, p) {
+  const speciesLabel = p.species === 'cat' ? '🐱 貓' : '🐶 狗';
+  const genderLabel = p.gender === 'male' ? '♂ 公' : p.gender === 'female' ? '♀ 母' : '—';
+  const neuteredLabel = p.neutered === 'yes' ? '已絕育' : p.neutered === 'no' ? '未絕育' : '—';
+  const previewHtml = `
+    <div class="card" style="cursor:default; background:var(--bg-soft)">
+      <h3 style="font-size:14px; color:var(--brown-dark); margin-bottom:10px">解析結果預覽</h3>
+      <div style="display:grid; grid-template-columns: 100px 1fr; gap:6px 12px; font-size:13px;">
+        <div style="color:var(--text-soft)">物種</div><div>${speciesLabel}</div>
+        <div style="color:var(--text-soft)">名字</div><div><b>${escapeHtml(p.name)}</b></div>
+        <div style="color:var(--text-soft)">品種</div><div>${escapeHtml(p.breed || '—')}</div>
+        <div style="color:var(--text-soft)">年齡</div><div>${escapeHtml(p.birth || '—')}</div>
+        <div style="color:var(--text-soft)">性別</div><div>${genderLabel} · ${neuteredLabel}</div>
+        <div style="color:var(--text-soft)">飼主</div><div>${escapeHtml(p.ownerName || '—')}</div>
+        <div style="color:var(--text-soft)">聯絡</div><div>${escapeHtml(p.ownerContact || '—')}</div>
+        <div style="color:var(--text-soft)">📍 地址</div><div>${escapeHtml(p.ownerAddress || '—')}</div>
+        <div style="color:var(--text-soft)">⚠️ 困擾</div><div style="white-space:pre-wrap">${escapeHtml(p.concerns || '—')}</div>
+        <div style="color:var(--text-soft)">📝 備註</div><div style="white-space:pre-wrap; font-size:11px; color:var(--text-soft); max-height:120px; overflow-y:auto; background:white; padding:6px; border-radius:4px">${escapeHtml(p.notes || '—')}</div>
+      </div>
+      <div class="actions-row" style="margin-top:14px">
+        <button class="btn ghost" id="em_re">重新貼</button>
+        <button class="btn" id="em_save">✅ 確認新增寵物</button>
+      </div>
+      <p class="card-meta" style="margin-top:8px">
+        💡 加進去後可以到寵物列表點寵物 → 「編輯寵物資料」進一步調整。
+      </p>
+    </div>
+  `;
+  const previewBox = overlay.querySelector('#em_preview');
+  previewBox.style.display = 'block';
+  previewBox.innerHTML = previewHtml;
+  overlay.querySelector('#em_re').onclick = () => {
+    previewBox.style.display = 'none';
+    overlay.querySelector('#em_text').focus();
+  };
+  overlay.querySelector('#em_save').onclick = () => {
+    const newPet = Object.assign({}, p, {
+      id: uid(),
+      createdAt: new Date().toISOString(),
+    });
+    const pets = load(KEYS.pets, []);
+    pets.push(newPet);
+    save(KEYS.pets, pets);
+    showNotice(`✅ 已新增 ${p.name}`);
+    overlay.remove();
     render();
   };
 }
