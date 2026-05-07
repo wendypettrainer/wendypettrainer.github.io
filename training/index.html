@@ -1268,7 +1268,7 @@ function openPetForm(pet = null) {
   const data = pet || {
     id: '', species: 'dog', name: '', breed: '', birth: '',
     gender: '', neutered: '',
-    ownerName: '', ownerContact: '', notes: '',
+    ownerName: '', ownerContact: '', ownerAddress: '', notes: '',
   };
   const html = `
     <div class="modal">
@@ -1323,6 +1323,10 @@ function openPetForm(pet = null) {
         <input id="f_contact" type="text" value="${escapeAttr(data.ownerContact)}" placeholder="可選">
       </div>
       <div class="field">
+        <label>飼主地址（用於到府上課與匯款通知）</label>
+        <input id="f_address" type="text" value="${escapeAttr(data.ownerAddress || '')}" placeholder="例：嘉義縣民雄鄉⋯">
+      </div>
+      <div class="field">
         <label>⚠️ 目前困擾行為（客戶想解決的問題）</label>
         <textarea id="f_concerns" placeholder="例：吠叫、撲人、不上廁所、護食⋯">${escapeHtml(data.concerns || '')}</textarea>
       </div>
@@ -1352,6 +1356,7 @@ function openPetForm(pet = null) {
       neutered: overlay.querySelector('#f_neutered').value,
       ownerName: overlay.querySelector('#f_owner').value.trim(),
       ownerContact: overlay.querySelector('#f_contact').value.trim(),
+      ownerAddress: overlay.querySelector('#f_address').value.trim(),
       concerns: overlay.querySelector('#f_concerns').value.trim(),
       notes: overlay.querySelector('#f_notes').value.trim(),
       createdAt: data.createdAt || new Date().toISOString(),
@@ -1391,6 +1396,7 @@ function renderSessions() {
         飼主 ${escapeHtml(pet.ownerName || '—')}
         ${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
       </div>
+      ${pet.ownerAddress ? `<div class="card-meta" style="margin-top:6px">📍 ${escapeHtml(pet.ownerAddress)}</div>` : ''}
       ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
       ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
       <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
@@ -1718,12 +1724,13 @@ function renderBooking() {
   if (isEdit && !data) { go('bookings', { petId: pet.id }); return; }
 
   // 帶入預設或既有資料
+  // 新建 booking 時：地點優先用「飼主地址」（多數客戶到府上課），沒填才退到全域預設
   const b = data ? JSON.parse(JSON.stringify(data)) : {
     id: '',
     petId: pet.id,
     sessionCount: 1,
     sessions: [{ date: '', startTime: '', endTime: '' }],
-    location: tpl.defaultLocation,
+    location: (pet.ownerAddress && pet.ownerAddress.trim()) || tpl.defaultLocation,
     feePerClass: tpl.defaultFeePerClass,
     transportPerClass: tpl.defaultTransportPerClass,
     paymentDueDate: '',
@@ -2446,14 +2453,25 @@ function exportBookingPdf(booking, pet) {
     margin-bottom: 6pt;
   }
 
-  /* 客戶填寫的簽名欄：行距更緊 */
+  /* 客戶填寫的簽名欄：標題 + 底線同一行，超緊湊 */
+  .pay-box.signature {
+    padding: 10pt 14pt 6pt;
+  }
   .pay-box.signature .sig-row {
-    margin: 4pt 0 8pt;
+    display: flex;
+    align-items: baseline;
+    gap: 6pt;
+    margin: 5pt 0;
+    font-size: 11.5pt;
+  }
+  .pay-box.signature .sig-label {
+    flex-shrink: 0;
+    font-weight: 500;
   }
   .pay-box.signature .sig-line {
+    flex: 1;
     border-bottom: 1px solid #c9b693;
     height: 14pt;
-    margin-top: 2pt;
   }
 
   .due-line {
@@ -2579,16 +2597,16 @@ function exportBookingPdf(booking, pet) {
 
     <div class="pay-box signature">
       <div class="sig-row">
-        <div>▍匯款人姓名：</div>
-        <div class="sig-line"></div>
+        <span class="sig-label">▍匯款人姓名：</span>
+        <span class="sig-line"></span>
       </div>
       <div class="sig-row">
-        <div>▍連絡電話：</div>
-        <div class="sig-line"></div>
+        <span class="sig-label">▍連絡電話：</span>
+        <span class="sig-line"></span>
       </div>
       <div class="sig-row">
-        <div>▍帳號後五碼：</div>
-        <div class="sig-line"></div>
+        <span class="sig-label">▍帳號後五碼：</span>
+        <span class="sig-line"></span>
       </div>
     </div>
   </section>
@@ -3191,6 +3209,7 @@ const CSV_FIELD_OPTIONS = [
   { value: 'birth', label: '出生年月 / 月齡' },
   { value: 'ownerName', label: '飼主姓名' },
   { value: 'ownerContact', label: '飼主聯絡' },
+  { value: 'ownerAddress', label: '📍 飼主地址（上課地點預設）' },
   { value: 'concerns', label: '⚠️ 困擾行為（客戶想解決的問題）' },
   { value: 'notes', label: '合併進備註（可多選）' },
 ];
@@ -3202,6 +3221,8 @@ function autoMapColumn(colName) {
   if (/^飼主.*姓名$|^飼主名$|^主人.*姓名$|^主人名$/i.test(s)) return 'ownerName';
   // 飼主聯絡（優先電話 > Email；Email 因可能用作識別、放備註更實用，這裡只抓電話）
   if (/聯絡電話|^電話|^手機|^phone$/i.test(s)) return 'ownerContact';
+  // 飼主地址（住址、地址、上課地點、住處）
+  if (/地址|住址|^住處$|上課地點|address|location/i.test(s)) return 'ownerAddress';
   // 寵物名字（嚴格：開頭必須是「寵物」）
   if (/^寵物.*名(字|稱)?$|^pet.*name$|^name$/i.test(s)) return 'name';
   // 寵物品種（嚴格：開頭必須是「寵物」）
@@ -3345,7 +3366,7 @@ function csvRowToPet(row, headers, mapping, batchSpecies) {
     id: uid(),
     species: batchSpecies,
     name: '', breed: '', gender: '', neutered: '', birth: '',
-    ownerName: '', ownerContact: '',
+    ownerName: '', ownerContact: '', ownerAddress: '',
     concerns: '', notes: '',
     createdAt: new Date().toISOString(),
   };
