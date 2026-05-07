@@ -882,12 +882,14 @@ async function findOrCreateSyncGist() {
 
 function buildSyncPayload() {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     lastModified: load(KEYS.lastModified, ''),
     pets: load(KEYS.pets, []),
     sessions: load(KEYS.sessions, []),
     itemsCat: load(KEYS.itemsCat, []),
     itemsDog: load(KEYS.itemsDog, []),
+    bookings: load(KEYS.bookings, []),
+    bookingTemplate: load(KEYS.bookingTemplate, {}),
   };
 }
 
@@ -898,6 +900,10 @@ function applySyncPayload(remote) {
   if (Array.isArray(remote.sessions)) _writeRaw(KEYS.sessions, remote.sessions);
   if (Array.isArray(remote.itemsCat)) _writeRaw(KEYS.itemsCat, remote.itemsCat);
   if (Array.isArray(remote.itemsDog)) _writeRaw(KEYS.itemsDog, remote.itemsDog);
+  if (Array.isArray(remote.bookings)) _writeRaw(KEYS.bookings, remote.bookings);
+  if (remote.bookingTemplate && typeof remote.bookingTemplate === 'object') {
+    _writeRaw(KEYS.bookingTemplate, remote.bookingTemplate);
+  }
   if (remote.lastModified) _writeRaw(KEYS.lastModified, remote.lastModified);
   return true;
 }
