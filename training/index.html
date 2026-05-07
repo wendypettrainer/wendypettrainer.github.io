@@ -1272,22 +1272,12 @@ function renderPets() {
 // 「+ 新增寵物」三選一入口（手動 / Email / CSV）
 function openAddPetChooser() {
   const html = `
-    <div class="modal" style="max-width:480px">
+    <div class="modal" style="max-width:420px">
       <h2>新增寵物</h2>
-      <p class="card-meta" style="margin-bottom:14px">選一種建檔方式</p>
-      <div style="display:flex; flex-direction:column; gap:10px">
-        <button class="btn" id="add_manual" style="text-align:left; padding:14px; height:auto; flex-direction:column; align-items:flex-start;">
-          <div style="font-size:15px; font-weight:600">✏️ 手動填寫</div>
-          <div style="font-size:12px; opacity:0.85; margin-top:4px">一筆一筆建檔</div>
-        </button>
-        <button class="btn" id="add_email" style="text-align:left; padding:14px; height:auto; flex-direction:column; align-items:flex-start;">
-          <div style="font-size:15px; font-weight:600">📧 從 Email 內容貼上</div>
-          <div style="font-size:12px; opacity:0.85; margin-top:4px">SurveyCake / Google 表單通知信全選複製、自動辨識欄位</div>
-        </button>
-        <button class="btn ghost" id="add_csv" style="text-align:left; padding:14px; height:auto; flex-direction:column; align-items:flex-start;">
-          <div style="font-size:15px; font-weight:600">📥 從 CSV 批次匯入</div>
-          <div style="font-size:12px; opacity:0.85; margin-top:4px">表單後台下載的 CSV，可以一次匯多筆</div>
-        </button>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px">
+        <button class="btn" id="add_email">📧 Email 貼上</button>
+        <button class="btn" id="add_csv">📥 CSV 匯入</button>
+        <button class="btn ghost" id="add_manual">✏️ 手動填寫</button>
       </div>
       <div class="modal-actions">
         <button class="btn ghost" id="add_cancel">取消</button>
