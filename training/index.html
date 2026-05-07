@@ -1185,7 +1185,7 @@ function renderPets() {
       </div>
       <button class="fab" id="fab">＋</button>
     `;
-    document.getElementById('fab').onclick = () => openPetForm();
+    document.getElementById('fab').onclick = () => openAddPetChooser();
     return;
   }
 
@@ -1266,7 +1266,39 @@ function renderPets() {
   main.querySelectorAll('.card[data-id]').forEach(el => {
     el.onclick = () => go('sessions', { petId: el.dataset.id });
   });
-  document.getElementById('fab').onclick = () => openPetForm();
+  document.getElementById('fab').onclick = () => openAddPetChooser();
+}
+
+// 「+ 新增寵物」三選一入口（手動 / Email / CSV）
+function openAddPetChooser() {
+  const html = `
+    <div class="modal" style="max-width:480px">
+      <h2>新增寵物</h2>
+      <p class="card-meta" style="margin-bottom:14px">選一種建檔方式</p>
+      <div style="display:flex; flex-direction:column; gap:10px">
+        <button class="btn" id="add_manual" style="text-align:left; padding:14px; height:auto; flex-direction:column; align-items:flex-start;">
+          <div style="font-size:15px; font-weight:600">✏️ 手動填寫</div>
+          <div style="font-size:12px; opacity:0.85; margin-top:4px">一筆一筆建檔</div>
+        </button>
+        <button class="btn" id="add_email" style="text-align:left; padding:14px; height:auto; flex-direction:column; align-items:flex-start;">
+          <div style="font-size:15px; font-weight:600">📧 從 Email 內容貼上</div>
+          <div style="font-size:12px; opacity:0.85; margin-top:4px">SurveyCake / Google 表單通知信全選複製、自動辨識欄位</div>
+        </button>
+        <button class="btn ghost" id="add_csv" style="text-align:left; padding:14px; height:auto; flex-direction:column; align-items:flex-start;">
+          <div style="font-size:15px; font-weight:600">📥 從 CSV 批次匯入</div>
+          <div style="font-size:12px; opacity:0.85; margin-top:4px">表單後台下載的 CSV，可以一次匯多筆</div>
+        </button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="add_cancel">取消</button>
+      </div>
+    </div>
+  `;
+  const overlay = openModal(html);
+  overlay.querySelector('#add_cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#add_manual').onclick = () => { overlay.remove(); openPetForm(); };
+  overlay.querySelector('#add_email').onclick = () => { overlay.remove(); openEmailImport(); };
+  overlay.querySelector('#add_csv').onclick = () => { overlay.remove(); openCsvImport(); };
 }
 
 function openPetForm(pet = null) {
@@ -2894,16 +2926,13 @@ function renderSettings() {
     <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">資料管理</h3>
     <div class="card" style="cursor:default">
       <div class="actions-row">
-        <button class="btn" id="csvImport">📥 從 CSV 匯入寵物</button>
-        <button class="btn" id="emailImport">📧 從 Email 內容匯入單筆</button>
         <button class="btn ghost" id="exportData">匯出全部資料 (JSON)</button>
         <button class="btn ghost" id="importData">匯入 JSON</button>
         <button class="btn danger" id="resetItems">重設清單為預設</button>
       </div>
       <p class="card-meta" style="margin-top:10px">
-        💡 <b>從 CSV 匯入寵物</b>：批次匯入。需要表單後台的 CSV 下載權限。<br>
-        💡 <b>從 Email 內容匯入單筆</b>：把 SurveyCake 通知 email 全選複製貼上，自動辨識欄位、單筆建檔。沒 CSV 下載權限時用這個。<br>
-        匯出 JSON 可備份，匯入 JSON 會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
+        💡 <b>新增寵物</b>（手動 / Email 貼上 / CSV 匯入）已搬到「寵物列表」右下角的 ＋ 按鈕。<br>
+        匯出 JSON 是備份用，匯入 JSON 會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
       </p>
     </div>
   `;
@@ -3115,9 +3144,7 @@ function renderSettings() {
   });
   renderItemEditor();
 
-  // Data management
-  document.getElementById('csvImport').onclick = () => openCsvImport();
-  document.getElementById('emailImport').onclick = () => openEmailImport();
+  // Data management（CSV / Email 匯入入口已搬到寵物列表 ＋ 按鈕，這裡不再綁定）
 
   document.getElementById('exportData').onclick = () => {
     const dump = {
