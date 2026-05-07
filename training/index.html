@@ -3272,10 +3272,47 @@ Gabu
   };
 }
 
+// 找既有寵物：名字一樣，且 (飼主名也一樣 OR 雙方都沒填飼主名)
+function findExistingPet(parsed) {
+  if (!parsed.name) return null;
+  const pets = load(KEYS.pets, []);
+  return pets.find(p => {
+    if (p.name !== parsed.name) return false;
+    // 名字一樣，再比飼主名（嚴格）
+    if (parsed.ownerName && p.ownerName) {
+      return parsed.ownerName === p.ownerName;
+    }
+    // 任一方沒填飼主，視為同一隻（保守判斷）
+    return true;
+  });
+}
+
 function renderEmailPreview(overlay, p) {
   const speciesLabel = p.species === 'cat' ? '🐱 貓' : '🐶 狗';
   const genderLabel = p.gender === 'male' ? '♂ 公' : p.gender === 'female' ? '♀ 母' : '—';
   const neuteredLabel = p.neutered === 'yes' ? '已絕育' : p.neutered === 'no' ? '未絕育' : '—';
+  const existing = findExistingPet(p);
+  const warningHtml = existing ? `
+    <div style="background:#fff4ea; border-left:4px solid #c97a4f; padding:10px 12px; margin:12px 0 6px; border-radius:4px; font-size:13px;">
+      ⚠️ <b>已有同名寵物：${escapeHtml(existing.name)}</b>${existing.ownerName ? '（飼主：' + escapeHtml(existing.ownerName) + '）' : ''}
+      <div style="margin-top:6px; color:var(--text-soft); font-size:12px;">
+        建於 ${escapeHtml((existing.createdAt || '').slice(0, 10) || '—')} · ${existing.ownerContact ? '電話：' + escapeHtml(existing.ownerContact) : ''}
+      </div>
+      <div style="margin-top:8px; color:var(--text)">
+        是同一隻嗎？選「<b>覆蓋舊資料</b>」會用這次解析的內容更新現有那筆（保留原本的課程記錄與匯款通知）；選「<b>新增為另一筆</b>」會建第二筆。
+      </div>
+    </div>
+  ` : '';
+
+  const actionButtons = existing ? `
+    <button class="btn ghost" id="em_re">重新貼</button>
+    <button class="btn" id="em_overwrite">🔁 覆蓋舊資料</button>
+    <button class="btn ghost" id="em_addnew">＋ 新增為另一筆</button>
+  ` : `
+    <button class="btn ghost" id="em_re">重新貼</button>
+    <button class="btn" id="em_save">✅ 確認新增寵物</button>
+  `;
+
   const previewHtml = `
     <div class="card" style="cursor:default; background:var(--bg-soft)">
       <h3 style="font-size:14px; color:var(--brown-dark); margin-bottom:10px">解析結果預覽</h3>
@@ -3291,9 +3328,9 @@ function renderEmailPreview(overlay, p) {
         <div style="color:var(--text-soft)">⚠️ 困擾</div><div style="white-space:pre-wrap">${escapeHtml(p.concerns || '—')}</div>
         <div style="color:var(--text-soft)">📝 備註</div><div style="white-space:pre-wrap; font-size:11px; color:var(--text-soft); max-height:120px; overflow-y:auto; background:white; padding:6px; border-radius:4px">${escapeHtml(p.notes || '—')}</div>
       </div>
+      ${warningHtml}
       <div class="actions-row" style="margin-top:14px">
-        <button class="btn ghost" id="em_re">重新貼</button>
-        <button class="btn" id="em_save">✅ 確認新增寵物</button>
+        ${actionButtons}
       </div>
       <p class="card-meta" style="margin-top:8px">
         💡 加進去後可以到寵物列表點寵物 → 「編輯寵物資料」進一步調整。
@@ -3303,22 +3340,51 @@ function renderEmailPreview(overlay, p) {
   const previewBox = overlay.querySelector('#em_preview');
   previewBox.style.display = 'block';
   previewBox.innerHTML = previewHtml;
+
   overlay.querySelector('#em_re').onclick = () => {
     previewBox.style.display = 'none';
     overlay.querySelector('#em_text').focus();
   };
-  overlay.querySelector('#em_save').onclick = () => {
-    const newPet = Object.assign({}, p, {
-      id: uid(),
-      createdAt: new Date().toISOString(),
-    });
-    const pets = load(KEYS.pets, []);
-    pets.push(newPet);
-    save(KEYS.pets, pets);
-    showNotice(`✅ 已新增 ${p.name}`);
-    overlay.remove();
-    render();
-  };
+
+  if (existing) {
+    overlay.querySelector('#em_overwrite').onclick = () => {
+      // 覆蓋：保留 id 和 createdAt，其他欄位用解析結果
+      const updated = Object.assign({}, p, {
+        id: existing.id,
+        createdAt: existing.createdAt || new Date().toISOString(),
+      });
+      const pets = load(KEYS.pets, []).map(x => x.id === existing.id ? updated : x);
+      save(KEYS.pets, pets);
+      showNotice(`✅ 已用新資料覆蓋 ${p.name}`);
+      overlay.remove();
+      render();
+    };
+    overlay.querySelector('#em_addnew').onclick = () => {
+      const newPet = Object.assign({}, p, {
+        id: uid(),
+        createdAt: new Date().toISOString(),
+      });
+      const pets = load(KEYS.pets, []);
+      pets.push(newPet);
+      save(KEYS.pets, pets);
+      showNotice(`✅ 已新增 ${p.name}（為新一筆）`);
+      overlay.remove();
+      render();
+    };
+  } else {
+    overlay.querySelector('#em_save').onclick = () => {
+      const newPet = Object.assign({}, p, {
+        id: uid(),
+        createdAt: new Date().toISOString(),
+      });
+      const pets = load(KEYS.pets, []);
+      pets.push(newPet);
+      save(KEYS.pets, pets);
+      showNotice(`✅ 已新增 ${p.name}`);
+      overlay.remove();
+      render();
+    };
+  }
 }
 
 /* ============== CSV IMPORT ============== */
