@@ -1619,9 +1619,20 @@ function loadBookingTemplate() {
   // 缺欄位用預設補（向後相容、設定漏填都能容錯）
   return Object.assign({}, DEFAULT_BOOKING_TEMPLATE, load(KEYS.bookingTemplate, {}));
 }
-function bookingTotal(booking) {
+function bookingSubtotal(booking) {
   const n = booking.sessionCount || 0;
   return ((booking.feePerClass || 0) + (booking.transportPerClass || 0)) * n;
+}
+// 優惠金額（折抵後是正數，要從 subtotal 扣掉）
+function bookingDiscount(booking) {
+  const sub = bookingSubtotal(booking);
+  const v = parseFloat(booking.discountValue) || 0;
+  if (booking.discountType === 'amount') return Math.min(v, sub);
+  if (booking.discountType === 'percent') return Math.round(sub * v / 100);
+  return 0;
+}
+function bookingTotal(booking) {
+  return bookingSubtotal(booking) - bookingDiscount(booking);
 }
 // 24h "16:00" → 「下午4:00」；空字串維持空
 function fmtTime12(hhmm) {
@@ -1761,9 +1772,16 @@ function renderBooking() {
     location: (pet.ownerAddress && pet.ownerAddress.trim()) || tpl.defaultLocation,
     feePerClass: tpl.defaultFeePerClass,
     transportPerClass: tpl.defaultTransportPerClass,
+    discountType: '',     // '' | 'amount' | 'percent'
+    discountValue: 0,
+    discountLabel: '',
     paymentDueDate: '',
     paymentDueNote: '中午前',
   };
+  // 舊資料相容（之前沒這幾欄）
+  if (b.discountType === undefined) b.discountType = '';
+  if (b.discountValue === undefined) b.discountValue = 0;
+  if (b.discountLabel === undefined) b.discountLabel = '';
   // 確保 sessions 長度跟 sessionCount 對齊（編輯舊資料時也修正）
   function alignSessions() {
     while (b.sessions.length < b.sessionCount) b.sessions.push({ date: '', startTime: '', endTime: '' });
@@ -1803,7 +1821,7 @@ function renderBooking() {
         </div>
 
         <div class="field">
-          <label>每堂日期 / 時間</label>
+          <label>每堂日期 / 時間 <span style="font-weight:normal; color:var(--text-soft); font-size:12px">（第 1 堂必填，後續可空白、上完前一堂再回來補）</span></label>
           <div id="bk_sessions">${sessRows}</div>
         </div>
 
@@ -1827,9 +1845,30 @@ function renderBooking() {
           <div style="text-align:center; color:var(--text-soft)">/ 堂</div>
           <div style="text-align:right; color:var(--text-soft)" id="bk_transportSubtotal">$ ${(b.transportPerClass*b.sessionCount).toLocaleString()}</div>
         </div>
-        <div style="display:flex; justify-content:space-between; padding-top:10px; border-top:1px solid var(--brown-light); font-weight:600; color:var(--work)">
+
+        <div style="border-top:1px dashed var(--brown-light); padding-top:8px; margin-top:6px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <div style="flex:0 0 60px; color:var(--text-soft); font-size:13px">優惠</div>
+            <select id="bk_discountType" style="flex:0 0 110px; padding:6px 8px;">
+              <option value="" ${b.discountType===''?'selected':''}>無</option>
+              <option value="amount" ${b.discountType==='amount'?'selected':''}>固定金額</option>
+              <option value="percent" ${b.discountType==='percent'?'selected':''}>百分比 %</option>
+            </select>
+            <input id="bk_discountLabel" type="text" value="${escapeAttr(b.discountLabel||'')}"
+                   placeholder="優惠說明（如：四堂組合優惠）"
+                   style="flex:1; padding:6px 8px;" ${b.discountType?'':'disabled'}>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;" id="bk_discountValueRow" ${b.discountType?'':'hidden'}>
+            <div style="flex:0 0 60px"></div>
+            <input id="bk_discountValue" type="number" min="0" value="${b.discountValue||0}" style="flex:0 0 100px;">
+            <div style="flex:0 0 24px; color:var(--text-soft);" id="bk_discountUnit">${b.discountType==='percent'?'%':'$'}</div>
+            <div style="flex:1; text-align:right; color:var(--work); font-weight:500;" id="bk_discountSubtotal">- $ ${bookingDiscount(b).toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; padding-top:10px; margin-top:8px; border-top:1px solid var(--brown-light); font-weight:600; color:var(--work)">
           <div>合計</div>
-          <div id="bk_total">${fmtMoney(total)}</div>
+          <div id="bk_total">${fmtMoney(bookingTotal(b))}</div>
         </div>
       </div>
 
@@ -1886,6 +1925,44 @@ function renderBooking() {
     document.getElementById('bk_due').onchange = (e) => { b.paymentDueDate = e.target.value; };
     document.getElementById('bk_dueNote').onchange = (e) => { b.paymentDueNote = e.target.value; };
 
+    // 優惠：類型切換 → 顯示/隱藏值欄、改單位、enable label
+    function refreshDiscountUI() {
+      const valueRow = document.getElementById('bk_discountValueRow');
+      const labelInp = document.getElementById('bk_discountLabel');
+      const unit = document.getElementById('bk_discountUnit');
+      if (b.discountType) {
+        valueRow.removeAttribute('hidden');
+        labelInp.removeAttribute('disabled');
+        unit.textContent = b.discountType === 'percent' ? '%' : '$';
+      } else {
+        valueRow.setAttribute('hidden', '');
+        labelInp.setAttribute('disabled', '');
+      }
+      document.getElementById('bk_discountSubtotal').textContent = '- $ ' + bookingDiscount(b).toLocaleString();
+      document.getElementById('bk_total').textContent = fmtMoney(bookingTotal(b));
+    }
+    document.getElementById('bk_discountType').onchange = (e) => {
+      b.discountType = e.target.value;
+      if (!b.discountType) { b.discountValue = 0; b.discountLabel = ''; }
+      refreshDiscountUI();
+    };
+    document.getElementById('bk_discountLabel').oninput = (e) => { b.discountLabel = e.target.value; };
+    document.getElementById('bk_discountValue').oninput = (e) => {
+      b.discountValue = parseFloat(e.target.value) || 0;
+      refreshDiscountUI();
+    };
+    // 課程/交通/堂數變動時也要重算優惠 (百分比情況)
+    const origFeeHandler = document.getElementById('bk_fee').oninput;
+    document.getElementById('bk_fee').oninput = (e) => {
+      origFeeHandler(e);
+      refreshDiscountUI();
+    };
+    const origTransHandler = document.getElementById('bk_transport').oninput;
+    document.getElementById('bk_transport').oninput = (e) => {
+      origTransHandler(e);
+      refreshDiscountUI();
+    };
+
     document.getElementById('bk_save').onclick = () => commitBooking({ thenPdf: false });
     document.getElementById('bk_pdf').onclick = () => commitBooking({ thenPdf: true });
     if (isEdit) {
@@ -1899,9 +1976,9 @@ function renderBooking() {
   }
 
   function commitBooking({ thenPdf }) {
-    // 簡單驗證
-    if (!b.sessions.every(s => s.date)) {
-      showNotice('請填好每堂的日期', 'err');
+    // 第 1 堂必填，其他堂可空（上完前一堂再回來補）
+    if (!b.sessions[0] || !b.sessions[0].date) {
+      showNotice('請至少填第 1 堂的日期', 'err');
       return;
     }
     const now = new Date().toISOString();
@@ -2345,14 +2422,19 @@ function exportBookingPdf(booking, pet) {
     : '');
 
   const sessionRowsHtml = (booking.sessions || []).map((s, i) => {
-    const dateStr = s.date ? fmtDate(s.date) : '—';
+    if (!s.date) {
+      // 空白堂 → 「（待安排）」灰色顯示
+      return `<div class="session-line" style="color:#999">第 ${i+1} 堂：（待安排）</div>`;
+    }
+    const dateStr = fmtDate(s.date);
     const timeStr = fmtTimeRange(s.startTime, s.endTime);
     return `<div class="session-line">第 ${i+1} 堂：${escapeHtml(dateStr)}${timeStr ? ' ' + escapeHtml(timeStr) : ''}</div>`;
   }).join('');
 
   const feeSubtotal = (booking.feePerClass || 0) * (booking.sessionCount || 0);
   const transportSubtotal = (booking.transportPerClass || 0) * (booking.sessionCount || 0);
-  const total = feeSubtotal + transportSubtotal;
+  const discountAmount = bookingDiscount(booking);
+  const total = feeSubtotal + transportSubtotal - discountAmount;
 
   const dueDateStr = booking.paymentDueDate
     ? `<mark>${escapeHtml(fmtDate(booking.paymentDueDate))}${booking.paymentDueNote ? ' ' + escapeHtml(booking.paymentDueNote) : ''}</mark>`
@@ -2602,6 +2684,11 @@ function exportBookingPdf(booking, pet) {
           <td class="label">交通費</td>
           <td class="amt">$ ${(booking.transportPerClass||0).toLocaleString()} / 堂 × ${booking.sessionCount} 堂 = $ ${transportSubtotal.toLocaleString()}</td>
         </tr>
+        ${discountAmount > 0 ? `
+        <tr>
+          <td class="label" style="color:#c97a4f">${escapeHtml(booking.discountLabel || '優惠')}</td>
+          <td class="amt" style="color:#c97a4f">- $ ${discountAmount.toLocaleString()}${booking.discountType === 'percent' ? `（${booking.discountValue}% off）` : ''}</td>
+        </tr>` : ''}
         <tr class="total">
           <td class="label">合計</td>
           <td class="amt">$ ${total.toLocaleString()}</td>
