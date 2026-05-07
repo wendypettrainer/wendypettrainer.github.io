@@ -621,6 +621,8 @@ const KEYS = {
   sessions: 'petcare.sessions',
   itemsCat: 'petcare.trainingItems.cat',
   itemsDog: 'petcare.trainingItems.dog',
+  bookings: 'petcare.bookings',                  // 預約 / 匯款通知記錄
+  bookingTemplate: 'petcare.bookingTemplate',    // 帳戶 + 須知 + 預設值
   settings: 'petcare.settings',
   version: 'petcare.version',
   lastModified: 'petcare.lastModified',  // 雲端同步用
@@ -632,6 +634,8 @@ const SYNCABLE_KEYS = new Set([
   'petcare.sessions',
   'petcare.trainingItems.cat',
   'petcare.trainingItems.dog',
+  'petcare.bookings',
+  'petcare.bookingTemplate',
 ]);
 
 const DEFAULT_DOG_ITEMS = [
@@ -650,6 +654,67 @@ const DEFAULT_CAT_ITEMS = [
   '接受陌生人靠近', '健康檢查姿勢（觸碰耳/嘴/腹）',
   '環境減敏：聲音', '環境減敏：陌生環境',
 ].map(name => ({ name, methods: [] }));
+
+/* ============ 匯款通知預設樣板（首次啟動時種入，之後可在設定頁編輯） ============ */
+const DEFAULT_BOOKING_TEMPLATE = {
+  bankName: '玉山銀行',
+  bankCode: '808',
+  accountNumber: '0509979062416',
+  accountHolder: '吳芮安',
+  defaultLocation: '嘉義縣民雄鄉福興村牛稠溪1609號',
+  defaultFeePerClass: 3000,
+  defaultTransportPerClass: 100,
+  registrationNotes:
+`一、報名與繳費
+①請於報名後 三日內完成全額匯款，經確認款項後方完成報名程序，名額始得保留。
+②若未於期限內完成繳費，將視同放棄報名資格，原預約時段不予保留。
+
+二、課程使用期限
+①課程自 第一堂課開始日起計算，有效期限為三個月，請於期限內上完所有課程。
+②若因不可抗力（如重大傷病、懷孕、生理因素等）導致無法於期限內完成，請提供相關證明並申請延期，將酌情保留課程效期。
+
+三、預約與改期說明
+①本課程採預約制，每堂課需事先確認上課日期與時間。
+②若需改期，請最遲於 上課前 24 小時通知，逾時將視為該堂課已上課處理。
+③如遲到 超過30分鐘 或未到課，亦視同該堂課程已使用，恕不補課。
+
+四、退費機制（依申請提出時間辦理）
+• 開課前 7 日（含）以前提出申請：退還 100% 費用
+• 開課前 1 日（含）以前提出申請：退還 70% 費用
+• 課程進行中，尚未超過全部堂數的 1/3 時提出：退還 50% 費用
+• 課程已進行超過 1/3 時提出申請：不予退費
+退費將於收到申請後 7 個工作日內完成，退款將匯至原付款帳戶或指定帳戶。
+申請需以書面（含簡訊、LINE、Email 等文字紀錄）提出，並以時間戳記為準。
+
+五、其他說明
+• 本報名規範為雙方之權利義務約定依據，報名視同同意本規定。
+• 本規範如有未盡事宜，依《消費者保護法》及相關法令規定辦理。`,
+  preClassNotes:
+`① 課前閱讀書籍（至少閱讀其中一本）：
+《狗狗這樣教，主人好輕鬆 2：不打不罵不關，33 招解決所有狗狗問題》
+《戴更基教你有效解決狗狗的 100 個行為問題 (1)》
+《戴更基教你有效解決狗狗的 100 個行為問題 (2)》
+
+② 狗狗的問題主要透過獎勵的方式來訓練，建立主人和狗狗的良好關係來達成訓練，並逐步改善問題。
+
+③ 不做違背天性的訓練，例如：生理行為，比如未絕育的狗狗抬腳尿尿做記號的行為（由訓練師判斷原因）。
+
+④ 上課主要是依專業角度幫助您釐清問題，依照生活環境、相處方式去做改變。
+
+⑤ 維持每個進度的回報，如有問題，建議在家練習時用影片紀錄並回傳確認，切莫自由發揮。
+
+⑥ 禁止體罰、打罵、關籠、假打、嚇狗等行為。
+
+⑦ 進度的回報確認非常重要，請回傳指定記錄才能確保操作無誤。
+
+⑧ 無法「保證」成功，關係著配合程度、是否確實執行步驟，若可以接受，我們再一起努力。
+
+⑨ 建議家人共同參與，標準不一會導致矯正失敗。
+
+⑩ 課後請反覆審視上課教的內容並確實執行，每個環節都非常重要，不能偷懶。
+
+⑪ 如狗狗有特殊行為問題，還需要搭配「藥物治療」，這部分在進行過程中若發現會轉介行為門診。`,
+};
 
 // 把任何舊版資料自動升級成 v3：{ name, methods: [{name, steps}] }
 function ensureItemShape(arr) {
@@ -726,6 +791,8 @@ function initStorage() {
   if (!localStorage.getItem(KEYS.sessions)) _writeRaw(KEYS.sessions, []);
   if (!localStorage.getItem(KEYS.itemsCat)) _writeRaw(KEYS.itemsCat, DEFAULT_CAT_ITEMS);
   if (!localStorage.getItem(KEYS.itemsDog)) _writeRaw(KEYS.itemsDog, DEFAULT_DOG_ITEMS);
+  if (!localStorage.getItem(KEYS.bookings)) _writeRaw(KEYS.bookings, []);
+  if (!localStorage.getItem(KEYS.bookingTemplate)) _writeRaw(KEYS.bookingTemplate, DEFAULT_BOOKING_TEMPLATE);
   if (!localStorage.getItem(KEYS.settings)) _writeRaw(KEYS.settings, {
     githubPat: '',
     githubUser: 'wendypettrainer',
@@ -738,9 +805,10 @@ function initStorage() {
 }
 
 const state = {
-  view: 'pets',  // pets | sessions | session | settings
+  view: 'pets',  // pets | sessions | session | bookings | booking | settings
   petId: null,
   sessionId: null,
+  bookingId: null,
   petFilter: '',  // '' | 'dog' | 'cat'
   petQuery: '',
 };
@@ -986,6 +1054,7 @@ function go(view, params = {}) {
   state.view = view;
   if ('petId' in params) state.petId = params.petId;
   if ('sessionId' in params) state.sessionId = params.sessionId;
+  if ('bookingId' in params) state.bookingId = params.bookingId;
   render();
 }
 
@@ -1009,6 +1078,17 @@ function updateHeader() {
     const p = s && getPet(s.petId);
     if (p) segs.push({ label: `${speciesEmoji(p.species)} ${p.name}`, action: 'sessions', petId: p.id });
     if (s) segs.push({ label: fmtDate(s.date), current: true });
+  } else if (state.view === 'bookings') {
+    segs.push({ label: '寵物列表', action: 'pets' });
+    const p = getPet(state.petId);
+    if (p) segs.push({ label: `${speciesEmoji(p.species)} ${p.name}`, action: 'sessions', petId: p.id });
+    segs.push({ label: '📋 匯款通知', current: true });
+  } else if (state.view === 'booking') {
+    segs.push({ label: '寵物列表', action: 'pets' });
+    const p = getPet(state.petId);
+    if (p) segs.push({ label: `${speciesEmoji(p.species)} ${p.name}`, action: 'sessions', petId: p.id });
+    segs.push({ label: '📋 匯款通知', action: 'bookings', petId: state.petId });
+    segs.push({ label: state.bookingId ? '編輯' : '新增', current: true });
   } else if (state.view === 'settings') {
     segs.push({ label: '寵物列表', action: 'pets' });
     segs.push({ label: '⚙ 設定', current: true });
@@ -1037,6 +1117,8 @@ function updateHeader() {
         go('pets');
       } else if (action === 'sessions') {
         go('sessions', { petId: a.dataset.petid });
+      } else if (action === 'bookings') {
+        go('bookings', { petId: a.dataset.petid });
       }
     };
   });
@@ -1070,6 +1152,8 @@ document.getElementById('syncDot').onclick = () => {
 document.getElementById('backBtn').onclick = () => {
   if (state.view === 'sessions') go('pets');
   else if (state.view === 'session') go('sessions', { petId: state.petId });
+  else if (state.view === 'bookings') go('sessions', { petId: state.petId });
+  else if (state.view === 'booking') go('bookings', { petId: state.petId });
   else if (state.view === 'settings') go(state._returnView || 'pets');
 };
 document.getElementById('settingsBtn').onclick = () => {
@@ -1309,8 +1393,9 @@ function renderSessions() {
       </div>
       ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
       ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
-      <div style="margin-top:10px; display:flex; gap:8px">
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
         <button class="small-btn" id="editPet">編輯寵物資料</button>
+        <button class="small-btn" id="bookingBtn">📋 匯款通知</button>
       </div>
     </div>
   `;
@@ -1339,6 +1424,7 @@ function renderSessions() {
   }
   main.innerHTML = meta + body + `<button class="fab" id="fab">＋</button>`;
   document.getElementById('editPet').onclick = () => openPetForm(pet);
+  document.getElementById('bookingBtn').onclick = () => go('bookings', { petId: pet.id });
   main.querySelectorAll('.card[data-id]').forEach(el => {
     el.onclick = (e) => {
       // 點到 ⋯ 按鈕時不要進入該堂課
@@ -1486,6 +1572,323 @@ function openSessionForm(session = null) {
       go('sessions', { petId: state.petId });
     };
   }
+}
+
+/* ============== BOOKING / 匯款通知 ============== */
+function getBooking(id) { return load(KEYS.bookings, []).find(b => b.id === id); }
+function getPetBookings(petId) {
+  return load(KEYS.bookings, [])
+    .filter(b => b.petId === petId)
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+}
+function loadBookingTemplate() {
+  // 缺欄位用預設補（向後相容、設定漏填都能容錯）
+  return Object.assign({}, DEFAULT_BOOKING_TEMPLATE, load(KEYS.bookingTemplate, {}));
+}
+function bookingTotal(booking) {
+  const n = booking.sessionCount || 0;
+  return ((booking.feePerClass || 0) + (booking.transportPerClass || 0)) * n;
+}
+// 24h "16:00" → 「下午4:00」；空字串維持空
+function fmtTime12(hhmm) {
+  if (!hhmm) return '';
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return hhmm;
+  let h = parseInt(m[1], 10);
+  const ampm = h < 12 ? '上午' : '下午';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${ampm}${h}:${m[2]}`;
+}
+function fmtTimeRange(start, end) {
+  if (!start && !end) return '';
+  if (!end) return fmtTime12(start);
+  // 同上午/下午只前綴一次
+  const s = fmtTime12(start), e = fmtTime12(end);
+  const sP = s.startsWith('上午') || s.startsWith('下午') ? s.slice(0, 2) : '';
+  const eP = e.startsWith('上午') || e.startsWith('下午') ? e.slice(0, 2) : '';
+  if (sP && sP === eP) return s + '-' + e.slice(2);
+  return s + '-' + e;
+}
+function fmtMoney(n) { return 'NT$ ' + (n || 0).toLocaleString('en-US'); }
+
+/* ---------- VIEW: BOOKING LIST ---------- */
+function renderBookings() {
+  const main = document.getElementById('main');
+  const pet = getPet(state.petId);
+  if (!pet) { go('pets'); return; }
+  const bookings = getPetBookings(pet.id);
+  const meta = `
+    <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
+      <div class="card-meta">
+        ${escapeHtml(petTagline(pet))} ·
+        飼主 ${escapeHtml(pet.ownerName || '—')}
+        ${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
+      </div>
+    </div>
+  `;
+  let body;
+  if (bookings.length === 0) {
+    body = `<div class="empty"><h3>還沒有匯款通知</h3><p>點右下角 ＋ 新增第一筆</p></div>`;
+  } else {
+    body = bookings.map(b => {
+      const firstDate = (b.sessions && b.sessions[0] && b.sessions[0].date) || '—';
+      const total = bookingTotal(b);
+      const due = b.paymentDueDate ? fmtDate(b.paymentDueDate) + (b.paymentDueNote ? ' ' + b.paymentDueNote : '') : '—';
+      return `
+        <div class="card" data-id="${b.id}">
+          <div class="card-row">
+            <div>
+              <div class="card-title">${b.sessionCount} 堂 · 起 ${escapeHtml(firstDate)}</div>
+              <div class="card-meta">
+                💰 ${fmtMoney(total)} · 截止 ${escapeHtml(due)}
+              </div>
+            </div>
+            <button class="card-menu-btn" data-menu="${b.id}" title="更多動作">⋯</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  main.innerHTML = meta + body + `<button class="fab" id="fab">＋</button>`;
+  main.querySelectorAll('.card[data-id]').forEach(el => {
+    el.onclick = (e) => {
+      if (e.target.classList.contains('card-menu-btn')) return;
+      go('booking', { petId: pet.id, bookingId: el.dataset.id });
+    };
+  });
+  main.querySelectorAll('.card-menu-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openBookingMenu(btn, btn.dataset.menu);
+    };
+  });
+  document.getElementById('fab').onclick = () => go('booking', { petId: pet.id, bookingId: null });
+}
+
+function openBookingMenu(anchorBtn, bookingId) {
+  document.querySelectorAll('.card-menu').forEach(m => m.remove());
+  const rect = anchorBtn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'card-menu';
+  menu.style.position = 'fixed';
+  menu.style.top = (rect.bottom + 4) + 'px';
+  menu.style.right = (window.innerWidth - rect.right) + 'px';
+  menu.innerHTML = `
+    <button data-act="edit">✏️ 編輯</button>
+    <button data-act="pdf">🖨 列印 / 存 PDF</button>
+    <button data-act="delete" class="danger">🗑 刪除</button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    const close = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', close);
+      }
+    };
+    document.addEventListener('click', close);
+  }, 0);
+  menu.querySelector('[data-act="edit"]').onclick = () => {
+    menu.remove();
+    go('booking', { petId: state.petId, bookingId });
+  };
+  menu.querySelector('[data-act="pdf"]').onclick = () => {
+    menu.remove();
+    const b = getBooking(bookingId);
+    const p = b && getPet(b.petId);
+    if (b && p) exportBookingPdf(b, p);
+  };
+  menu.querySelector('[data-act="delete"]').onclick = () => {
+    menu.remove();
+    if (!confirm('刪除這筆匯款通知？')) return;
+    save(KEYS.bookings, load(KEYS.bookings, []).filter(b => b.id !== bookingId));
+    showNotice('已刪除');
+    render();
+  };
+}
+
+/* ---------- VIEW: BOOKING EDIT ---------- */
+function renderBooking() {
+  const main = document.getElementById('main');
+  const pet = getPet(state.petId);
+  if (!pet) { go('pets'); return; }
+  const tpl = loadBookingTemplate();
+  const isEdit = !!state.bookingId;
+  const data = isEdit ? getBooking(state.bookingId) : null;
+  if (isEdit && !data) { go('bookings', { petId: pet.id }); return; }
+
+  // 帶入預設或既有資料
+  const b = data ? JSON.parse(JSON.stringify(data)) : {
+    id: '',
+    petId: pet.id,
+    sessionCount: 1,
+    sessions: [{ date: '', startTime: '', endTime: '' }],
+    location: tpl.defaultLocation,
+    feePerClass: tpl.defaultFeePerClass,
+    transportPerClass: tpl.defaultTransportPerClass,
+    paymentDueDate: '',
+    paymentDueNote: '中午前',
+  };
+  // 確保 sessions 長度跟 sessionCount 對齊（編輯舊資料時也修正）
+  function alignSessions() {
+    while (b.sessions.length < b.sessionCount) b.sessions.push({ date: '', startTime: '', endTime: '' });
+    if (b.sessions.length > b.sessionCount) b.sessions.length = b.sessionCount;
+  }
+  alignSessions();
+
+  function rerender() { renderInner(); }
+  function renderInner() {
+    const sessRows = b.sessions.map((s, i) => `
+      <div class="session-row" style="display:grid; grid-template-columns: 60px 1fr 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px;">
+        <div style="color:var(--text-soft); font-size:14px;">第 ${i+1} 堂</div>
+        <input type="date" data-i="${i}" data-f="date" value="${escapeAttr(s.date||'')}">
+        <input type="time" data-i="${i}" data-f="startTime" value="${escapeAttr(s.startTime||'')}">
+        <input type="time" data-i="${i}" data-f="endTime" value="${escapeAttr(s.endTime||'')}">
+      </div>
+    `).join('');
+
+    const total = bookingTotal(b);
+
+    main.innerHTML = `
+      <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
+        <div class="card-meta">
+          ${speciesEmoji(pet.species)} ${escapeHtml(pet.name)} ${pet.breed ? '(' + escapeHtml(pet.breed) + ')' : ''} ·
+          飼主 ${escapeHtml(pet.ownerName || '—')}
+        </div>
+      </div>
+
+      <div class="card" style="cursor:default">
+        <div class="field">
+          <label>堂數</label>
+          <div class="radio-group" id="bk_count">
+            ${[1,2,3,4,5,6,7,8].map(n =>
+              `<label class="radio-opt"><input type="radio" name="bkCount" value="${n}" ${b.sessionCount===n?'checked':''}> ${n} 堂</label>`
+            ).join('')}
+          </div>
+        </div>
+
+        <div class="field">
+          <label>每堂日期 / 時間</label>
+          <div id="bk_sessions">${sessRows}</div>
+        </div>
+
+        <div class="field">
+          <label>上課地點</label>
+          <input id="bk_location" type="text" value="${escapeAttr(b.location||'')}" placeholder="例：嘉義縣民雄鄉⋯">
+        </div>
+      </div>
+
+      <div class="card" style="cursor:default">
+        <h3 style="font-size:14px; color:var(--brown-dark); margin-bottom:10px;">費用</h3>
+        <div style="display:grid; grid-template-columns: 1fr 100px 60px 1fr; gap:8px; align-items:center; margin-bottom:8px;">
+          <div>課程</div>
+          <input id="bk_fee" type="number" min="0" value="${b.feePerClass}">
+          <div style="text-align:center; color:var(--text-soft)">/ 堂</div>
+          <div style="text-align:right; color:var(--text-soft)" id="bk_feeSubtotal">$ ${(b.feePerClass*b.sessionCount).toLocaleString()}</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 100px 60px 1fr; gap:8px; align-items:center; margin-bottom:8px;">
+          <div>交通費</div>
+          <input id="bk_transport" type="number" min="0" value="${b.transportPerClass}">
+          <div style="text-align:center; color:var(--text-soft)">/ 堂</div>
+          <div style="text-align:right; color:var(--text-soft)" id="bk_transportSubtotal">$ ${(b.transportPerClass*b.sessionCount).toLocaleString()}</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding-top:10px; border-top:1px solid var(--brown-light); font-weight:600; color:var(--work)">
+          <div>合計</div>
+          <div id="bk_total">${fmtMoney(total)}</div>
+        </div>
+      </div>
+
+      <div class="card" style="cursor:default">
+        <div class="row2">
+          <div class="field">
+            <label>繳費截止日</label>
+            <input id="bk_due" type="date" value="${escapeAttr(b.paymentDueDate||'')}">
+          </div>
+          <div class="field">
+            <label>截止備註</label>
+            <select id="bk_dueNote">
+              <option value="" ${b.paymentDueNote===''?'selected':''}>—</option>
+              <option value="中午前" ${b.paymentDueNote==='中午前'?'selected':''}>中午前</option>
+              <option value="下午前" ${b.paymentDueNote==='下午前'?'selected':''}>下午前</option>
+              <option value="晚上前" ${b.paymentDueNote==='晚上前'?'selected':''}>晚上前</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions-row" style="margin-top:14px">
+        <button class="btn" id="bk_save">💾 儲存</button>
+        <button class="btn ghost" id="bk_pdf">🖨 預覽 / 列印 PDF</button>
+        ${isEdit ? '<button class="btn danger" id="bk_del">刪除</button>' : ''}
+      </div>
+    `;
+
+    // 事件
+    main.querySelectorAll('input[name="bkCount"]').forEach(r => {
+      r.onchange = () => {
+        b.sessionCount = parseInt(r.value, 10);
+        alignSessions();
+        rerender();
+      };
+    });
+    main.querySelectorAll('#bk_sessions input').forEach(inp => {
+      inp.onchange = () => {
+        const i = parseInt(inp.dataset.i, 10);
+        b.sessions[i][inp.dataset.f] = inp.value;
+      };
+    });
+    document.getElementById('bk_location').onchange = (e) => { b.location = e.target.value.trim(); };
+    document.getElementById('bk_fee').oninput = (e) => {
+      b.feePerClass = parseInt(e.target.value, 10) || 0;
+      document.getElementById('bk_feeSubtotal').textContent = '$ ' + (b.feePerClass*b.sessionCount).toLocaleString();
+      document.getElementById('bk_total').textContent = fmtMoney(bookingTotal(b));
+    };
+    document.getElementById('bk_transport').oninput = (e) => {
+      b.transportPerClass = parseInt(e.target.value, 10) || 0;
+      document.getElementById('bk_transportSubtotal').textContent = '$ ' + (b.transportPerClass*b.sessionCount).toLocaleString();
+      document.getElementById('bk_total').textContent = fmtMoney(bookingTotal(b));
+    };
+    document.getElementById('bk_due').onchange = (e) => { b.paymentDueDate = e.target.value; };
+    document.getElementById('bk_dueNote').onchange = (e) => { b.paymentDueNote = e.target.value; };
+
+    document.getElementById('bk_save').onclick = () => commitBooking({ thenPdf: false });
+    document.getElementById('bk_pdf').onclick = () => commitBooking({ thenPdf: true });
+    if (isEdit) {
+      document.getElementById('bk_del').onclick = () => {
+        if (!confirm('刪除這筆匯款通知？')) return;
+        save(KEYS.bookings, load(KEYS.bookings, []).filter(x => x.id !== b.id));
+        showNotice('已刪除');
+        go('bookings', { petId: pet.id });
+      };
+    }
+  }
+
+  function commitBooking({ thenPdf }) {
+    // 簡單驗證
+    if (!b.sessions.every(s => s.date)) {
+      showNotice('請填好每堂的日期', 'err');
+      return;
+    }
+    const now = new Date().toISOString();
+    const updated = Object.assign({}, b, {
+      id: b.id || uid(),
+      createdAt: b.createdAt || now,
+      updatedAt: now,
+    });
+    const all = load(KEYS.bookings, []);
+    const idx = all.findIndex(x => x.id === updated.id);
+    if (idx >= 0) all[idx] = updated; else all.push(updated);
+    save(KEYS.bookings, all);
+    showNotice('已儲存');
+    if (thenPdf) {
+      exportBookingPdf(updated, pet);
+    } else if (!isEdit) {
+      // 第一次新增 → 跳到編輯模式 (帶 id)
+      go('booking', { petId: pet.id, bookingId: updated.id });
+    }
+  }
+
+  renderInner();
 }
 
 /* ============== VIEW: SESSION RECORD ============== */
@@ -1899,6 +2302,297 @@ function exportPdf(sess, pet) {
   showNotice('已開新分頁 → 列印對話框會自動跳出，選「另存為 PDF」');
 }
 
+/* ============== BOOKING PDF (3 頁 A4: 報名須知 / 課前須知 / 匯款通知) ============== */
+function exportBookingPdf(booking, pet) {
+  const tpl = loadBookingTemplate();
+  const logoSrc = LOGO_DATA || (window.location.protocol.startsWith('http')
+    ? window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'logo.png'
+    : '');
+
+  const sessionRowsHtml = (booking.sessions || []).map((s, i) => {
+    const dateStr = s.date ? fmtDate(s.date) : '—';
+    const timeStr = fmtTimeRange(s.startTime, s.endTime);
+    return `<div class="session-line">第 ${i+1} 堂：${escapeHtml(dateStr)}${timeStr ? ' ' + escapeHtml(timeStr) : ''}</div>`;
+  }).join('');
+
+  const feeSubtotal = (booking.feePerClass || 0) * (booking.sessionCount || 0);
+  const transportSubtotal = (booking.transportPerClass || 0) * (booking.sessionCount || 0);
+  const total = feeSubtotal + transportSubtotal;
+
+  const dueDateStr = booking.paymentDueDate
+    ? `<mark>${escapeHtml(fmtDate(booking.paymentDueDate))}${booking.paymentDueNote ? ' ' + escapeHtml(booking.paymentDueNote) : ''}</mark>`
+    : '<mark>（未填截止日）</mark>';
+
+  // 把 textarea 樣的多行文字轉 HTML（保留段落、條列）
+  function notesToHtml(text) {
+    return escapeHtml(text || '').replace(/\n/g, '<br>');
+  }
+
+  const titleStr = `${pet.name}_匯款通知`;
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>${escapeHtml(titleStr)}</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
+                 "Noto Sans TC", "Heiti TC", sans-serif;
+    color: #3d2f1f;
+    line-height: 1.7;
+    background: white;
+    font-size: 12pt;
+  }
+
+  header.brand {
+    text-align: center;
+    padding-bottom: 10pt;
+    margin-bottom: 14pt;
+    border-bottom: 2px solid #8b6f47;
+  }
+  header.brand img { max-width: 180pt; height: auto; }
+  header.brand .sub {
+    font-size: 8.5pt; color: #8b6f47; letter-spacing: 1px;
+    margin-top: 4pt;
+  }
+
+  h1.page-title {
+    text-align: center;
+    color: #6b5435;
+    font-size: 18pt;
+    margin: 8pt 0 16pt;
+    letter-spacing: 2px;
+  }
+  h1.page-title.alt {
+    border-bottom: 2px solid #c9b693;
+    padding-bottom: 6pt;
+    font-size: 16pt;
+  }
+
+  .page {
+    page-break-after: always;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  .notes {
+    white-space: pre-wrap;
+    line-height: 1.8;
+    font-size: 11.5pt;
+  }
+
+  /* 匯款通知頁的卡片 */
+  .info-line {
+    font-size: 12pt;
+    margin: 8pt 0;
+  }
+  .info-line .ico { color: #8b6f47; margin-right: 4pt; }
+
+  .session-block {
+    background: #f7f0e3;
+    border-left: 4px solid #8b6f47;
+    padding: 10pt 14pt;
+    border-radius: 6pt;
+    margin: 6pt 0 14pt;
+  }
+  .session-line {
+    font-size: 11.5pt;
+    padding: 3pt 0;
+  }
+
+  table.fee {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14pt 0;
+  }
+  table.fee th, table.fee td {
+    border: 1px solid #c9b693;
+    padding: 8pt 10pt;
+    font-size: 11.5pt;
+  }
+  table.fee th {
+    background: #8b6f47;
+    color: white;
+    font-weight: 600;
+  }
+  table.fee td.label {
+    width: 30%;
+    background: #f7f0e3;
+    font-weight: 500;
+  }
+  table.fee td.amt {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.fee tr.total td {
+    background: #fff4ea;
+    color: #c97a4f;
+    font-weight: 700;
+    font-size: 13pt;
+  }
+
+  .pay-box {
+    border: 1.5px solid #8b6f47;
+    border-radius: 8pt;
+    padding: 12pt 14pt;
+    margin: 14pt 0;
+  }
+  .pay-box .pay-title {
+    font-weight: 600;
+    color: #6b5435;
+    margin-bottom: 8pt;
+  }
+
+  .due-line {
+    background: #fff4ea;
+    border-left: 4px solid #c97a4f;
+    padding: 10pt 14pt;
+    border-radius: 4pt;
+    margin: 16pt 0 8pt;
+    font-weight: 600;
+  }
+  .due-line mark {
+    background: #ffd966;
+    padding: 2pt 6pt;
+    border-radius: 3pt;
+  }
+
+  /* 列印控制條（不會被印出來） */
+  .print-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: #8b6f47; color: white;
+    padding: 10pt 14pt;
+    display: flex; gap: 12pt; align-items: center; justify-content: center;
+    z-index: 100;
+    font-size: 11pt;
+  }
+  .print-bar button {
+    background: white; color: #6b5435;
+    border: none; padding: 6pt 14pt; border-radius: 6pt;
+    cursor: pointer; font-size: 11pt; font-weight: 600;
+  }
+  .print-bar button:hover { background: #f7f0e3; }
+  body { padding-top: 56pt; }
+
+  @media print {
+    .print-bar { display: none !important; }
+    body { padding-top: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-bar">
+    <button onclick="window.print()">🖨 列印 / 存 PDF</button>
+    <button onclick="window.close()">關閉</button>
+  </div>
+
+  <!-- ===== Page 1: 報名須知 ===== -->
+  <section class="page">
+    <header class="brand">
+      ${logoSrc ? `<img src="${logoSrc}" alt="Wendy">` : '<h1 style="color:#6b5435">Wendy 溫蒂．貓與狗訓練日常</h1>'}
+      <div class="sub">Cat &amp; Dog Training</div>
+    </header>
+    <h1 class="page-title">感謝您報名一對一課程</h1>
+    <div style="text-align:center; color:#8b6f47; font-weight:600; margin-bottom:14pt;">＝報名前請留意＝</div>
+    <div class="notes">${notesToHtml(tpl.registrationNotes)}</div>
+  </section>
+
+  <!-- ===== Page 2: 課前須知 ===== -->
+  <section class="page">
+    <header class="brand">
+      ${logoSrc ? `<img src="${logoSrc}" alt="Wendy">` : '<h1 style="color:#6b5435">Wendy 溫蒂．貓與狗訓練日常</h1>'}
+      <div class="sub">Cat &amp; Dog Training</div>
+    </header>
+    <h1 class="page-title alt">課前注意須知</h1>
+    <div class="notes">${notesToHtml(tpl.preClassNotes)}</div>
+  </section>
+
+  <!-- ===== Page 3: 匯款通知 ===== -->
+  <section class="page">
+    <header class="brand">
+      ${logoSrc ? `<img src="${logoSrc}" alt="Wendy">` : '<h1 style="color:#6b5435">Wendy 溫蒂．貓與狗訓練日常</h1>'}
+      <div class="sub">Cat &amp; Dog Training</div>
+    </header>
+    <h1 class="page-title alt">【一對一 課程 匯款通知】</h1>
+
+    <div class="info-line">
+      <span class="ico">▍</span><b>${pet.species === 'cat' ? '貓貓' : '狗狗'}名字：</b>${escapeHtml(pet.name)}${pet.breed ? '（' + escapeHtml(pet.breed) + '）' : ''}
+    </div>
+
+    <div class="info-line">
+      <span class="ico">▍</span><b>上課日期：</b>（共 ${booking.sessionCount} 堂）
+    </div>
+    <div class="session-block">
+      ${sessionRowsHtml || '<div class="session-line">（尚未填寫）</div>'}
+    </div>
+
+    <div class="info-line">
+      <span class="ico">▍</span><b>上課地點：</b>${escapeHtml(booking.location || '—')}
+    </div>
+
+    <table class="fee">
+      <thead>
+        <tr><th colspan="2">費用說明</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="label">課程</td>
+          <td class="amt">$ ${(booking.feePerClass||0).toLocaleString()} / 堂 × ${booking.sessionCount} 堂 = $ ${feeSubtotal.toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td class="label">交通費</td>
+          <td class="amt">$ ${(booking.transportPerClass||0).toLocaleString()} / 堂 × ${booking.sessionCount} 堂 = $ ${transportSubtotal.toLocaleString()}</td>
+        </tr>
+        <tr class="total">
+          <td class="label">合計</td>
+          <td class="amt">$ ${total.toLocaleString()}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pay-box">
+      <div class="pay-title">▍付款方式：</div>
+      <div>銀行：${escapeHtml(tpl.bankName)} (${escapeHtml(tpl.bankCode)})</div>
+      <div>帳號：${escapeHtml(tpl.accountNumber)}</div>
+      <div>戶名：${escapeHtml(tpl.accountHolder)}</div>
+    </div>
+
+    <div class="due-line">
+      請於 ${dueDateStr} 完成繳費，並提供下列資訊以便核對。
+    </div>
+    <div style="font-size:11pt; color:#6b5435; margin-bottom:14pt;">
+      確認後即會幫您保留預約時段；若未於期限內完成，該時段將視情況釋出。
+    </div>
+
+    <div class="pay-box">
+      <div>▍匯款人姓名：</div>
+      <div style="margin:8pt 0; border-bottom:1px solid #c9b693; height:18pt;"></div>
+      <div>▍連絡電話：</div>
+      <div style="margin:8pt 0; border-bottom:1px solid #c9b693; height:18pt;"></div>
+      <div>▍帳號後五碼：</div>
+      <div style="margin:8pt 0; border-bottom:1px solid #c9b693; height:18pt;"></div>
+    </div>
+  </section>
+
+  <scr` + `ipt>
+    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
+  </scr` + `ipt>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    showNotice('請允許跳出視窗以下載 PDF', 'err');
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+  w.document.title = titleStr;
+  showNotice('已開新分頁 → 列印對話框會自動跳出，選「另存為 PDF」');
+}
+
 /* ============== GIST SHARE ============== */
 async function shareToGist(sess, pet) {
   const settings = load(KEYS.settings, {});
@@ -2017,6 +2711,7 @@ function renderSettings() {
   const s = load(KEYS.settings, {});
   const dogItems = load(KEYS.itemsDog, []);
   const catItems = load(KEYS.itemsCat, []);
+  const bookingTpl = loadBookingTemplate();
 
   const lastSyncTxt = s.syncLastTime
     ? new Date(s.syncLastTime).toLocaleString('zh-TW')
@@ -2087,6 +2782,67 @@ function renderSettings() {
       </p>
     </div>
 
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 匯款通知樣板</h3>
+    <div class="card" style="cursor:default">
+      <p class="card-meta" style="margin-bottom:12px">
+        💡 這裡編輯的內容會出現在每隻寵物的匯款通知 PDF 上。<br>
+        <b>銀行帳戶</b>每張通知都會印；<b>預設地點/費用</b>是新增匯款通知時的預設值，可逐筆覆蓋；<b>報名須知/課前須知</b>是 PDF 的前兩頁，幾乎不會變動。
+      </p>
+
+      <h4 style="font-size:13px; color:var(--brown-dark); margin:14px 0 8px;">收款帳戶</h4>
+      <div class="row2">
+        <div class="field">
+          <label>銀行</label>
+          <input id="bt_bankName" type="text" value="${escapeAttr(bookingTpl.bankName||'')}">
+        </div>
+        <div class="field">
+          <label>銀行代碼</label>
+          <input id="bt_bankCode" type="text" value="${escapeAttr(bookingTpl.bankCode||'')}">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>帳號</label>
+          <input id="bt_account" type="text" value="${escapeAttr(bookingTpl.accountNumber||'')}">
+        </div>
+        <div class="field">
+          <label>戶名</label>
+          <input id="bt_holder" type="text" value="${escapeAttr(bookingTpl.accountHolder||'')}">
+        </div>
+      </div>
+
+      <h4 style="font-size:13px; color:var(--brown-dark); margin:18px 0 8px;">新增匯款通知時的預設值</h4>
+      <div class="field">
+        <label>預設上課地點</label>
+        <input id="bt_loc" type="text" value="${escapeAttr(bookingTpl.defaultLocation||'')}">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>預設課程費 / 堂</label>
+          <input id="bt_fee" type="number" min="0" value="${bookingTpl.defaultFeePerClass||0}">
+        </div>
+        <div class="field">
+          <label>預設交通費 / 堂</label>
+          <input id="bt_trans" type="number" min="0" value="${bookingTpl.defaultTransportPerClass||0}">
+        </div>
+      </div>
+
+      <h4 style="font-size:13px; color:var(--brown-dark); margin:18px 0 8px;">PDF 前兩頁固定文字</h4>
+      <div class="field">
+        <label>報名須知（第 1 頁）</label>
+        <textarea id="bt_regNotes" rows="10" style="font-family:monospace; font-size:12px; line-height:1.5;">${escapeHtml(bookingTpl.registrationNotes||'')}</textarea>
+      </div>
+      <div class="field">
+        <label>課前須知（第 2 頁）</label>
+        <textarea id="bt_preNotes" rows="10" style="font-family:monospace; font-size:12px; line-height:1.5;">${escapeHtml(bookingTpl.preClassNotes||'')}</textarea>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn" id="bt_save">儲存匯款通知樣板</button>
+        <button class="btn ghost" id="bt_reset">重設為預設文字</button>
+      </div>
+    </div>
+
     <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">訓練項目清單</h3>
     <div class="tabs">
       <button class="tab active" data-tab="dog">🐶 狗 (${dogItems.length})</button>
@@ -2134,6 +2890,32 @@ function renderSettings() {
       pagesSubPath: document.getElementById('s_subpath').value.trim(),
     });
     showNotice('設定已儲存');
+  };
+
+  // 匯款通知樣板：儲存
+  document.getElementById('bt_save').onclick = () => {
+    save(KEYS.bookingTemplate, {
+      bankName: document.getElementById('bt_bankName').value.trim(),
+      bankCode: document.getElementById('bt_bankCode').value.trim(),
+      accountNumber: document.getElementById('bt_account').value.trim(),
+      accountHolder: document.getElementById('bt_holder').value.trim(),
+      defaultLocation: document.getElementById('bt_loc').value.trim(),
+      defaultFeePerClass: parseInt(document.getElementById('bt_fee').value, 10) || 0,
+      defaultTransportPerClass: parseInt(document.getElementById('bt_trans').value, 10) || 0,
+      registrationNotes: document.getElementById('bt_regNotes').value,
+      preClassNotes: document.getElementById('bt_preNotes').value,
+    });
+    showNotice('匯款通知樣板已儲存');
+  };
+  document.getElementById('bt_reset').onclick = () => {
+    if (!confirm('把報名須知 + 課前須知還原成預設文字？\n\n（帳戶與預設費用不會動）')) return;
+    const cur = loadBookingTemplate();
+    save(KEYS.bookingTemplate, Object.assign({}, cur, {
+      registrationNotes: DEFAULT_BOOKING_TEMPLATE.registrationNotes,
+      preClassNotes: DEFAULT_BOOKING_TEMPLATE.preClassNotes,
+    }));
+    showNotice('已重設須知文字');
+    renderSettings();
   };
 
   // 同步：開關
@@ -2295,11 +3077,13 @@ function renderSettings() {
 
   document.getElementById('exportData').onclick = () => {
     const dump = {
-      version: 1,
+      version: 2,
       pets: load(KEYS.pets, []),
       sessions: load(KEYS.sessions, []),
       itemsCat: load(KEYS.itemsCat, []),
       itemsDog: load(KEYS.itemsDog, []),
+      bookings: load(KEYS.bookings, []),
+      bookingTemplate: load(KEYS.bookingTemplate, {}),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
@@ -2324,6 +3108,8 @@ function renderSettings() {
         if (data.sessions) save(KEYS.sessions, data.sessions);
         if (data.itemsCat) save(KEYS.itemsCat, data.itemsCat);
         if (data.itemsDog) save(KEYS.itemsDog, data.itemsDog);
+        if (data.bookings) save(KEYS.bookings, data.bookings);
+        if (data.bookingTemplate) save(KEYS.bookingTemplate, data.bookingTemplate);
         showNotice('匯入完成');
         render();
       } catch (e) {
@@ -2625,6 +3411,8 @@ function render() {
   if (state.view === 'pets') renderPets();
   else if (state.view === 'sessions') renderSessions();
   else if (state.view === 'session') renderSession();
+  else if (state.view === 'bookings') renderBookings();
+  else if (state.view === 'booking') renderBooking();
   else if (state.view === 'settings') renderSettings();
 }
 
