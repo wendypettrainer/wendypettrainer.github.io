@@ -140,6 +140,45 @@
   }
   .add-pet-btn:hover{ background:var(--header-bg); }
   .add-pet-btn:active{ transform:scale(.98); }
+  /* === 寵物列表 view === */
+  .pet-list{ display:flex; flex-direction:column; gap:10px; }
+  .pet-list-empty{
+    text-align:center; padding:48px 24px; color:var(--muted);
+    background:var(--card); border:1.5px dashed var(--border); border-radius:10px;
+  }
+  .pet-list-card{
+    background:var(--card);
+    border:1.5px solid var(--border); border-radius:10px;
+    padding:14px 16px; cursor:pointer;
+    display:flex; align-items:center; gap:12px;
+    transition:border-color .15s, transform .1s;
+  }
+  .pet-list-card:hover{ border-color:var(--accent); }
+  .pet-list-card:active{ transform:scale(.99); }
+  .pet-list-card .plc-emoji{ font-size:32px; flex:0 0 auto; }
+  .pet-list-card .plc-info{ flex:1; min-width:0; }
+  .pet-list-card .plc-name{ font-weight:700; font-size:18px; color:var(--text); }
+  .pet-list-card .plc-meta{ font-size:13px; color:var(--muted); margin-top:3px; line-height:1.4; }
+  .pet-list-card .plc-recent{ font-size:12px; color:var(--accent); margin-top:2px; }
+  .pet-list-card .plc-badge{
+    flex:0 0 auto; padding:6px 10px; font-size:13px; font-weight:600;
+    background:var(--header-bg); color:var(--accent); border-radius:6px;
+  }
+  .list-add-pet-btn{
+    display:block; width:100%; padding:12px;
+    background:var(--accent); color:white;
+    border:none; border-radius:10px;
+    font-size:15px; font-weight:600; cursor:pointer;
+    margin-bottom:14px;
+    font-family:inherit;
+  }
+  .list-add-pet-btn:active{ transform:scale(.99); }
+  .pet-list-brand{
+    background:var(--header-bg); border-radius:12px; padding:16px 20px;
+    margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .pet-list-brand h2{ margin:0; font-size:20px; font-weight:800; color:var(--accent); letter-spacing:1px; }
+  .pet-list-brand .sub{ font-size:12px; color:var(--muted); margin-top:2px; }
   .brand{
     text-align:right; font-weight:800; font-size:20px; color:var(--accent);
     line-height:1.1;
@@ -547,24 +586,40 @@
   <nav class="breadcrumb" id="breadcrumb">
     <a class="bc-link" id="bcBrand" title="回品牌首頁">🏠</a>
     <span class="bc-sep">/</span>
-    <span class="bc-current">照護日記</span>
+    <a class="bc-link" id="bcList" title="回寵物列表" style="display:none">照護日記</a>
+    <span class="bc-current" id="bcCurrent">照護日記</span>
   </nav>
   <span class="sync-dot disabled" id="syncDot" title="同步狀態（點開設定查看）"></span>
   <button class="icon-btn" id="settingsBtn" title="設定" type="button">⚙</button>
 </header>
-<div class="container">
+
+<!-- 第二層：寵物列表 view (預設) -->
+<div class="container" id="petListView">
+  <div class="pet-list-brand">
+    <div>
+      <h2>照護日記</h2>
+      <div class="sub">選擇要紀錄的寵物</div>
+    </div>
+    <div class="brand">
+      <img src="logo.png" alt="Wendy" class="logo-img"
+           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+      <div class="logo" style="display:none;">🐶🐱</div>
+    </div>
+  </div>
+  <button type="button" class="list-add-pet-btn" onclick="quickAddPet()">+ 新增寵物</button>
+  <div class="pet-list" id="petList"></div>
+</div>
+
+<!-- 第三層：寵物詳情 / 日記 view -->
+<div class="container" id="diaryView" style="display:none">
 
   <div class="header">
     <div style="min-width:0; flex:1;">
       <h1>
-        <button type="button" class="pet-selector" onclick="openPetManager()">
-          🐾 <span id="currentPetName">泰迪</span> <span class="caret">▼</span>
-        </button>
-        每日紀錄
+        🐾 <span id="currentPetName">泰迪</span> 每日紀錄
       </h1>
       <div id="currentPetMeta" style="font-size:12px; color:var(--muted); margin-top:2px;"></div>
       <input type="date" id="date" class="date-input">
-      <button type="button" class="add-pet-btn" onclick="quickAddPet()">+ 新增寵物</button>
     </div>
     <div class="brand">
       <img src="logo.png" alt="Wendy" class="logo-img"
@@ -1873,6 +1928,102 @@ function quickAddPet(){
   $('petModal').style.display = 'flex';
   showPetForm();
 }
+
+// === 寵物欄位顯示工具 ===
+function genderLabel(p){
+  if(!p || !p.gender) return '';
+  if(p.gender === 'female') return '♀ 母';
+  if(p.gender === 'male') return '♂ 公';
+  return '';
+}
+function neuteredLabel(p){
+  if(!p || !p.neutered) return '';
+  if(p.neutered === 'yes') return '已絕育';
+  if(p.neutered === 'no') return '未絕育';
+  return '';
+}
+function petLatestDiaryDate(petId){
+  const data = getData();
+  const recs = data?.records?.[petId] || {};
+  const dates = Object.keys(recs).filter(d => recs[d] && Object.keys(recs[d]).length > 0).sort();
+  return dates[dates.length - 1] || '';
+}
+function petDiaryCount(petId){
+  const data = getData();
+  const recs = data?.records?.[petId] || {};
+  return Object.keys(recs).filter(d => recs[d] && Object.keys(recs[d]).length > 0).length;
+}
+
+// === View routing ===
+let currentView = 'list';
+function applyView(view){
+  currentView = view;
+  if(view === 'list'){
+    $('petListView').style.display = '';
+    $('diaryView').style.display = 'none';
+    // 麵包屑：🏠 / 照護日記
+    $('bcList').style.display = 'none';
+    $('bcCurrent').style.display = '';
+    $('bcCurrent').textContent = '照護日記';
+  } else {
+    $('petListView').style.display = 'none';
+    $('diaryView').style.display = '';
+    // 麵包屑：🏠 / 照護日記 / {pet name}
+    $('bcList').style.display = '';
+    $('bcCurrent').style.display = '';
+    const pet = getCurrentPet();
+    $('bcCurrent').textContent = pet ? pet.name : '寵物';
+  }
+}
+function gotoList(){
+  applyView('list');
+  renderPetListView();
+}
+function gotoDiary(petId){
+  if(petId){
+    setCurrentPet(petId);
+  }
+  applyView('diary');
+}
+function renderPetListView(){
+  const data = ensureData();
+  const list = $('petList');
+  if(!list) return;
+  if(!data.pets || data.pets.length === 0){
+    list.innerHTML = '<div class="pet-list-empty">尚未新增寵物<br><br>點上方「+ 新增寵物」開始</div>';
+    return;
+  }
+  list.innerHTML = data.pets.map(p => {
+    const latest = petLatestDiaryDate(p.id);
+    const count = petDiaryCount(p.id);
+    const recentLabel = latest ? `最近紀錄：${latest}` : '尚未紀錄';
+    // 一行 meta：物種 + 飼主 + 性別 + 絕育（有什麼放什麼）
+    const metaParts = [];
+    if(p.species) metaParts.push(p.species);
+    if(p.owner) metaParts.push(`飼主：${escapeHtml(p.owner)}`);
+    const g = genderLabel(p);
+    if(g) metaParts.push(g);
+    const n = neuteredLabel(p);
+    if(n) metaParts.push(n);
+    return `<div class="pet-list-card" onclick="gotoDiary('${p.id}')">
+      <div class="plc-emoji">${speciesEmoji(p.species)}</div>
+      <div class="plc-info">
+        <div class="plc-name">${escapeHtml(p.name)}</div>
+        ${metaParts.length ? `<div class="plc-meta">${metaParts.join(' · ')}</div>` : ''}
+        <div class="plc-recent">${recentLabel}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+        <div class="plc-badge">${count} 筆</div>
+        <button type="button" class="add-pet-btn" style="margin-top:0; padding:3px 10px; font-size:12px;"
+                onclick="event.stopPropagation(); openPetEditForm('${p.id}')">編輯</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function openPetEditForm(petId){
+  $('petModal').style.display = 'flex';
+  showPetForm(petId);
+}
 function closePetManager(){
   $('petModal').style.display = 'none';
 }
@@ -1921,6 +2072,16 @@ function showPetForm(petId){
         <label class="chip"><input type="radio" name="petFormSpecies" value="貓" ${editing?.species==='貓'?'checked':''}> 🐱 貓</label>
         <label class="chip"><input type="radio" name="petFormSpecies" value="狗" ${editing?.species==='狗'?'checked':''}> 🐶 狗</label>
         <label class="chip"><input type="radio" name="petFormSpecies" value="其他" ${editing?.species==='其他'?'checked':''}> 🐾 其他</label>
+      </div></div>
+      <div class="row"><div class="lbl">性別</div><div class="field chips">
+        <label class="chip"><input type="radio" name="petFormGender" value="female" ${editing?.gender==='female'?'checked':''}> ♀ 母</label>
+        <label class="chip"><input type="radio" name="petFormGender" value="male" ${editing?.gender==='male'?'checked':''}> ♂ 公</label>
+        <label class="chip"><input type="radio" name="petFormGender" value="unknown" ${editing?.gender==='unknown'?'checked':''}> 未知</label>
+      </div></div>
+      <div class="row"><div class="lbl">絕育</div><div class="field chips">
+        <label class="chip"><input type="radio" name="petFormNeutered" value="yes" ${editing?.neutered==='yes'?'checked':''}> 已絕育</label>
+        <label class="chip"><input type="radio" name="petFormNeutered" value="no" ${editing?.neutered==='no'?'checked':''}> 未絕育</label>
+        <label class="chip"><input type="radio" name="petFormNeutered" value="unknown" ${editing?.neutered==='unknown'?'checked':''}> 未知</label>
       </div></div>
       <div class="row"><div class="lbl">飼主</div><div class="field">
         <input type="text" id="petFormOwner" value="${editing?escapeHtml(editing.owner||''):''}" placeholder="選填">
@@ -2022,15 +2183,19 @@ function savePetForm(editingId){
   if(!name){ toast('請填名字'); return; }
   const speciesRadio = document.querySelector('input[name="petFormSpecies"]:checked');
   const species = speciesRadio ? speciesRadio.value : '其他';
+  const genderRadio = document.querySelector('input[name="petFormGender"]:checked');
+  const gender = genderRadio ? genderRadio.value : '';
+  const neuteredRadio = document.querySelector('input[name="petFormNeutered"]:checked');
+  const neutered = neuteredRadio ? neuteredRadio.value : '';
   const owner = $('petFormOwner').value.trim();
   const notes = $('petFormNotes').value.trim();
   const data = ensureData();
   if(editingId){
     const p = data.pets.find(x=>x.id===editingId);
-    if(p){ p.name = name; p.species = species; p.owner = owner; p.notes = notes; }
+    if(p){ p.name = name; p.species = species; p.gender = gender; p.neutered = neutered; p.owner = owner; p.notes = notes; }
   } else {
     const id = genId();
-    data.pets.push({ id, name, species, owner, notes });
+    data.pets.push({ id, name, species, gender, neutered, owner, notes });
     data.current_pet_id = id;  // 新增後切過去
   }
   saveData(data);
@@ -2039,6 +2204,7 @@ function savePetForm(editingId){
   loadPhotos();
   updateHistoryHint();
   renderPetList();
+  if (typeof renderPetListView === 'function') renderPetListView();
   toast(editingId?'已更新':'已新增');
 }
 function deletePet(petId){
@@ -2060,6 +2226,7 @@ function deletePet(petId){
   loadPhotos();
   updateHistoryHint();
   renderPetList();
+  if (typeof renderPetListView === 'function') renderPetListView();
   toast('已刪除');
 }
 
@@ -2306,6 +2473,13 @@ window.addEventListener('DOMContentLoaded', ()=>{
       }
     };
   }
+  const bcList = document.getElementById('bcList');
+  if (bcList) bcList.onclick = () => gotoList();
+
+  // 預設進入：寵物列表 view（第二層）
+  applyView('list');
+  renderPetListView();
+
   const settingsBtn = document.getElementById('settingsBtn');
   if (settingsBtn) {
     settingsBtn.onclick = () => openTeddySettings();
