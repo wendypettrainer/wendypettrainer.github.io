@@ -467,6 +467,13 @@ async function generatePdf() {
   const element = document.getElementById('pdf-content');
   const startTime = Date.now();
 
+  // 鎖定 element 寬度為 794px（A4 @ 96dpi），避免手機用 viewport 寬度 render
+  // 否則 iPhone Safari 會以 375px 寬度去 wrap 內容，導致 PDF 排版錯亂
+  const _origW = element.style.width;
+  const _origMW = element.style.maxWidth;
+  element.style.width = '794px';
+  element.style.maxWidth = '794px';
+
   const opt = {
     margin: 0,                           // 邊界已在 .page CSS 控制
     filename: 'Lulu_匯款通知_demo.pdf',
@@ -475,7 +482,9 @@ async function generatePdf() {
       scale: 2,                          // 2x 提升清晰度
       useCORS: true,
       logging: false,
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      windowWidth: 794,           // 強制 mock window 寬度
+      width: 794                  // canvas 寬度
     },
     jsPDF: {
       unit: 'mm',
@@ -501,6 +510,9 @@ async function generatePdf() {
     status.textContent = '❌ 出錯：' + (e && e.message ? e.message : e);
     console.error(e);
   } finally {
+    // 還原 element 原寬度
+    element.style.width = _origW;
+    element.style.maxWidth = _origMW;
     btn.disabled = false;
   }
 }
