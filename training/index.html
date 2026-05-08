@@ -579,6 +579,50 @@
   }
   .actions-row .btn { flex: 1; min-width: 120px; }
 
+  /* === FAS 色帶（首堂諮詢內部觀察） === */
+  .fas-bar {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .fas-btn {
+    padding: 10px 4px; border: 2px solid transparent;
+    border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: white;
+    text-align: center; line-height: 1.2;
+    font-family: inherit;
+  }
+  .fas-btn.lvl-low { background: var(--good); }
+  .fas-btn.lvl-mid { background: var(--ok); }
+  .fas-btn.lvl-high { background: var(--work); }
+  .fas-btn:not(.active) { opacity: 0.5; }
+  .fas-btn.active { opacity: 1; outline: 2px solid var(--brown-dark); outline-offset: 2px; }
+  .fas-btn small { display:block; font-size:10px; opacity:0.85; font-weight:500; margin-top:2px; }
+  .fas-desc {
+    background: var(--bg-soft, #f7f1e6);
+    border-left: 3px solid var(--brown-light);
+    padding: 10px 12px; border-radius: 6px;
+    font-size: 13px; line-height: 1.6; color: var(--text);
+    margin-top: 4px; white-space: pre-wrap;
+  }
+  .fas-desc:empty { display: none; }
+  .fc-section-title {
+    font-size: 14px; color: var(--brown-dark); font-weight: 700;
+    margin: 22px 0 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .fc-section-title .small { font-size: 11px; font-weight: 400; color: var(--text-soft); }
+  .template-buttons {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+  }
+  .template-buttons .small-btn {
+    background: var(--header-bg, #f0e6d6); color: var(--brown);
+    border: 1px solid var(--brown-light); padding: 6px 12px;
+    border-radius: 6px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  .template-buttons .small-btn:hover { background: var(--brown-light); color: white; }
+
   /* iOS safe area */
   @supports (padding: env(safe-area-inset-bottom)) {
     .app { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
@@ -714,6 +758,25 @@ const DEFAULT_BOOKING_TEMPLATE = {
 ⑩ 課後請反覆審視上課教的內容並確實執行，每個環節都非常重要，不能偷懶。
 
 ⑪ 如狗狗有特殊行為問題，還需要搭配「藥物治療」，這部分在進行過程中若發現會轉介行為門診。`,
+  // 首堂諮詢報告模板（給家長看的快速插入文字段落）
+  firstConsultTemplates: [
+    {
+      label: '整體狀態',
+      content: '【整體狀態評估】\n\n經過今天初次見面的觀察，本次諮詢主要觀察重點如下：\n\n• 與家庭成員互動：\n• 對環境的反應：\n• 行為傾向：\n'
+    },
+    {
+      label: '訓練建議',
+      content: '【訓練方向建議】\n\n依據今天的觀察，建議的訓練重點：\n\n1. \n2. \n3. \n\n預估時程：約 ___ 個月\n適合的課程類型：（建議幼犬班 / 一對一 / 等）\n'
+    },
+    {
+      label: '飼主注意事項',
+      content: '【日常生活注意事項】\n\n建議飼主在日常生活中特別留意：\n\n• \n• \n• \n\n可以在家練習的小活動：\n\n• \n'
+    },
+    {
+      label: '後續課程方向',
+      content: '【後續課程規劃建議】\n\n第一階段（前 4 堂）目標：\n第二階段（中期）：\n長期目標：\n'
+    }
+  ],
 };
 
 // 把任何舊版資料自動升級成 v3：{ name, methods: [{name, steps}] }
@@ -1553,7 +1616,7 @@ function openSessionForm(session = null) {
   // 課程類型相關（舊資料沒有 → 全空）
   const ct = data.courseType || '';
   const gst = data.groupSubType || '';
-  const showSeq = !!ct;  // 任何課程類型都可填進度
+  const showSeq = !!ct && ct !== 'firstConsult';  // 首堂諮詢不需要進度
   const html = `
     <div class="modal">
       <h2>${isEdit ? '編輯課程' : '新增課程'}</h2>
@@ -1631,7 +1694,7 @@ function openSessionForm(session = null) {
     const cur = ctEl ? ctEl.value : '';
     overlay.querySelector('#f_groupSubField').style.display = (cur === 'group') ? 'block' : 'none';
     overlay.querySelector('#f_courseTypeOther').style.display = (cur === 'other') ? 'block' : 'none';
-    overlay.querySelector('#f_seqField').style.display = cur ? 'block' : 'none';
+    overlay.querySelector('#f_seqField').style.display = (cur && cur !== 'firstConsult') ? 'block' : 'none';
     // 團體班 → 子類「其他」才顯示自填
     const gstSel = overlay.querySelector('#f_groupSubType');
     const gstVal = gstSel ? gstSel.value : '';
@@ -1725,9 +1788,10 @@ function courseTypeLabel(b) {
       return '';
   }
 }
-// 排序顯示：第 X 堂 / 共 Y 堂（所有課程類型都可填）
+// 排序顯示：第 X 堂 / 共 Y 堂（首堂諮詢不顯示）
 function sessionSeqLabel(s) {
   if (!s) return '';
+  if (s.courseType === 'firstConsult') return '';
   const seq = parseInt(s.sessionSeq, 10);
   const total = parseInt(s.sessionTotal, 10);
   if (!seq && !total) return '';
@@ -2168,12 +2232,152 @@ function renderBooking() {
 }
 
 /* ============== VIEW: SESSION RECORD ============== */
+// FAS 等級描述（從 FAS Spectrum 標準）
+const FAS_DESCRIPTIONS = {
+  '0': '沒有 FAS 的徵兆，表現出放鬆的肢體語言，並願意與家庭成員進行社交互動。',
+  '1': '表現出 1 或 2 個輕微 FAS 的徵兆：流口水、舔唇、不願意眼神接觸、轉過頭但不走開、抬起腳掌、瞳孔部分放大和/或喘氣（嘴巴微微張開），每分鐘發生少於 4 次。對零食或玩具感興趣，並會與家庭成員進行社交互動。',
+  '2': '表現出 1 到 2 個中度 FAS 的徵兆：耳朵稍微向後或向某一側、尾巴朝下、皺眉頭、移動緩慢、過度尋求關注 和/或張開口緊繃的喘著氣。容易接受零食或玩具，仍希望與家庭成員進行社交互動。',
+  '3': '出現超過 2 個中等程度的 FAS 徵兆，在一分鐘內發生 4 次以上。可能會拒絕零食或玩具，或很急促地吃下進食。也可能不太想與互動，但不會主動避開。',
+  '4': '不具有攻擊行為的強烈 FAS 徵兆：僵住、坐立不安、迴避、瞳孔放大、過度喘氣、呼吸頻率加快、頭抖、緊閉尾巴、耳朵向後 和/或尾巴捲起或擺動。可能不接受任何零食或玩具，沒興趣與家庭成員互動，可能出現主動避開。',
+  '5': '具有攻擊行為的強烈 FAS 徵兆：低吼、暴衝、吠叫、哈氣、咆哮和/或空咬。'
+};
+function fasColorClass(level) {
+  if (level === '0' || level === '1') return 'lvl-low';
+  if (level === '2' || level === '3') return 'lvl-mid';
+  if (level === '4' || level === '5') return 'lvl-high';
+  return '';
+}
+function fasShortLabel(level) {
+  return ({'0':'放鬆','1':'輕微','2':'輕中度','3':'中度','4':'高度','5':'高度+攻擊'})[level] || '';
+}
+
+function renderFirstConsultSession(sess, pet) {
+  const main = document.getElementById('main');
+  const tpl = loadBookingTemplate();
+  const templates = tpl.firstConsultTemplates || [];
+  const fasLevel = (sess.fasLevel != null && sess.fasLevel !== '') ? String(sess.fasLevel) : '';
+  const fasDesc = FAS_DESCRIPTIONS[fasLevel] || '';
+  main.innerHTML = `
+    <div class="autosave-banner">
+      💾 FAS、觀察備註、報告內容都<b>自動儲存</b>。FAS 跟觀察備註不會出現在給家長的報告 PDF 上。
+    </div>
+    <div class="card" style="cursor:default">
+      <div class="card-row">
+        <div>
+          <div class="card-title">${speciesEmoji(pet.species)} ${escapeHtml(pet.name)} ${genderLabel(pet.gender)}</div>
+          <div class="card-meta">
+            ${fmtDate(sess.date)}
+            ${sess.location ? ' · 📍 ' + escapeHtml(sess.location) : ''}
+            ${sess.duration ? ' · ' + sess.duration + ' 分鐘' : ''}
+            <br>📋 首堂諮詢
+          </div>
+        </div>
+        <button class="small-btn" id="editSess">編輯</button>
+      </div>
+    </div>
+
+    <div class="fc-section-title">🔍 內部觀察 <span class="small">（不會出現在報告）</span></div>
+    <div class="card" style="cursor:default">
+      <div class="field">
+        <label>FAS 等級（恐懼／焦慮／壓力）</label>
+        <div class="fas-bar">
+          ${['0','1','2','3','4','5'].map(lv => `
+            <button type="button" class="fas-btn ${fasColorClass(lv)} ${fasLevel===lv?'active':''}" data-fas="${lv}">
+              ${lv}<small>${fasShortLabel(lv)}</small>
+            </button>
+          `).join('')}
+        </div>
+        <div class="fas-desc" id="fasDesc">${escapeHtml(fasDesc)}</div>
+      </div>
+      <div class="field">
+        <label>觀察備註（你自己的判斷依據）</label>
+        <textarea id="fasNotes" placeholder="例：踏進門立刻舔唇、瞳孔放大；飼主出現後僵住約 5 秒...">${escapeHtml(sess.fasNotes||'')}</textarea>
+      </div>
+    </div>
+
+    <div class="fc-section-title">📨 給家長的報告 <span class="small">（會出現在 PDF）</span></div>
+    <div class="card" style="cursor:default">
+      <div class="field">
+        <label>報告內容</label>
+        <textarea id="firstConsultReport" rows="14" placeholder="這裡的內容會印在給飼主的 PDF 報告上...">${escapeHtml(sess.firstConsultReport||'')}</textarea>
+        <div class="template-buttons">
+          ${templates.length === 0 ? '<span style="font-size:12px; color:var(--text-soft)">（尚未設定模板，去設定頁編輯）</span>' :
+            templates.map((t, i) => `<button type="button" class="small-btn" data-tpl-idx="${i}">+ ${escapeHtml(t.label)}</button>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="actions-row">
+      <button class="btn" id="saveBtn">💾 儲存</button>
+      <button class="btn ghost" id="pdfBtn">📄 報告 PDF</button>
+    </div>
+  `;
+  document.getElementById('editSess').onclick = () => openSessionForm(sess);
+
+  function saveAll() {
+    sess.fasNotes = document.getElementById('fasNotes').value;
+    sess.firstConsultReport = document.getElementById('firstConsultReport').value;
+    const sessions = load(KEYS.sessions, []);
+    const idx = sessions.findIndex(s => s.id === sess.id);
+    if (idx >= 0) { sessions[idx] = sess; save(KEYS.sessions, sessions); }
+  }
+
+  // FAS 按鈕
+  main.querySelectorAll('.fas-btn').forEach(btn => {
+    btn.onclick = () => {
+      const lv = btn.dataset.fas;
+      const newLevel = sess.fasLevel === lv ? '' : lv;
+      sess.fasLevel = newLevel;
+      const sessions = load(KEYS.sessions, []);
+      const idx = sessions.findIndex(s => s.id === sess.id);
+      if (idx >= 0) { sessions[idx] = sess; save(KEYS.sessions, sessions); }
+      renderFirstConsultSession(sess, pet);  // 重渲染顯示新描述
+    };
+  });
+
+  // 模板插入按鈕
+  main.querySelectorAll('[data-tpl-idx]').forEach(btn => {
+    btn.onclick = () => {
+      const i = parseInt(btn.dataset.tplIdx, 10);
+      const tplItem = templates[i];
+      if (!tplItem) return;
+      const ta = document.getElementById('firstConsultReport');
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const before = ta.value.substring(0, start);
+      const after = ta.value.substring(end);
+      const sep = (before && !before.endsWith('\n\n')) ? (before.endsWith('\n') ? '\n' : '\n\n') : '';
+      const inserted = sep + tplItem.content;
+      ta.value = before + inserted + after;
+      const newPos = start + inserted.length;
+      ta.selectionStart = ta.selectionEnd = newPos;
+      ta.focus();
+      saveAll();
+    };
+  });
+
+  // Auto-save
+  ['fasNotes', 'firstConsultReport'].forEach(id => {
+    document.getElementById(id).addEventListener('blur', saveAll);
+  });
+
+  document.getElementById('saveBtn').onclick = () => { saveAll(); showNotice('已儲存'); };
+  document.getElementById('pdfBtn').onclick = () => {
+    saveAll();
+    exportFirstConsultPdf(sess, pet);
+  };
+}
+
 function renderSession() {
   const main = document.getElementById('main');
   const sess = getSession(state.sessionId);
   if (!sess) { go('sessions', { petId: state.petId }); return; }
   const pet = getPet(sess.petId);
   if (!pet) { go('pets'); return; }
+  // 首堂諮詢走專用 view
+  if (sess.courseType === 'firstConsult') {
+    return renderFirstConsultSession(sess, pet);
+  }
   const items = ensureItemShape(pet.species === 'cat' ? load(KEYS.itemsCat, []) : load(KEYS.itemsDog, []));
   const recordsByName = {};
   (sess.records || []).forEach(r => recordsByName[r.name] = r);
@@ -2329,6 +2533,117 @@ function renderSession() {
 }
 
 /* ============== PDF EXPORT (走瀏覽器列印對話框，中文完美) ============== */
+function exportFirstConsultPdf(sess, pet) {
+  const logoSrc = LOGO_DATA || (window.location.protocol.startsWith('http')
+    ? window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'logo.png'
+    : '');
+  const reportText = (sess.firstConsultReport || '').trim();
+  const titleStr = `${pet.name}_首堂諮詢報告`;
+  const dateStr = fmtDate(sess.date);
+  const ownerLine = pet.ownerName ? `飼主：${escapeHtml(pet.ownerName)}` : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>${escapeHtml(titleStr)}</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
+                 "Noto Sans TC", "Heiti TC", sans-serif;
+    color: #3d2f1f;
+    line-height: 1.65;
+    background: white;
+    font-size: 12pt;
+  }
+  header.brand {
+    text-align: center;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
+    border-bottom: 2px solid #8b6f47;
+  }
+  header.brand img { max-width: 150pt; height: auto; }
+  header.brand .sub {
+    font-size: 9pt; color: #8b6f47; letter-spacing: 1.2px;
+    margin-top: 3pt;
+  }
+  h1.page-title {
+    text-align: center; color: #6b5435;
+    font-size: 18pt; margin: 14pt 0 6pt;
+  }
+  .meta-line {
+    text-align: center; color: #8b6f47; font-size: 11pt;
+    margin-bottom: 18pt;
+  }
+  .report-body {
+    font-size: 12pt; line-height: 1.85;
+    white-space: pre-wrap;
+    padding: 4pt 0;
+  }
+  .signoff {
+    margin-top: 28pt; padding-top: 12pt;
+    border-top: 1px solid #c9b89a;
+    text-align: right; color: #8b6f47;
+    font-size: 11pt;
+  }
+  .print-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: #f0e6d6; border-bottom: 2px solid #c9a85a;
+    padding: 10px 16px; display: flex; gap: 8px; z-index: 999;
+  }
+  .print-bar button {
+    padding: 6px 14px; border: 1px solid #8b6f47;
+    background: white; color: #8b6f47;
+    border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  body { padding-top: 50px; }
+  @media print {
+    .print-bar { display: none !important; }
+    body { padding-top: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="print-bar">
+    <button onclick="window.print()">🖨 列印 / 存 PDF</button>
+    <button onclick="window.close()">關閉</button>
+  </div>
+
+  <section>
+    <header class="brand">
+      ${logoSrc ? `<img src="${logoSrc}" alt="Wendy">` : '<h1 style="color:#6b5435">Wendy 溫蒂．貓與狗訓練日常</h1>'}
+      <div class="sub">Cat &amp; Dog Training</div>
+    </header>
+    <h1 class="page-title">首堂諮詢報告</h1>
+    <div class="meta-line">
+      ${escapeHtml(pet.name)}${pet.breed ? '（' + escapeHtml(pet.breed) + '）' : ''} ·
+      ${escapeHtml(dateStr)}${ownerLine ? ' · ' + ownerLine : ''}
+    </div>
+
+    <div class="report-body">${escapeHtml(reportText) || '（尚未填寫報告內容）'}</div>
+
+    <div class="signoff">
+      Wendy 溫蒂．貓與狗訓練日常 製作
+    </div>
+  </section>
+
+  <scr` + `ipt>
+    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
+  </scr` + `ipt>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    showNotice('請允許跳出視窗以下載 PDF', 'err');
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+}
+
 function exportPdf(sess, pet) {
   const items = ensureItemShape(pet.species === 'cat' ? load(KEYS.itemsCat, []) : load(KEYS.itemsDog, []));
   const itemMap = {};
@@ -3158,6 +3473,19 @@ function renderSettings() {
       </div>
     </div>
 
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📨 首堂諮詢報告模板</h3>
+    <div class="card" style="cursor:default">
+      <p class="card-meta" style="margin-bottom:12px">
+        💡 這些是<b>給家長看的報告</b>快速插入文字。建立首堂諮詢課程時，按模板按鈕會把對應段落插到報告內容游標位置，你再改填具體內容。
+      </p>
+      <div id="fcTplList"></div>
+      <button class="btn ghost" id="fc_addTpl" style="margin-top:8px;">+ 新增模板</button>
+      <div class="actions-row" style="margin-top:14px">
+        <button class="btn" id="fc_save">儲存模板</button>
+        <button class="btn ghost" id="fc_reset">重設為預設模板</button>
+      </div>
+    </div>
+
     <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">訓練項目清單</h3>
     <div class="tabs">
       <button class="tab active" data-tab="dog">🐶 狗 (${dogItems.length})</button>
@@ -3229,6 +3557,62 @@ function renderSettings() {
       preClassNotes: DEFAULT_BOOKING_TEMPLATE.preClassNotes,
     }));
     showNotice('已重設須知文字');
+    renderSettings();
+  };
+
+  // 首堂諮詢報告模板編輯器
+  let fcTpls = JSON.parse(JSON.stringify(bookingTpl.firstConsultTemplates || DEFAULT_BOOKING_TEMPLATE.firstConsultTemplates || []));
+  function renderFcTplList() {
+    const wrap = document.getElementById('fcTplList');
+    if (!wrap) return;
+    wrap.innerHTML = fcTpls.map((t, i) => `
+      <div style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px">
+        <div class="row2" style="margin-bottom:6px">
+          <div class="field" style="margin-bottom:0">
+            <label>標籤名稱（按鈕上的字）</label>
+            <input type="text" data-fc-label="${i}" value="${escapeAttr(t.label||'')}" placeholder="例：訓練建議">
+          </div>
+          <div class="field" style="margin-bottom:0; display:flex; align-items:flex-end">
+            <button class="btn danger" data-fc-del="${i}" style="height:36px">刪除</button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>插入文字內容</label>
+          <textarea rows="5" data-fc-content="${i}" style="font-size:12px; line-height:1.5;">${escapeHtml(t.content||'')}</textarea>
+        </div>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('[data-fc-label]').forEach(el => {
+      el.oninput = (e) => { fcTpls[parseInt(el.dataset.fcLabel,10)].label = e.target.value; };
+    });
+    wrap.querySelectorAll('[data-fc-content]').forEach(el => {
+      el.oninput = (e) => { fcTpls[parseInt(el.dataset.fcContent,10)].content = e.target.value; };
+    });
+    wrap.querySelectorAll('[data-fc-del]').forEach(el => {
+      el.onclick = () => {
+        if (!confirm('刪除這個模板？')) return;
+        fcTpls.splice(parseInt(el.dataset.fcDel,10), 1);
+        renderFcTplList();
+      };
+    });
+  }
+  renderFcTplList();
+  document.getElementById('fc_addTpl').onclick = () => {
+    fcTpls.push({ label: '新模板', content: '' });
+    renderFcTplList();
+  };
+  document.getElementById('fc_save').onclick = () => {
+    const cur = loadBookingTemplate();
+    save(KEYS.bookingTemplate, Object.assign({}, cur, { firstConsultTemplates: fcTpls }));
+    showNotice('首堂諮詢模板已儲存');
+  };
+  document.getElementById('fc_reset').onclick = () => {
+    if (!confirm('重設首堂諮詢模板為預設？\n\n你目前的編輯會被覆蓋')) return;
+    const cur = loadBookingTemplate();
+    save(KEYS.bookingTemplate, Object.assign({}, cur, {
+      firstConsultTemplates: JSON.parse(JSON.stringify(DEFAULT_BOOKING_TEMPLATE.firstConsultTemplates || []))
+    }));
+    showNotice('已重設首堂諮詢模板');
     renderSettings();
   };
 
