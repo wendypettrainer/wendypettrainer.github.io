@@ -1553,7 +1553,7 @@ function openSessionForm(session = null) {
   // 課程類型相關（舊資料沒有 → 全空）
   const ct = data.courseType || '';
   const gst = data.groupSubType || '';
-  const showSeq = (ct === 'group' || ct === 'other');
+  const showSeq = !!ct;  // 任何課程類型都可填進度
   const html = `
     <div class="modal">
       <h2>${isEdit ? '編輯課程' : '新增課程'}</h2>
@@ -1631,7 +1631,7 @@ function openSessionForm(session = null) {
     const cur = ctEl ? ctEl.value : '';
     overlay.querySelector('#f_groupSubField').style.display = (cur === 'group') ? 'block' : 'none';
     overlay.querySelector('#f_courseTypeOther').style.display = (cur === 'other') ? 'block' : 'none';
-    overlay.querySelector('#f_seqField').style.display = (cur === 'group' || cur === 'other') ? 'block' : 'none';
+    overlay.querySelector('#f_seqField').style.display = cur ? 'block' : 'none';
     // 團體班 → 子類「其他」才顯示自填
     const gstSel = overlay.querySelector('#f_groupSubType');
     const gstVal = gstSel ? gstSel.value : '';
@@ -1725,10 +1725,9 @@ function courseTypeLabel(b) {
       return '';
   }
 }
-// 排序顯示：第 X 堂 / 共 Y 堂（只有 group/other 用）
+// 排序顯示：第 X 堂 / 共 Y 堂（所有課程類型都可填）
 function sessionSeqLabel(s) {
   if (!s) return '';
-  if (s.courseType !== 'group' && s.courseType !== 'other') return '';
   const seq = parseInt(s.sessionSeq, 10);
   const total = parseInt(s.sessionTotal, 10);
   if (!seq && !total) return '';
