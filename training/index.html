@@ -1455,11 +1455,17 @@ function renderSessions() {
     body = sessions.map(s => {
       const recCount = (s.records || []).filter(r => r.selected).length;
       const isToday = s.date === todayStr();
+      const ctLab = courseTypeLabel(s);
+      const seqLab = sessionSeqLabel(s);
+      const courseLine = (ctLab || seqLab)
+        ? `<div class="card-meta" style="color:var(--brown-dark); font-weight:500">📋 ${escapeHtml(ctLab)}${ctLab && seqLab ? ' · ' : ''}${escapeHtml(seqLab)}</div>`
+        : '';
       return `
         <div class="card" data-id="${s.id}">
           <div class="card-row">
             <div>
               <div class="card-title">${fmtDate(s.date)} ${isToday ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}</div>
+              ${courseLine}
               <div class="card-meta">
                 ${s.location ? '📍 ' + escapeHtml(s.location) + ' · ' : ''}
                 ${s.duration ? s.duration + ' 分鐘' : ''}
@@ -1536,12 +1542,18 @@ function openSessionForm(session = null) {
   const data = session || {
     id: '', petId: state.petId, date: todayStr(),
     location: '', duration: 60,
+    courseType: '', groupSubType: '', groupSubTypeOther: '', courseTypeOther: '',
+    sessionSeq: '', sessionTotal: '',
   };
   // 把舊的 freeform location 對應到 radio：教室/家中 直接命中，其他都歸到「其他」+文字
   const presetLocs = ['教室', '家中'];
   const isPreset = presetLocs.includes(data.location);
   const initType = !data.location ? '' : (isPreset ? data.location : 'other');
   const initOther = isPreset ? '' : (data.location || '');
+  // 課程類型相關（舊資料沒有 → 全空）
+  const ct = data.courseType || '';
+  const gst = data.groupSubType || '';
+  const showSeq = (ct === 'group' || ct === 'other');
   const html = `
     <div class="modal">
       <h2>${isEdit ? '編輯課程' : '新增課程'}</h2>
@@ -1565,6 +1577,37 @@ function openSessionForm(session = null) {
         <input id="f_locOther" type="text" value="${escapeAttr(initOther)}" placeholder="請輸入地點"
                style="margin-top:8px; display:${initType==='other'?'block':'none'};">
       </div>
+      <div class="field">
+        <label>課程類型</label>
+        <div class="radio-group">
+          <label class="radio-opt"><input type="radio" name="sCourseType" value="oneOnOne" ${ct==='oneOnOne'?'checked':''}> 一對一</label>
+          <label class="radio-opt"><input type="radio" name="sCourseType" value="firstConsult" ${ct==='firstConsult'?'checked':''}> 首堂諮詢</label>
+          <label class="radio-opt"><input type="radio" name="sCourseType" value="group" ${ct==='group'?'checked':''}> 團體班</label>
+          <label class="radio-opt"><input type="radio" name="sCourseType" value="other" ${ct==='other'?'checked':''}> 其他</label>
+        </div>
+        <div id="f_groupSubField" style="margin-top:8px; display:${ct==='group'?'block':'none'};">
+          <select id="f_groupSubType" style="width:100%; padding:8px;">
+            <option value="" ${gst===''?'selected':''}>— 選團體班類型 —</option>
+            <option value="puppy" ${gst==='puppy'?'selected':''}>幼犬班</option>
+            <option value="youth" ${gst==='youth'?'selected':''}>青少年犬班</option>
+            <option value="other" ${gst==='other'?'selected':''}>其他（自填）</option>
+          </select>
+          <input id="f_groupSubTypeOther" type="text" value="${escapeAttr(data.groupSubTypeOther||'')}" placeholder="例：成犬班"
+                 style="margin-top:8px; width:100%; padding:8px; display:${ct==='group' && gst==='other'?'block':'none'};">
+        </div>
+        <input id="f_courseTypeOther" type="text" value="${escapeAttr(data.courseTypeOther||'')}" placeholder="例：行為矯正"
+               style="margin-top:8px; width:100%; padding:8px; display:${ct==='other'?'block':'none'};">
+      </div>
+      <div class="field" id="f_seqField" style="display:${showSeq?'block':'none'}">
+        <label>進度（這堂是幾堂裡的第幾堂）</label>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span>第</span>
+          <input id="f_sessionSeq" type="number" min="1" value="${escapeAttr(data.sessionSeq||'')}" placeholder="1" style="width:70px; padding:6px;">
+          <span>堂 / 共</span>
+          <input id="f_sessionTotal" type="number" min="1" value="${escapeAttr(data.sessionTotal||'')}" placeholder="4" style="width:70px; padding:6px;">
+          <span>堂</span>
+        </div>
+      </div>
       <div class="modal-actions">
         ${isEdit ? '<button class="btn danger" id="m_del">刪除</button>' : ''}
         <button class="btn ghost" id="m_cancel">取消</button>
@@ -1574,7 +1617,7 @@ function openSessionForm(session = null) {
   `;
   const overlay = openModal(html);
   overlay.querySelector('#m_cancel').onclick = () => overlay.remove();
-  // Toggle 其他 文字輸入
+  // Toggle 其他 文字輸入 (地點)
   overlay.querySelectorAll('input[name="locType"]').forEach(r => {
     r.onchange = () => {
       const ot = overlay.querySelector('#f_locOther');
@@ -1582,6 +1625,24 @@ function openSessionForm(session = null) {
       if (r.value === 'other' && r.checked) ot.focus();
     };
   });
+  // Toggle 課程類型相關欄位
+  function refreshCourseTypeUI() {
+    const ctEl = overlay.querySelector('input[name="sCourseType"]:checked');
+    const cur = ctEl ? ctEl.value : '';
+    overlay.querySelector('#f_groupSubField').style.display = (cur === 'group') ? 'block' : 'none';
+    overlay.querySelector('#f_courseTypeOther').style.display = (cur === 'other') ? 'block' : 'none';
+    overlay.querySelector('#f_seqField').style.display = (cur === 'group' || cur === 'other') ? 'block' : 'none';
+    // 團體班 → 子類「其他」才顯示自填
+    const gstSel = overlay.querySelector('#f_groupSubType');
+    const gstVal = gstSel ? gstSel.value : '';
+    overlay.querySelector('#f_groupSubTypeOther').style.display =
+      (cur === 'group' && gstVal === 'other') ? 'block' : 'none';
+  }
+  overlay.querySelectorAll('input[name="sCourseType"]').forEach(r => {
+    r.onchange = refreshCourseTypeUI;
+  });
+  const gstSel = overlay.querySelector('#f_groupSubType');
+  if (gstSel) gstSel.onchange = refreshCourseTypeUI;
   overlay.querySelector('#m_save').onclick = () => {
     const date = overlay.querySelector('#f_date').value;
     if (!date) { showNotice('請選日期', 'err'); return; }
@@ -1589,12 +1650,25 @@ function openSessionForm(session = null) {
     const locType = locTypeEl ? locTypeEl.value : '';
     const locOther = overlay.querySelector('#f_locOther').value.trim();
     const finalLoc = locType === 'other' ? locOther : (locType || '');
+    const ctEl = overlay.querySelector('input[name="sCourseType"]:checked');
+    const courseType = ctEl ? ctEl.value : '';
+    const groupSubType = (overlay.querySelector('#f_groupSubType') || {}).value || '';
+    const groupSubTypeOther = (overlay.querySelector('#f_groupSubTypeOther') || {}).value || '';
+    const courseTypeOther = (overlay.querySelector('#f_courseTypeOther') || {}).value || '';
+    const sessionSeq = (overlay.querySelector('#f_sessionSeq') || {}).value || '';
+    const sessionTotal = (overlay.querySelector('#f_sessionTotal') || {}).value || '';
     const updated = {
       id: data.id || uid(),
       petId: data.petId,
       date,
       duration: parseInt(overlay.querySelector('#f_duration').value) || 0,
       location: finalLoc,
+      courseType,
+      groupSubType,
+      groupSubTypeOther: groupSubTypeOther.trim(),
+      courseTypeOther: courseTypeOther.trim(),
+      sessionSeq,
+      sessionTotal,
       records: data.records || [],
       homework: data.homework || '',
       notes: data.notes || '',
@@ -1634,21 +1708,33 @@ function loadBookingTemplate() {
   // 缺欄位用預設補（向後相容、設定漏填都能容錯）
   return Object.assign({}, DEFAULT_BOOKING_TEMPLATE, load(KEYS.bookingTemplate, {}));
 }
-// 課程類型 → 顯示文字
+// 課程類型 → 顯示文字（共用：booking + session）
 function courseTypeLabel(b) {
   switch (b && b.courseType) {
     case 'firstConsult': return '首堂諮詢';
     case 'group':
-      if (b.groupSubType === 'puppy') return '幼犬團體班';
-      if (b.groupSubType === 'youth') return '青少年團體班';
+      if (b.groupSubType === 'puppy') return '幼犬班';
+      if (b.groupSubType === 'youth') return '青少年犬班';
       if (b.groupSubType === 'other') return (b.groupSubTypeOther || '').trim() || '團體班';
       return '團體班';
     case 'other':
       return (b.courseTypeOther || '').trim() || '其他課程';
     case 'oneOnOne':
-    default:
       return '一對一';
+    default:
+      return '';
   }
+}
+// 排序顯示：第 X 堂 / 共 Y 堂（只有 group/other 用）
+function sessionSeqLabel(s) {
+  if (!s) return '';
+  if (s.courseType !== 'group' && s.courseType !== 'other') return '';
+  const seq = parseInt(s.sessionSeq, 10);
+  const total = parseInt(s.sessionTotal, 10);
+  if (!seq && !total) return '';
+  if (seq && total) return `第 ${seq} 堂 / 共 ${total} 堂`;
+  if (seq) return `第 ${seq} 堂`;
+  return '';
 }
 function bookingSubtotal(booking) {
   const n = booking.sessionCount || 0;
@@ -1862,7 +1948,7 @@ function renderBooking() {
             <label style="display:block; font-weight:normal; color:var(--text-soft); font-size:12px; margin-bottom:6px">團體班類型</label>
             <select id="bk_groupSubType" style="width:100%; padding:8px;">
               <option value="puppy" ${b.groupSubType==='puppy'?'selected':''}>幼犬班</option>
-              <option value="youth" ${b.groupSubType==='youth'?'selected':''}>青少年班</option>
+              <option value="youth" ${b.groupSubType==='youth'?'selected':''}>青少年犬班</option>
               <option value="other" ${b.groupSubType==='other'?'selected':''}>其他（自填）</option>
             </select>
             <input id="bk_groupSubTypeOther" type="text" value="${escapeAttr(b.groupSubTypeOther||'')}" placeholder="例：成犬班"
