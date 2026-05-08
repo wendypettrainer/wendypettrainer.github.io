@@ -2255,11 +2255,9 @@ function renderFirstConsultSession(sess, pet) {
   const main = document.getElementById('main');
   const tpl = loadBookingTemplate();
   const templates = tpl.firstConsultTemplates || [];
-  const fasLevel = (sess.fasLevel != null && sess.fasLevel !== '') ? String(sess.fasLevel) : '';
-  const fasDesc = FAS_DESCRIPTIONS[fasLevel] || '';
   main.innerHTML = `
     <div class="autosave-banner">
-      💾 FAS、觀察備註、報告內容都<b>自動儲存</b>。FAS 跟觀察備註不會出現在給家長的報告 PDF 上。
+      💾 FAS 觀察筆記、報告內容都<b>自動儲存</b>。觀察筆記是內部用、不會出現在給家長的報告 PDF 上。
     </div>
     <div class="card" style="cursor:default">
       <div class="card-row">
@@ -2279,19 +2277,24 @@ function renderFirstConsultSession(sess, pet) {
     <div class="fc-section-title">🔍 內部觀察 <span class="small">（不會出現在報告）</span></div>
     <div class="card" style="cursor:default">
       <div class="field">
-        <label>FAS 等級（恐懼／焦慮／壓力）</label>
-        <div class="fas-bar">
+        <label>FAS 觀察筆記</label>
+        <textarea id="fasNotes" rows="10" placeholder="點下方色帶按鈕插入「[FAS X]」標記。例：&#10;[FAS 4] 進門時瞳孔放大、僵住 5 秒&#10;[FAS 2] 接受零食後緩和&#10;[FAS 3] 飼主大聲說話時又緊繃...">${escapeHtml(sess.fasNotes||'')}</textarea>
+        <div style="margin-top:8px; font-size:12px; color:var(--text-soft)">點按鈕在游標位置插入「[FAS X] 」標記：</div>
+        <div class="fas-bar" style="margin-top:6px">
           ${['0','1','2','3','4','5'].map(lv => `
-            <button type="button" class="fas-btn ${fasColorClass(lv)} ${fasLevel===lv?'active':''}" data-fas="${lv}">
+            <button type="button" class="fas-btn ${fasColorClass(lv)} active" data-fas="${lv}" style="opacity:1">
               ${lv}<small>${fasShortLabel(lv)}</small>
             </button>
           `).join('')}
         </div>
-        <div class="fas-desc" id="fasDesc">${escapeHtml(fasDesc)}</div>
-      </div>
-      <div class="field">
-        <label>觀察備註（你自己的判斷依據）</label>
-        <textarea id="fasNotes" placeholder="例：踏進門立刻舔唇、瞳孔放大；飼主出現後僵住約 5 秒...">${escapeHtml(sess.fasNotes||'')}</textarea>
+        <details style="margin-top:10px">
+          <summary style="cursor:pointer; font-size:12px; color:var(--accent); user-select:none">📖 各等級特徵說明（點開）</summary>
+          <div style="margin-top:8px; padding:10px 12px; background:#f7f1e6; border-left:3px solid var(--brown-light); border-radius:6px; font-size:12px; line-height:1.7;">
+            ${['0','1','2','3','4','5'].map(lv => `
+              <div style="margin-bottom:6px"><b style="color:${lv<2?'#6b9e6e':lv<4?'#c9a85a':'#c97a4f'}">[FAS ${lv}] ${fasShortLabel(lv)}</b>：${escapeHtml(FAS_DESCRIPTIONS[lv])}</div>
+            `).join('')}
+          </div>
+        </details>
       </div>
     </div>
 
@@ -2323,15 +2326,23 @@ function renderFirstConsultSession(sess, pet) {
   }
 
   // FAS 按鈕
+  // FAS 色帶按鈕：在 fasNotes 游標位置插入「[FAS X] 」標記
   main.querySelectorAll('.fas-btn').forEach(btn => {
     btn.onclick = () => {
       const lv = btn.dataset.fas;
-      const newLevel = sess.fasLevel === lv ? '' : lv;
-      sess.fasLevel = newLevel;
-      const sessions = load(KEYS.sessions, []);
-      const idx = sessions.findIndex(s => s.id === sess.id);
-      if (idx >= 0) { sessions[idx] = sess; save(KEYS.sessions, sessions); }
-      renderFirstConsultSession(sess, pet);  // 重渲染顯示新描述
+      const ta = document.getElementById('fasNotes');
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const before = ta.value.substring(0, start);
+      const after = ta.value.substring(end);
+      // 自動換行：如果游標前不是行首，先加 \n
+      const needsNewline = before && !before.endsWith('\n');
+      const marker = (needsNewline ? '\n' : '') + `[FAS ${lv}] `;
+      ta.value = before + marker + after;
+      const newPos = start + marker.length;
+      ta.selectionStart = ta.selectionEnd = newPos;
+      ta.focus();
+      saveAll();
     };
   });
 
