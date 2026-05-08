@@ -2250,6 +2250,15 @@ function fasColorClass(level) {
 function fasShortLabel(level) {
   return ({'0':'放鬆','1':'輕微','2':'輕中度','3':'中度','4':'高度','5':'高度+攻擊'})[level] || '';
 }
+function fasEmoji(level) {
+  if (level === '0' || level === '1') return '🟢';
+  if (level === '2' || level === '3') return '🟡';
+  if (level === '4' || level === '5') return '🔴';
+  return '';
+}
+function fasMarker(level) {
+  return `${fasEmoji(level)} ${fasShortLabel(level)} `;
+}
 
 function renderFirstConsultSession(sess, pet) {
   const main = document.getElementById('main');
@@ -2278,8 +2287,8 @@ function renderFirstConsultSession(sess, pet) {
     <div class="card" style="cursor:default">
       <div class="field">
         <label>FAS 觀察筆記</label>
-        <textarea id="fasNotes" rows="10" placeholder="點下方色帶按鈕插入「[FAS X]」標記。例：&#10;[FAS 4] 進門時瞳孔放大、僵住 5 秒&#10;[FAS 2] 接受零食後緩和&#10;[FAS 3] 飼主大聲說話時又緊繃...">${escapeHtml(sess.fasNotes||'')}</textarea>
-        <div style="margin-top:8px; font-size:12px; color:var(--text-soft)">點按鈕在游標位置插入「[FAS X] 」標記：</div>
+        <textarea id="fasNotes" rows="10" placeholder="點下方色帶按鈕插入帶顏色的等級標記。例：&#10;🔴 高度 進門時瞳孔放大、僵住 5 秒&#10;🟢 輕微 接受零食後緩和&#10;🟡 中度 飼主大聲說話時又緊繃...">${escapeHtml(sess.fasNotes||'')}</textarea>
+        <div style="margin-top:8px; font-size:12px; color:var(--text-soft)">點按鈕在游標位置插入帶顏色的等級標記：</div>
         <div class="fas-bar" style="margin-top:6px">
           ${['0','1','2','3','4','5'].map(lv => `
             <button type="button" class="fas-btn ${fasColorClass(lv)} active" data-fas="${lv}" style="opacity:1">
@@ -2291,7 +2300,7 @@ function renderFirstConsultSession(sess, pet) {
           <summary style="cursor:pointer; font-size:12px; color:var(--accent); user-select:none">📖 各等級特徵說明（點開）</summary>
           <div style="margin-top:8px; padding:10px 12px; background:#f7f1e6; border-left:3px solid var(--brown-light); border-radius:6px; font-size:12px; line-height:1.7;">
             ${['0','1','2','3','4','5'].map(lv => `
-              <div style="margin-bottom:6px"><b style="color:${lv<2?'#6b9e6e':lv<4?'#c9a85a':'#c97a4f'}">[FAS ${lv}] ${fasShortLabel(lv)}</b>：${escapeHtml(FAS_DESCRIPTIONS[lv])}</div>
+              <div style="margin-bottom:6px"><b style="color:${lv<2?'#6b9e6e':lv<4?'#c9a85a':'#c97a4f'}">${fasEmoji(lv)} ${fasShortLabel(lv)}</b>：${escapeHtml(FAS_DESCRIPTIONS[lv])}</div>
             `).join('')}
           </div>
         </details>
@@ -2337,7 +2346,7 @@ function renderFirstConsultSession(sess, pet) {
       const after = ta.value.substring(end);
       // 自動換行：如果游標前不是行首，先加 \n
       const needsNewline = before && !before.endsWith('\n');
-      const marker = (needsNewline ? '\n' : '') + `[FAS ${lv}] `;
+      const marker = (needsNewline ? '\n' : '') + fasMarker(lv);
       ta.value = before + marker + after;
       const newPos = start + marker.length;
       ta.selectionStart = ta.selectionEnd = newPos;
