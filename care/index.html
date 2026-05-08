@@ -132,6 +132,14 @@
     background:transparent; border:1px dashed var(--accent-soft); border-radius:6px;
     font-family:inherit;
   }
+  .add-pet-btn{
+    margin-top:8px; font-size:13px; padding:6px 12px;
+    color:var(--accent); background:transparent;
+    border:1px solid var(--accent-soft); border-radius:6px;
+    cursor:pointer; font-family:inherit; font-weight:600;
+  }
+  .add-pet-btn:hover{ background:var(--header-bg); }
+  .add-pet-btn:active{ transform:scale(.98); }
   .brand{
     text-align:right; font-weight:800; font-size:20px; color:var(--accent);
     line-height:1.1;
@@ -556,6 +564,7 @@
       </h1>
       <div id="currentPetMeta" style="font-size:12px; color:var(--muted); margin-top:2px;"></div>
       <input type="date" id="date" class="date-input">
+      <button type="button" class="add-pet-btn" onclick="quickAddPet()">+ 新增寵物</button>
     </div>
     <div class="brand">
       <img src="logo.png" alt="Wendy" class="logo-img"
@@ -1858,6 +1867,11 @@ function exportPetCsv(){
 function openPetManager(){
   renderPetList();
   $('petModal').style.display = 'flex';
+}
+// 從頁首按鈕直接新增 — 開啟 modal + 直接進新增表單（跳過寵物列表）
+function quickAddPet(){
+  $('petModal').style.display = 'flex';
+  showPetForm();
 }
 function closePetManager(){
   $('petModal').style.display = 'none';

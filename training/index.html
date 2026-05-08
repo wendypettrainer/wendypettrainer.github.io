@@ -1228,6 +1228,20 @@ function renderPets() {
       const recentLabel = sessions.length
         ? `最近：${fmtDate(sessions[0].date)}`
         : '尚未上課';
+      // 購買過的課程類型摘要（按次數降冪）
+      const petBookings = getPetBookings(p.id);
+      const courseSummary = (() => {
+        if (petBookings.length === 0) return '';
+        const counts = {};
+        petBookings.forEach(b => {
+          const label = courseTypeLabel(b);
+          counts[label] = (counts[label] || 0) + 1;
+        });
+        const parts = Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([label, n]) => `${escapeHtml(label)} ×${n}`);
+        return `<div class="card-meta" style="margin-top:4px; font-size:12px; color:var(--brown-dark)">📋 ${parts.join(' · ')}</div>`;
+      })();
       return `
         <div class="card" data-id="${p.id}">
           <div class="card-row">
@@ -1235,6 +1249,7 @@ function renderPets() {
               <div class="card-title">${speciesEmoji(p.species)} ${escapeHtml(p.name)}</div>
               <div class="card-meta">${escapeHtml(petTagline(p))} · 飼主：${escapeHtml(p.ownerName || '—')}</div>
               <div class="card-meta" style="margin-top:4px; font-size:12px">${recentLabel}</div>
+              ${courseSummary}
             </div>
             <span class="badge">${count} 堂</span>
           </div>
@@ -1619,6 +1634,22 @@ function loadBookingTemplate() {
   // 缺欄位用預設補（向後相容、設定漏填都能容錯）
   return Object.assign({}, DEFAULT_BOOKING_TEMPLATE, load(KEYS.bookingTemplate, {}));
 }
+// 課程類型 → 顯示文字
+function courseTypeLabel(b) {
+  switch (b && b.courseType) {
+    case 'firstConsult': return '首堂諮詢';
+    case 'group':
+      if (b.groupSubType === 'puppy') return '幼犬團體班';
+      if (b.groupSubType === 'youth') return '青少年團體班';
+      if (b.groupSubType === 'other') return (b.groupSubTypeOther || '').trim() || '團體班';
+      return '團體班';
+    case 'other':
+      return (b.courseTypeOther || '').trim() || '其他課程';
+    case 'oneOnOne':
+    default:
+      return '一對一';
+  }
+}
 function bookingSubtotal(booking) {
   const n = booking.sessionCount || 0;
   return ((booking.feePerClass || 0) + (booking.transportPerClass || 0)) * n;
@@ -1684,7 +1715,7 @@ function renderBookings() {
         <div class="card" data-id="${b.id}">
           <div class="card-row">
             <div>
-              <div class="card-title">${b.sessionCount} 堂 · 起 ${escapeHtml(firstDate)}</div>
+              <div class="card-title">${escapeHtml(courseTypeLabel(b))} · ${b.sessionCount} 堂 · 起 ${escapeHtml(firstDate)}</div>
               <div class="card-meta">
                 💰 ${fmtMoney(total)} · 截止 ${escapeHtml(due)}
               </div>
@@ -1777,11 +1808,19 @@ function renderBooking() {
     discountLabel: '',
     paymentDueDate: '',
     paymentDueNote: '中午前',
+    courseType: 'oneOnOne',           // 'oneOnOne' | 'firstConsult' | 'group' | 'other'
+    groupSubType: 'puppy',            // 'puppy' | 'youth' | 'other'  (only if courseType==='group')
+    groupSubTypeOther: '',            // 自填的團體班類型 (only if groupSubType==='other')
+    courseTypeOther: '',              // 自填的課程類型 (only if courseType==='other')
   };
   // 舊資料相容（之前沒這幾欄）
   if (b.discountType === undefined) b.discountType = '';
   if (b.discountValue === undefined) b.discountValue = 0;
   if (b.discountLabel === undefined) b.discountLabel = '';
+  if (b.courseType === undefined) b.courseType = 'oneOnOne';
+  if (b.groupSubType === undefined) b.groupSubType = 'puppy';
+  if (b.groupSubTypeOther === undefined) b.groupSubTypeOther = '';
+  if (b.courseTypeOther === undefined) b.courseTypeOther = '';
   // 確保 sessions 長度跟 sessionCount 對齊（編輯舊資料時也修正）
   function alignSessions() {
     while (b.sessions.length < b.sessionCount) b.sessions.push({ date: '', startTime: '', endTime: '' });
@@ -1811,6 +1850,28 @@ function renderBooking() {
       </div>
 
       <div class="card" style="cursor:default">
+        <div class="field">
+          <label>課程類型</label>
+          <div class="radio-group">
+            <label class="radio-opt"><input type="radio" name="bkCourseType" value="oneOnOne" ${b.courseType==='oneOnOne'?'checked':''}> 一對一</label>
+            <label class="radio-opt"><input type="radio" name="bkCourseType" value="firstConsult" ${b.courseType==='firstConsult'?'checked':''}> 首堂諮詢</label>
+            <label class="radio-opt"><input type="radio" name="bkCourseType" value="group" ${b.courseType==='group'?'checked':''}> 團體班</label>
+            <label class="radio-opt"><input type="radio" name="bkCourseType" value="other" ${b.courseType==='other'?'checked':''}> 其他</label>
+          </div>
+          <div id="bk_groupSubField" style="margin-top:10px; display:${b.courseType==='group'?'block':'none'};">
+            <label style="display:block; font-weight:normal; color:var(--text-soft); font-size:12px; margin-bottom:6px">團體班類型</label>
+            <select id="bk_groupSubType" style="width:100%; padding:8px;">
+              <option value="puppy" ${b.groupSubType==='puppy'?'selected':''}>幼犬班</option>
+              <option value="youth" ${b.groupSubType==='youth'?'selected':''}>青少年班</option>
+              <option value="other" ${b.groupSubType==='other'?'selected':''}>其他（自填）</option>
+            </select>
+            <input id="bk_groupSubTypeOther" type="text" value="${escapeAttr(b.groupSubTypeOther||'')}" placeholder="例：成犬班"
+                   style="margin-top:8px; width:100%; padding:8px; display:${b.courseType==='group' && b.groupSubType==='other'?'block':'none'};">
+          </div>
+          <input id="bk_courseTypeOther" type="text" value="${escapeAttr(b.courseTypeOther||'')}" placeholder="例：行為矯正"
+                 style="margin-top:10px; width:100%; padding:8px; display:${b.courseType==='other'?'block':'none'};">
+        </div>
+
         <div class="field">
           <label>堂數</label>
           <div class="radio-group" id="bk_count">
@@ -1898,6 +1959,24 @@ function renderBooking() {
     `;
 
     // 事件
+    // 課程類型 radio
+    main.querySelectorAll('input[name="bkCourseType"]').forEach(r => {
+      r.onchange = () => {
+        b.courseType = r.value;
+        // 切到 group 而 groupSubType 是空字串時，預設選 puppy
+        if (b.courseType === 'group' && !b.groupSubType) b.groupSubType = 'puppy';
+        rerender();
+      };
+    });
+    const grpSel = document.getElementById('bk_groupSubType');
+    if (grpSel) grpSel.onchange = (e) => {
+      b.groupSubType = e.target.value;
+      rerender();
+    };
+    const grpOther = document.getElementById('bk_groupSubTypeOther');
+    if (grpOther) grpOther.oninput = (e) => { b.groupSubTypeOther = e.target.value; };
+    const ctOther = document.getElementById('bk_courseTypeOther');
+    if (ctOther) ctOther.oninput = (e) => { b.courseTypeOther = e.target.value; };
     main.querySelectorAll('input[name="bkCount"]').forEach(r => {
       r.onchange = () => {
         b.sessionCount = parseInt(r.value, 10);
@@ -2446,6 +2525,7 @@ function exportBookingPdf(booking, pet) {
   }
 
   const titleStr = `${pet.name}_匯款通知`;
+  const ctLabel = courseTypeLabel(booking);
 
   const html = `<!DOCTYPE html>
 <html lang="zh-Hant">
@@ -2633,7 +2713,7 @@ function exportBookingPdf(booking, pet) {
       ${logoSrc ? `<img src="${logoSrc}" alt="Wendy">` : '<h1 style="color:#6b5435">Wendy 溫蒂．貓與狗訓練日常</h1>'}
       <div class="sub">Cat &amp; Dog Training</div>
     </header>
-    <h1 class="page-title">感謝您報名一對一課程</h1>
+    <h1 class="page-title">感謝您報名${escapeHtml(ctLabel)}${ctLabel === '一對一' ? '課程' : ''}</h1>
     <div style="text-align:center; color:#8b6f47; font-weight:600; margin-bottom:14pt;">＝報名前請留意＝</div>
     <div class="notes">${notesToHtml(tpl.registrationNotes)}</div>
   </section>
@@ -2654,7 +2734,7 @@ function exportBookingPdf(booking, pet) {
       ${logoSrc ? `<img src="${logoSrc}" alt="Wendy">` : '<h1 style="color:#6b5435">Wendy 溫蒂．貓與狗訓練日常</h1>'}
       <div class="sub">Cat &amp; Dog Training</div>
     </header>
-    <h1 class="page-title alt">【一對一 課程 匯款通知】</h1>
+    <h1 class="page-title alt">【${escapeHtml(ctLabel)} 匯款通知】</h1>
 
     <div class="info-line">
       <span class="ico">▍</span><b>${pet.species === 'cat' ? '貓貓' : '狗狗'}名字：</b>${escapeHtml(pet.name)}${pet.breed ? '（' + escapeHtml(pet.breed) + '）' : ''}
