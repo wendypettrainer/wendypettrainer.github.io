@@ -276,6 +276,23 @@
   .cal-sess-done    { background: rgba(107,158,110,0.2); color: #4a7d4d; text-decoration: line-through; }
   .cal-sess-closed  { background: #d8d4ce; color: #6a6258; text-decoration: line-through; }
 
+  /* 月曆 legend chip（4 個 status 圖例對齊） */
+  .legend-chip {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 3px;
+    font-size: 10px;
+    margin-right: 4px;
+    vertical-align: middle;
+    text-decoration: none;
+    border: 1px solid transparent;
+    box-sizing: border-box;
+  }
+  .legend-chip.booked  { background: #f0e6d6; color: #6b5435; }
+  .legend-chip.pending { background: #fbe8d4; color: #c97a4f; border-color: #e8b894; }
+  .legend-chip.done    { background: rgba(107,158,110,0.2); color: #4a7d4d; }
+  .legend-chip.closed  { background: #d8d4ce; color: #6a6258; }
+
   /* 設定頁可摺疊 section */
   .settings-section { margin-bottom: 14px; }
   .settings-section > summary {
@@ -5071,11 +5088,11 @@ function renderSettings() {
       </div>
       <button class="btn" id="s_save">儲存設定</button>
       <p class="card-meta" style="margin-top:10px">
-        💡 分享連結預覽：<br>
+        • 分享連結預覽：<br>
         <code style="font-size:11px; word-break:break-all" id="urlPreview">—</code>
       </p>
       <p class="card-meta" style="margin-top:10px">
-        💡 PAT 只存在這台裝置的 localStorage，不會上傳。產生分享連結時用來建立 secret gist；
+        • PAT 只存在這台裝置的 localStorage，不會上傳。產生分享連結時用來建立 secret gist；
         飼主開連結時匿名讀取，不需 PAT。
       </p>
     </div>
@@ -5085,8 +5102,10 @@ function renderSettings() {
     <summary>課程預約樣板</summary>
     <div class="card" style="cursor:default">
       <p class="card-meta" style="margin-bottom:12px">
-        💡 這裡編輯的內容會出現在每隻寵物的課程預約 PDF 上。<br>
-        <b>銀行帳戶</b>每張通知都會印；<b>預設地點/費用</b>是新增課程預約時的預設值，可逐筆覆蓋；<b>報名須知/課前須知</b>是 PDF 的前兩頁，幾乎不會變動。
+        • 這裡編輯的內容會出現在每隻寵物的課程預約 PDF 上。<br>
+        • <b>銀行帳戶</b>每張通知都會印<br>
+        • <b>預設地點/費用</b>是新增課程預約時的預設值，可逐筆覆蓋<br>
+        • <b>報名須知/課前須知</b>是 PDF 的前兩頁，幾乎不會變動
       </p>
 
       <h4 style="font-size:13px; color:var(--brown-dark); margin:14px 0 8px;">收款帳戶</h4>
@@ -5148,7 +5167,8 @@ function renderSettings() {
     <summary>首堂諮詢報告模板</summary>
     <div class="card" style="cursor:default">
       <p class="card-meta" style="margin-bottom:12px">
-        💡 這些是<b>給家長看的報告</b>快速插入文字。建立首堂諮詢課程時，按模板按鈕會把對應段落插到報告內容游標位置，你再改填具體內容。
+        • 這些是<b>給家長看的報告</b>快速插入文字。<br>
+        • 建立首堂諮詢課程時，按模板按鈕會把對應段落插到報告內容游標位置，你再改填具體內容。
       </p>
       <div id="fcTplList"></div>
       <button class="btn ghost" id="fc_addTpl" style="margin-top:8px;">+ 新增模板</button>
@@ -5177,8 +5197,10 @@ function renderSettings() {
         <button class="btn danger" id="resetItems">重設清單為預設</button>
       </div>
       <p class="card-meta" style="margin-top:10px">
-        💡 <b>新增寵物</b>（手動 / Email 貼上 / CSV 匯入）已搬到「寵物列表」右下角的 ＋ 按鈕。<br>
-        匯出 JSON 是備份用，匯入 JSON 會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
+        • <b>新增寵物</b>（手動 / Email 貼上 / CSV 匯入）已搬到「寵物列表」右下角的 ＋ 按鈕<br>
+        • 匯出 JSON 是備份用<br>
+        • 匯入 JSON 會覆蓋現有資料<br>
+        • 重設清單只會還原訓練項目，寵物與課程不受影響
       </p>
     </div>
     </details>
@@ -5190,8 +5212,10 @@ function renderSettings() {
         <button class="btn ghost" id="linkOldData">🔗 連結舊課程預約 / 補產殼</button>
       </div>
       <p class="card-meta" style="margin-top:10px">
-        💡 把舊課程預約跟既有課程紀錄認親（用<b>同寵物 + 同日期</b> match 沒被連結過的紀錄），找不到 match 的會補產空白課程殼。<br>
-        正常情況新建匯款已自動產殼，這個按鈕只在你舊資料還沒連結時用。可以重複按、不會重複產生。
+        • 把舊課程預約跟既有課程紀錄認親（用<b>同寵物 + 同日期</b> match 沒被連結過的紀錄）<br>
+        • 找不到 match 的會補產空白課程殼<br>
+        • 正常情況新建課程預約已自動產殼，這個按鈕只在你舊資料還沒連結時用<br>
+        • 可以重複按、不會重複產生
       </p>
     </div>
     </details>
@@ -5395,8 +5419,9 @@ function renderSettings() {
     document.getElementById('itemEditor').innerHTML = `
       <div class="card" style="cursor:default">
         <p class="card-meta" style="margin-bottom:10px">
-          💡 每個訓練項目下可加多個「訓練方法」，每個方法有自己的步驟。
-          上課時可勾選今天用了哪些方法，飼主端會看到對應步驟當回家功課指引。
+          • 每個訓練項目下可加多個「訓練方法」，每個方法有自己的步驟<br>
+          • 上課時可勾選今天用了哪些方法<br>
+          • 飼主端會看到對應步驟當回家功課指引
         </p>
         ${list.map((it, i) => `
           <div class="item-edit-block">
@@ -5819,12 +5844,9 @@ function renderCalendar() {
   }).join('');
 
   main.innerHTML = headerHtml + weekHeader + `<div class="cal-grid">${cellsHtml}</div>` + `
-    <p style="margin-top:14px; font-size:11px; color:var(--text-soft); line-height:1.7">
-      💡 顏色：<span class="cal-sess cal-sess-booked" style="display:inline-block; padding:1px 6px">已預約</span>
-      <span class="cal-sess cal-sess-pending" style="display:inline-block; padding:1px 6px">待結案</span>
-      <span class="cal-sess cal-sess-done" style="display:inline-block; padding:1px 6px">已完成</span>
-      <span class="cal-sess cal-sess-closed" style="display:inline-block; padding:1px 6px">已結案</span><br>
-      💡 點任一格 session 跳到該堂課詳情頁；待安排（沒日期）的 session 不會出現在月曆。
+    <p style="margin-top:14px; font-size:11px; color:var(--text-soft); line-height:1.8">
+      • 顏色：<span class="legend-chip booked">已預約</span><span class="legend-chip pending">待結案</span><span class="legend-chip done">已完成</span><span class="legend-chip closed">已結案</span><br>
+      • 點任一格 session 跳到該堂課詳情頁；待安排（沒日期）的 session 不會出現在月曆。
     </p>
   `;
 
