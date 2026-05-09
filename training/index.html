@@ -190,10 +190,16 @@
     background: var(--good, #6b9e6e);
     border-color: var(--good, #6b9e6e);
   }
+  .status-toggle.closed {
+    background: #b8b3aa; border-color: #b8b3aa; color: white; font-size: 11px;
+  }
   .status-toggle.booked:hover { border-color: var(--accent, #8b6f47); }
-  /* done 卡片視覺：灰底 + 標題刪除線 */
+  /* done 卡片視覺：淺灰底 + 標題刪除線 */
   .card.session-done { background: #f5f0e8; opacity: 0.72; }
   .card.session-done .card-title { text-decoration: line-through; color: var(--text-soft); }
+  /* closed 卡片視覺：更灰、刪除線 */
+  .card.session-closed { background: #ece7df; opacity: 0.55; }
+  .card.session-closed .card-title { text-decoration: line-through; color: var(--text-soft); }
   /* 狀態 badge（已預約 / 待結案 / 已完成） */
   .status-badge {
     display: inline-block;
@@ -206,9 +212,11 @@
     vertical-align: 2px;
     white-space: nowrap;
   }
-  .status-badge.booked  { background: #f0e6d6; color: #6b5435; }
-  .status-badge.pending { background: #fbe8d4; color: #c97a4f; border: 1px solid #e8b894; }
-  .status-badge.done    { background: rgba(107,158,110,0.15); color: #4a7d4d; }
+  .status-badge.unscheduled { background: #ebe5dc; color: #8a7e6f; }
+  .status-badge.booked      { background: #f0e6d6; color: #6b5435; }
+  .status-badge.pending     { background: #fbe8d4; color: #c97a4f; border: 1px solid #e8b894; }
+  .status-badge.done        { background: rgba(107,158,110,0.15); color: #4a7d4d; }
+  .status-badge.closed      { background: #d8d4ce; color: #6a6258; text-decoration: line-through; }
   /* Section header（即將上課優先模式 3 段） */
   .session-section-header {
     font-size: 14px;
@@ -219,6 +227,22 @@
     font-weight: 600;
   }
   .session-section-header.pending { color: var(--work, #c97a4f); }
+  .session-section-header.closed  { color: #6a6258; }
+
+  /* 統計頁卡片 */
+  .stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+  }
+  .stat-card.good { background: rgba(107,158,110,0.08); border-color: rgba(107,158,110,0.3); }
+  .stat-card.warn { background: rgba(201,122,79,0.08); border-color: rgba(201,122,79,0.3); }
+  .stat-label { font-size: 12px; color: var(--text-soft); margin-bottom: 4px; }
+  .stat-value { font-size: 18px; font-weight: 700; color: var(--brown-dark); line-height: 1.3; }
+  .stat-card.good .stat-value { color: #4a7d4d; }
+  .stat-card.warn .stat-value { color: var(--work); }
+  .stat-pct { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
 
   .card-menu {
     background: white;
@@ -1075,9 +1099,12 @@ function ensureSessionShape(arr) {
     if (!s || typeof s !== 'object') return s;
     return {
       ...s,
-      status: (s.status === 'booked' || s.status === 'done') ? s.status : 'done',
+      // 三種 status：booked（預約中/待安排/待結案 derived） / done（已完成）/ closed（強制結案，呆帳）
+      status: ['booked', 'done', 'closed'].includes(s.status) ? s.status : 'done',
       sourceBookingId: s.sourceBookingId || null,
       sourceIndex: (typeof s.sourceIndex === 'number') ? s.sourceIndex : null,
+      closeReason: typeof s.closeReason === 'string' ? s.closeReason : '',
+      closedAt: s.closedAt || null,
     };
   });
 }
@@ -1466,6 +1493,10 @@ function updateHeader() {
   } else if (state.view === 'settings') {
     segs.push({ label: '寵物列表', action: 'pets' });
     segs.push({ label: '⚙ 設定', current: true });
+  } else if (state.view === 'stats') {
+    segs.push({ label: '寵物列表', action: 'pets' });
+    segs.push({ label: '⚙ 設定', action: 'settings' });
+    segs.push({ label: '📊 呆帳統計', current: true });
   }
 
   breadcrumb.innerHTML = segs.map((seg, i) => {
@@ -1493,6 +1524,8 @@ function updateHeader() {
         go('sessions', { petId: a.dataset.petid });
       } else if (action === 'bookings') {
         go('bookings', { petId: a.dataset.petid });
+      } else if (action === 'settings') {
+        go('settings');
       }
     };
   });
@@ -1529,6 +1562,7 @@ document.getElementById('backBtn').onclick = () => {
   else if (state.view === 'bookings') go('sessions', { petId: state.petId });
   else if (state.view === 'booking') go('bookings', { petId: state.petId });
   else if (state.view === 'settings') go(state._returnView || 'pets');
+  else if (state.view === 'stats') go('settings');
 };
 document.getElementById('settingsBtn').onclick = () => {
   state._returnView = state.view;
@@ -1842,17 +1876,18 @@ function applySessionSort(sessions, key) {
 }
 
 /**
- * 'upcoming_first' 模式專用：把 sessions 切成 3 段。
+ * 'upcoming_first' 模式專用：把 sessions 切成 4 段。
  * - upcoming：booked + (date >= today 或 date 空白「待安排」)
  * - pending： booked + date < today（待結案，呆帳訊號）
  * - done：    status === 'done'
- * 各段內部排序見內文。
+ * - closed：  status === 'closed'（強制結案，已收錢無法兌現的呆帳）
  */
 function partitionSessions(sessions) {
   const today = todayStr();
-  const upcoming = [], pending = [], done = [];
+  const upcoming = [], pending = [], done = [], closed = [];
   for (const s of sessions) {
-    if (s.status === 'done') done.push(s);
+    if (s.status === 'closed') closed.push(s);
+    else if (s.status === 'done') done.push(s);
     else if (!s.date || s.date >= today) upcoming.push(s);
     else pending.push(s);
   }
@@ -1865,31 +1900,66 @@ function partitionSessions(sessions) {
   });
   // pending：最久過期 → 最近過期（最該追的呆帳浮上來）
   pending.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  // done：日期新 → 舊（最近上的最前）
+  // done：日期新 → 舊
   done.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  return { upcoming, pending, done };
+  // closed：結案時間新 → 舊（fallback session date）
+  closed.sort((a, b) => {
+    const aT = a.closedAt || a.date || '';
+    const bT = b.closedAt || b.date || '';
+    return bT.localeCompare(aT);
+  });
+  return { upcoming, pending, done, closed };
 }
 
 /**
- * 給 session 算出顯示用的狀態 badge HTML。
- * 已完成 / 待結案（booked + 過去日期）/ 已預約（booked + 未來或待安排）
+ * 給 session 算出顯示用的狀態 badge HTML。5 種：
+ * - 已結案（status='closed'，呆帳）
+ * - 已完成（status='done'）
+ * - 待安排（booked + date 空）
+ * - 待結案（booked + date 已過）
+ * - 已預約（booked + date 未來）
  */
 function statusBadgeHtml(s) {
   if (!s) return '';
+  if (s.status === 'closed') return '<span class="status-badge closed">⊘ 已結案</span>';
   if (s.status === 'done') return '<span class="status-badge done">已完成</span>';
+  if (!s.date) return '<span class="status-badge unscheduled">待安排</span>';
   const today = todayStr();
-  if (s.date && s.date < today) return '<span class="status-badge pending">⚠ 待結案</span>';
+  if (s.date < today) return '<span class="status-badge pending">⚠ 待結案</span>';
   return '<span class="status-badge booked">已預約</span>';
 }
 
 /**
- * 翻轉 session.status booked ↔ done。回傳更新後的 session（caller 自己 re-render）。
+ * 翻轉 session.status。booked ↔ done 直接 toggle；
+ * closed 要 confirm 解除（清掉 closeReason / closedAt）回 booked。
  */
 function toggleSessionStatus(sessionId) {
   const all = load(KEYS.sessions, []);
   const idx = all.findIndex(s => s.id === sessionId);
   if (idx < 0) return null;
-  all[idx].status = all[idx].status === 'done' ? 'booked' : 'done';
+  const cur = all[idx].status;
+  if (cur === 'closed') {
+    if (!confirm('解除「已結案」狀態？這堂會回到「已預約」（清除結案原因 / 時間）')) return null;
+    all[idx].status = 'booked';
+    all[idx].closeReason = '';
+    all[idx].closedAt = null;
+  } else {
+    all[idx].status = cur === 'done' ? 'booked' : 'done';
+  }
+  save(KEYS.sessions, all);
+  return all[idx];
+}
+
+/**
+ * 強制結案：把 booked 標成 closed + 記錄原因 / 時間（呆帳追蹤用）。
+ */
+function closeSession(sessionId, reason) {
+  const all = load(KEYS.sessions, []);
+  const idx = all.findIndex(s => s.id === sessionId);
+  if (idx < 0) return null;
+  all[idx].status = 'closed';
+  all[idx].closeReason = (reason || '').trim();
+  all[idx].closedAt = new Date().toISOString();
   save(KEYS.sessions, all);
   return all[idx];
 }
@@ -1930,24 +2000,29 @@ function renderSessions() {
     const recCount = (s.records || []).filter(r => r.selected).length;
     const isToday = s.date === todayStr();
     const isDone = s.status === 'done';
+    const isClosed = s.status === 'closed';
     const ctLab = courseTypeLabel(s);
     const seqLab = sessionSeqLabel(s);
     const courseLine = (ctLab || seqLab)
       ? `<div class="card-meta" style="color:var(--brown-dark); font-weight:500">📋 ${escapeHtml(ctLab)}${ctLab && seqLab ? ' · ' : ''}${escapeHtml(seqLab)}</div>`
       : '';
-    // 標題：有 date 顯示日期；date 空顯示「第 N 堂（待安排）」灰字
+    // 標題：有 date 顯示日期；date 空（已被 status badge 「待安排」表達，標題只顯示堂數）
     let titleHtml;
     if (s.date) {
-      titleHtml = `${fmtDate(s.date)} ${isToday ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}`;
+      titleHtml = `${fmtDate(s.date)} ${isToday && !isDone && !isClosed ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}`;
     } else {
       const seq = (s.sessionSeq || '?').toString();
-      titleHtml = `<span style="color:var(--text-soft); font-weight:500">第 ${escapeHtml(seq)} 堂（待安排）</span>`;
+      titleHtml = `<span style="color:var(--text-soft); font-weight:500">第 ${escapeHtml(seq)} 堂</span>`;
     }
-    const toggleBtn = `<button class="status-toggle ${isDone ? 'done' : 'booked'}" data-toggle="${s.id}" title="${isDone ? '取消完成' : '標記已完成'}">${isDone ? '✓' : ''}</button>`;
-    const cardCls = isDone ? 'card session-done' : 'card';
+    const toggleBtn = isClosed
+      ? `<button class="status-toggle closed" data-toggle="${s.id}" title="解除結案">⊘</button>`
+      : `<button class="status-toggle ${isDone ? 'done' : 'booked'}" data-toggle="${s.id}" title="${isDone ? '取消完成' : '標記已完成'}">${isDone ? '✓' : ''}</button>`;
+    const cardCls = isClosed ? 'card session-closed' : (isDone ? 'card session-done' : 'card');
     const metaTail = recCount > 0
       ? ' · 已記錄 ' + recCount + ' 項'
-      : (isDone ? ' · 已完成' : (s.date ? ' · 尚未記錄' : ' · 待填日期'));
+      : (isClosed ? (s.closeReason ? ' · ' + escapeHtml(s.closeReason) : ' · 已結案') :
+         isDone ? ' · 已完成' :
+         (s.date ? ' · 尚未記錄' : ' · 待填日期'));
     return `
       <div class="${cardCls}" data-id="${s.id}">
         <div class="card-row">
@@ -1970,7 +2045,7 @@ function renderSessions() {
   if (sessions.length === 0) {
     body = `<div class="empty"><h3>還沒有課程</h3><p>點右下角 ＋ 新增第一堂</p></div>`;
   } else if (sortKey === 'upcoming_first') {
-    // 3 段顯示：即將上課 / 待結案 / 已完成
+    // 4 段顯示：即將上課 / 待結案 / 已完成 / 已結案（呆帳）
     const parts = partitionSessions(sessions);
     const sectionHtml = (label, list, cls) => list.length === 0 ? '' : `
       <h3 class="session-section-header${cls ? ' ' + cls : ''}">${label} <span style="color:var(--text-soft); font-weight:400">(${list.length})</span></h3>
@@ -1978,7 +2053,8 @@ function renderSessions() {
     `;
     body = sectionHtml('📅 即將上課', parts.upcoming, '')
          + sectionHtml('⚠ 待結案', parts.pending, 'pending')
-         + sectionHtml('✓ 已完成', parts.done, '');
+         + sectionHtml('✓ 已完成', parts.done, '')
+         + sectionHtml('⊘ 已結案', parts.closed, 'closed');
   } else if (sortKey === 'by_type') {
     // 課程類型分組：加分類標頭
     const groups = {};
@@ -2206,11 +2282,14 @@ function openSessionForm(session = null) {
       notes: data.notes || '',
       gistId: data.gistId,
       createdAt: data.createdAt || new Date().toISOString(),
-      // booked/done 狀態：edit 保留既有；新建（手動建）default 'done'（記過去的紀錄是主要場景）
-      status: (data.status === 'booked' || data.status === 'done') ? data.status : 'done',
+      // booked/done/closed 狀態：edit 保留既有；新建（手動建）default 'done'
+      status: ['booked', 'done', 'closed'].includes(data.status) ? data.status : 'done',
       // booking 來源（手動建為 null；從 booking spawn 出來的會帶 booking id + 第幾堂）
       sourceBookingId: data.sourceBookingId || null,
       sourceIndex: (typeof data.sourceIndex === 'number') ? data.sourceIndex : null,
+      // 強制結案專用（status === 'closed' 時填）
+      closeReason: data.closeReason || '',
+      closedAt: data.closedAt || null,
     };
     const sessions = load(KEYS.sessions, []);
     if (isEdit) {
@@ -2296,12 +2375,13 @@ function bookingTotal(booking) {
  */
 function isEmptyShell(s) {
   if (!s) return true;
+  // closed / done 都「不算空殼」（有業務意義，不能被 booking 縮減自動刪）
+  if (s.status !== 'booked') return false;
   return (!Array.isArray(s.records) || s.records.length === 0)
       && !s.homework
       && !s.notes
       && !s.firstConsultReport
-      && !s.fasNotes
-      && s.status === 'booked';
+      && !s.fasNotes;
 }
 
 /**
@@ -2990,9 +3070,14 @@ function renderFirstConsultSession(sess, pet) {
     </div>
 
     <div class="actions-row">
-      ${sess.status === 'done'
-        ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消完成</button>`
-        : `<button class="btn" id="toggleStatusBtn" style="background:var(--good); color:white">✓ 標記已完成</button>`}
+      ${sess.status === 'closed'
+        ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消結案</button>`
+        : sess.status === 'done'
+          ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消完成</button>`
+          : `<button class="btn" id="toggleStatusBtn" style="background:var(--good); color:white">✓ 標記已完成</button>`}
+      ${(sess.status !== 'closed' && sess.status !== 'done')
+        ? `<button class="btn ghost" id="closeSessBtn" style="border-color:#b8b3aa; color:#6a6258">⊘ 強制結案</button>`
+        : ''}
       <button class="btn" id="saveBtn">💾 儲存</button>
       <button class="btn ghost" id="pdfBtn">📄 報告 PDF</button>
     </div>
@@ -3000,6 +3085,19 @@ function renderFirstConsultSession(sess, pet) {
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
   document.getElementById('toggleStatusBtn').onclick = () => {
     toggleSessionStatus(sess.id);
+    renderSession();
+  };
+  const closeSessBtnEl = document.getElementById('closeSessBtn');
+  if (closeSessBtnEl) closeSessBtnEl.onclick = () => {
+    let reason = '';
+    while (true) {
+      reason = prompt('結案原因（必填，呆帳追蹤用）：\n例如「已讀不回 2 個月」、「客戶主動表明不繼續」、「失聯」', reason);
+      if (reason === null) return;
+      if (reason.trim()) break;
+      alert('⚠ 結案原因不能空白（之後分析呆帳模式會用到）');
+    }
+    if (!confirm(`確定強制結案？\n原因：${reason.trim()}\n\n這堂會計入呆帳統計，仍可從「⊘」按鈕解除。`)) return;
+    closeSession(sess.id, reason.trim());
     renderSession();
   };
   // 待安排殼：inline 改日期（不用開 modal）
@@ -3190,9 +3288,14 @@ function renderSession() {
     </div>
 
     <div class="actions-row">
-      ${sess.status === 'done'
-        ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消完成</button>`
-        : `<button class="btn" id="toggleStatusBtn" style="background:var(--good); color:white">✓ 標記已完成</button>`}
+      ${sess.status === 'closed'
+        ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消結案</button>`
+        : sess.status === 'done'
+          ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消完成</button>`
+          : `<button class="btn" id="toggleStatusBtn" style="background:var(--good); color:white">✓ 標記已完成</button>`}
+      ${(sess.status !== 'closed' && sess.status !== 'done')
+        ? `<button class="btn ghost" id="closeSessBtn" style="border-color:#b8b3aa; color:#6a6258">⊘ 強制結案</button>`
+        : ''}
       <button class="btn" id="saveBtn">💾 儲存</button>
       <button class="btn ghost" id="pdfBtn">📄 下載 PDF</button>
       <button class="btn ghost" id="shareBtn">🔗 產生分享連結</button>
@@ -3202,6 +3305,20 @@ function renderSession() {
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
   document.getElementById('toggleStatusBtn').onclick = () => {
     toggleSessionStatus(sess.id);
+    renderSession();
+  };
+  const closeSessBtnEl = document.getElementById('closeSessBtn');
+  if (closeSessBtnEl) closeSessBtnEl.onclick = () => {
+    let reason = '';
+    // 必填 loop：填空白會再要求；按取消才中斷
+    while (true) {
+      reason = prompt('結案原因（必填，呆帳追蹤用）：\n例如「已讀不回 2 個月」、「客戶主動表明不繼續」、「失聯」', reason);
+      if (reason === null) return; // 取消
+      if (reason.trim()) break;
+      alert('⚠ 結案原因不能空白（之後分析呆帳模式會用到）');
+    }
+    if (!confirm(`確定強制結案？\n原因：${reason.trim()}\n\n這堂會計入呆帳統計，仍可從「⊘」按鈕解除。`)) return;
+    closeSession(sess.id, reason.trim());
     renderSession();
   };
   // 待安排殼：inline 改日期（不用開 modal）
@@ -4313,6 +4430,16 @@ function renderSettings() {
         正常情況新建匯款已自動產殼，這個按鈕只在你舊資料還沒連結時用。可以重複按、不會重複產生。
       </p>
     </div>
+
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">業務分析</h3>
+    <div class="card" style="cursor:default">
+      <div class="actions-row">
+        <button class="btn ghost" id="openStats">📊 呆帳統計</button>
+      </div>
+      <p class="card-meta" style="margin-top:10px">
+        💡 看「總收費 / 已兌現 / 未兌現（呆帳）/ 進行中」全貌，按課程類型 + 時段分類，方便做帳跟追客戶。
+      </p>
+    </div>
   `;
 
   function refreshUrlPreview() {
@@ -4651,6 +4778,10 @@ function renderSettings() {
 
   // Data management（CSV / Email 匯入入口已搬到寵物列表 ＋ 按鈕，這裡不再綁定）
 
+  // 業務分析：呆帳統計入口
+  const openStatsBtn = document.getElementById('openStats');
+  if (openStatsBtn) openStatsBtn.onclick = () => go('stats');
+
   // 資料修復：連結舊 booking 到既有 sessions + 補產殼
   const linkOldBtn = document.getElementById('linkOldData');
   if (linkOldBtn) linkOldBtn.onclick = () => {
@@ -4831,6 +4962,219 @@ function findExistingPet(parsed) {
     }
     // 任一方沒填飼主，視為同一隻（保守判斷）
     return true;
+  });
+}
+
+/* ============== VIEW: STATS（呆帳統計）============== */
+function renderStats() {
+  const main = document.getElementById('main');
+  const settings = load(KEYS.settings, {});
+  const range = settings.statsRange || 'all';
+
+  // 計算 cutoff 日期
+  let cutoff = null;
+  const today = new Date();
+  if (range !== 'all') {
+    const d = new Date(today);
+    if (range === '1m') d.setMonth(d.getMonth() - 1);
+    else if (range === '3m') d.setMonth(d.getMonth() - 3);
+    else if (range === '6m') d.setMonth(d.getMonth() - 6);
+    else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
+    cutoff = d.toISOString().slice(0, 10);
+  }
+
+  const allBookings = load(KEYS.bookings, []);
+  const bookings = cutoff
+    ? allBookings.filter(b => (b.createdAt || '').slice(0, 10) >= cutoff)
+    : allBookings;
+  const sessions = load(KEYS.sessions, []);
+  const pets = load(KEYS.pets, []);
+  const todayStrV = todayStr();
+
+  // 累計
+  let totalRev = 0, realizedRev = 0, unrealizedRev = 0, pendingRev = 0, overdueRev = 0;
+  const closedDetails = [];
+  const byType = {};
+
+  for (const b of bookings) {
+    const sessCount = b.sessionCount || 0;
+    if (sessCount === 0) continue;
+    const fee = (b.feePerClass || 0) + (b.transportPerClass || 0);
+    const subtotal = fee * sessCount;
+    const discount = bookingDiscount(b);
+    const total = subtotal - discount;
+    const pricePerSess = total / sessCount;
+    totalRev += total;
+
+    const bSess = sessions.filter(s => s.sourceBookingId === b.id);
+    let realized = 0, unrealized = 0, pending = 0, overdue = 0;
+    let closedReasons = [], closedCount = 0, doneCount = 0;
+    for (const s of bSess) {
+      if (s.status === 'done') { realized += pricePerSess; doneCount++; }
+      else if (s.status === 'closed') {
+        unrealized += pricePerSess;
+        closedCount++;
+        if (s.closeReason) closedReasons.push(s.closeReason);
+      } else if (s.status === 'booked') {
+        if (s.date && s.date < todayStrV) overdue += pricePerSess;
+        else pending += pricePerSess;
+      }
+    }
+    // 沒對應殼的 booking 堂數（舊資料未連結）→ 算進「進行中」
+    const remaining = Math.max(0, sessCount - bSess.length);
+    if (remaining > 0) pending += pricePerSess * remaining;
+
+    realizedRev += realized;
+    unrealizedRev += unrealized;
+    pendingRev += pending;
+    overdueRev += overdue;
+
+    const ctLab = courseTypeLabel(b) || '其他';
+    if (!byType[ctLab]) byType[ctLab] = { revenue: 0, realized: 0, unrealized: 0, count: 0 };
+    byType[ctLab].revenue += total;
+    byType[ctLab].realized += realized;
+    byType[ctLab].unrealized += unrealized;
+    byType[ctLab].count++;
+
+    if (closedCount > 0) {
+      const pet = pets.find(p => p.id === b.petId) || {};
+      closedDetails.push({
+        petName: pet.name || '?',
+        petSpecies: pet.species || '',
+        ownerName: pet.ownerName || '',
+        courseType: ctLab,
+        sessCount, doneCount, closedCount,
+        amount: closedCount * pricePerSess,
+        reasons: closedReasons,
+        bookingId: b.id,
+        petId: b.petId,
+      });
+    }
+  }
+  closedDetails.sort((a, b) => b.amount - a.amount);
+
+  // helpers
+  const fmtMoney = n => 'NT$ ' + Math.round(n).toLocaleString('zh-TW');
+  const pct = (num, denom) => denom ? (num / denom * 100).toFixed(1) + '%' : '0%';
+
+  const RANGE_OPTS = [
+    { k: 'all', l: '全部' },
+    { k: '1y', l: '近 1 年' },
+    { k: '6m', l: '近 6 個月' },
+    { k: '3m', l: '近 3 個月' },
+    { k: '1m', l: '近 1 個月' },
+  ];
+
+  const closedTotalCount = closedDetails.reduce((sum, d) => sum + d.closedCount, 0);
+
+  const header = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:8px; flex-wrap:wrap">
+      <div>
+        <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📊 呆帳統計</div>
+        <div style="font-size:12px; color:var(--text-soft); margin-top:2px">範圍內 ${bookings.length} 筆匯款通知 · ${closedTotalCount} 堂強制結案</div>
+      </div>
+      <select id="statsRange" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:white; font-family:inherit; color:var(--text)">
+        ${RANGE_OPTS.map(o => `<option value="${o.k}" ${o.k===range?'selected':''}>${o.l}</option>`).join('')}
+      </select>
+    </div>
+  `;
+
+  const summaryGrid = `
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:18px">
+      <div class="stat-card">
+        <div class="stat-label">總收費</div>
+        <div class="stat-value">${fmtMoney(totalRev)}</div>
+      </div>
+      <div class="stat-card good">
+        <div class="stat-label">已兌現</div>
+        <div class="stat-value">${fmtMoney(realizedRev)}</div>
+        <div class="stat-pct">${pct(realizedRev, totalRev)}</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="stat-label">未兌現（呆帳）</div>
+        <div class="stat-value">${fmtMoney(unrealizedRev)}</div>
+        <div class="stat-pct">${pct(unrealizedRev, totalRev)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">進行中</div>
+        <div class="stat-value">${fmtMoney(pendingRev + overdueRev)}</div>
+        <div class="stat-pct" style="color:${overdueRev>0?'var(--work)':'var(--text-soft)'}">${overdueRev>0 ? '含 ' + fmtMoney(overdueRev) + ' 待結案' : '正常進度'}</div>
+      </div>
+    </div>
+  `;
+
+  const closedHtml = closedDetails.length === 0
+    ? `<div class="empty" style="padding:20px; text-align:center; color:var(--text-soft); background:rgba(107,158,110,0.05); border-radius:8px">期間內沒有強制結案紀錄 🎉</div>`
+    : closedDetails.map(d => `
+        <div class="card" data-petid="${d.petId}">
+          <div class="card-row">
+            <div style="flex:1; min-width:0">
+              <div class="card-title">${d.petSpecies==='cat'?'🐱':'🐶'} ${escapeHtml(d.petName)}${d.ownerName ? ' · ' + escapeHtml(d.ownerName) : ''}</div>
+              <div class="card-meta">
+                ${escapeHtml(d.courseType)} · 共 ${d.sessCount} 堂 · 已完成 ${d.doneCount} · 結案 ${d.closedCount}
+              </div>
+              ${d.reasons.length > 0 ? `<div class="card-meta" style="margin-top:4px; color:var(--work)">原因：${d.reasons.map(escapeHtml).join('；')}</div>` : ''}
+            </div>
+            <div style="font-weight:700; color:var(--work); font-size:15px; flex-shrink:0; margin-left:10px">${fmtMoney(d.amount)}</div>
+          </div>
+        </div>
+      `).join('');
+
+  const byTypeRows = Object.entries(byType).sort((a, b) => b[1].revenue - a[1].revenue);
+  const byTypeHtml = byTypeRows.length === 0 ? '' : `
+    <div style="overflow-x:auto">
+    <table style="width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; min-width:480px">
+      <thead>
+        <tr style="background:#f0e6d6; color:#6b5435; text-align:left">
+          <th style="padding:8px 10px; border:1px solid var(--border)">類型</th>
+          <th style="padding:8px 10px; border:1px solid var(--border); text-align:right">份數</th>
+          <th style="padding:8px 10px; border:1px solid var(--border); text-align:right">總收費</th>
+          <th style="padding:8px 10px; border:1px solid var(--border); text-align:right; color:#4a7d4d">已兌現</th>
+          <th style="padding:8px 10px; border:1px solid var(--border); text-align:right; color:var(--work)">未兌現</th>
+          <th style="padding:8px 10px; border:1px solid var(--border); text-align:right">呆帳率</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${byTypeRows.map(([lab, d]) => `
+          <tr>
+            <td style="padding:8px 10px; border:1px solid var(--border)">${escapeHtml(lab)}</td>
+            <td style="padding:8px 10px; border:1px solid var(--border); text-align:right">${d.count}</td>
+            <td style="padding:8px 10px; border:1px solid var(--border); text-align:right">${fmtMoney(d.revenue)}</td>
+            <td style="padding:8px 10px; border:1px solid var(--border); text-align:right; color:#4a7d4d">${fmtMoney(d.realized)}</td>
+            <td style="padding:8px 10px; border:1px solid var(--border); text-align:right; color:var(--work)">${fmtMoney(d.unrealized)}</td>
+            <td style="padding:8px 10px; border:1px solid var(--border); text-align:right">${pct(d.unrealized, d.revenue)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    </div>
+  `;
+
+  main.innerHTML = `
+    ${header}
+    ${summaryGrid}
+    <h3 style="color:var(--brown-dark); margin: 18px 0 10px; font-size:15px">⊘ 呆帳明細 <span style="color:var(--text-soft); font-weight:400; font-size:13px">（按金額由大到小，點卡片進寵物課程）</span></h3>
+    ${closedHtml}
+    ${byTypeRows.length > 0 ? `
+      <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 按課程類型</h3>
+      ${byTypeHtml}
+    ` : ''}
+    <p style="margin-top:24px; font-size:12px; color:var(--text-soft); line-height:1.7">
+      💡 「已兌現」= status=done 的堂數 × 單堂單價（含交通扣折扣後）<br>
+      💡 「未兌現」= status=closed（強制結案）的堂數 — 這些是已收錢但無法兌現的呆帳<br>
+      💡 「進行中」含已預約、待安排、待結案，預設這些會兌現<br>
+      💡 範圍切換按 booking 建立時間 (createdAt) 篩選
+    </p>
+  `;
+
+  document.getElementById('statsRange').onchange = (e) => {
+    const s = load(KEYS.settings, {});
+    s.statsRange = e.target.value;
+    save(KEYS.settings, s);
+    renderStats();
+  };
+  main.querySelectorAll('.card[data-petid]').forEach(el => {
+    el.onclick = () => go('sessions', { petId: el.dataset.petid });
   });
 }
 
@@ -5350,6 +5694,7 @@ function render() {
   else if (state.view === 'bookings') renderBookings();
   else if (state.view === 'booking') renderBooking();
   else if (state.view === 'settings') renderSettings();
+  else if (state.view === 'stats') renderStats();
 }
 
 initStorage();
