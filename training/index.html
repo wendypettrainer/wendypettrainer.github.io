@@ -1490,11 +1490,56 @@ function openPetForm(pet = null) {
 }
 
 /* ============== VIEW: SESSIONS ============== */
+// ===== Session 排序 =====
+const SESSION_SORT_OPTIONS = [
+  { key: 'date_desc',      label: '日期：新到舊' },
+  { key: 'date_asc',       label: '日期：舊到新' },
+  { key: 'upcoming_first', label: '即將上課優先' },
+  { key: 'by_type',        label: '課程類型分組' },
+];
+function getSessionSortPref() {
+  const s = load(KEYS.settings, {});
+  return s.sessionSort || 'date_desc';
+}
+function setSessionSortPref(key) {
+  const s = load(KEYS.settings, {});
+  s.sessionSort = key;
+  save(KEYS.settings, s);
+}
+function applySessionSort(sessions, key) {
+  const today = todayStr();
+  const arr = sessions.slice();
+  switch (key) {
+    case 'date_asc':
+      return arr.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    case 'upcoming_first':
+      return arr.sort((a, b) => {
+        const aFut = (a.date || '') >= today;
+        const bFut = (b.date || '') >= today;
+        if (aFut && !bFut) return -1;
+        if (!aFut && bFut) return 1;
+        if (aFut && bFut) return (a.date || '').localeCompare(b.date || '');
+        return (b.date || '').localeCompare(a.date || '');
+      });
+    case 'by_type':
+      return arr.sort((a, b) => {
+        const labA = courseTypeLabel(a) || '未分類';
+        const labB = courseTypeLabel(b) || '未分類';
+        if (labA !== labB) return labA.localeCompare(labB);
+        return (b.date || '').localeCompare(a.date || '');
+      });
+    case 'date_desc':
+    default:
+      return arr.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }
+}
+
 function renderSessions() {
   const main = document.getElementById('main');
   const pet = getPet(state.petId);
   if (!pet) { go('pets'); return; }
-  const sessions = getPetSessions(pet.id);
+  const sortKey = getSessionSortPref();
+  const sessions = applySessionSort(getPetSessions(pet.id), sortKey);
   const meta = `
     <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
       <div class="card-meta">
@@ -1511,36 +1556,68 @@ function renderSessions() {
       </div>
     </div>
   `;
+  // 排序選單（只有 ≥1 堂課時才顯示）
+  const sortBar = sessions.length === 0 ? '' : `
+    <div style="display:flex; justify-content:flex-end; align-items:center; gap:6px; margin:6px 4px 10px">
+      <label for="sessionSort" style="font-size:12px; color:var(--text-soft)">排序</label>
+      <select id="sessionSort" style="padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:white; font-size:13px; color:var(--text); font-family:inherit">
+        ${SESSION_SORT_OPTIONS.map(o => `<option value="${o.key}" ${o.key===sortKey?'selected':''}>${o.label}</option>`).join('')}
+      </select>
+    </div>`;
+
+  // 卡片渲染（共用）
+  function sessionCardHtml(s) {
+    const recCount = (s.records || []).filter(r => r.selected).length;
+    const isToday = s.date === todayStr();
+    const ctLab = courseTypeLabel(s);
+    const seqLab = sessionSeqLabel(s);
+    const courseLine = (ctLab || seqLab)
+      ? `<div class="card-meta" style="color:var(--brown-dark); font-weight:500">📋 ${escapeHtml(ctLab)}${ctLab && seqLab ? ' · ' : ''}${escapeHtml(seqLab)}</div>`
+      : '';
+    return `
+      <div class="card" data-id="${s.id}">
+        <div class="card-row">
+          <div>
+            <div class="card-title">${fmtDate(s.date)} ${isToday ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}</div>
+            ${courseLine}
+            <div class="card-meta">
+              ${s.location ? '📍 ' + escapeHtml(s.location) + ' · ' : ''}
+              ${s.duration ? s.duration + ' 分鐘' : ''}
+              ${recCount > 0 ? ' · 已記錄 ' + recCount + ' 項' : ' · 尚未記錄'}
+            </div>
+          </div>
+          <button class="card-menu-btn" data-menu="${s.id}" title="更多動作">⋯</button>
+        </div>
+      </div>`;
+  }
+
   let body;
   if (sessions.length === 0) {
     body = `<div class="empty"><h3>還沒有課程</h3><p>點右下角 ＋ 新增第一堂</p></div>`;
+  } else if (sortKey === 'by_type') {
+    // 課程類型分組：加分類標頭
+    const groups = {};
+    sessions.forEach(s => {
+      const lab = courseTypeLabel(s) || '未分類';
+      if (!groups[lab]) groups[lab] = [];
+      groups[lab].push(s);
+    });
+    body = Object.keys(groups).sort().map(label => `
+      <h3 style="font-size:14px; color:var(--brown-dark); margin:18px 4px 8px; border-bottom:1px solid var(--border); padding-bottom:4px">
+        📋 ${escapeHtml(label)} <span style="color:var(--text-soft); font-weight:400">(${groups[label].length})</span>
+      </h3>
+      ${groups[label].map(sessionCardHtml).join('')}
+    `).join('');
   } else {
-    body = sessions.map(s => {
-      const recCount = (s.records || []).filter(r => r.selected).length;
-      const isToday = s.date === todayStr();
-      const ctLab = courseTypeLabel(s);
-      const seqLab = sessionSeqLabel(s);
-      const courseLine = (ctLab || seqLab)
-        ? `<div class="card-meta" style="color:var(--brown-dark); font-weight:500">📋 ${escapeHtml(ctLab)}${ctLab && seqLab ? ' · ' : ''}${escapeHtml(seqLab)}</div>`
-        : '';
-      return `
-        <div class="card" data-id="${s.id}">
-          <div class="card-row">
-            <div>
-              <div class="card-title">${fmtDate(s.date)} ${isToday ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}</div>
-              ${courseLine}
-              <div class="card-meta">
-                ${s.location ? '📍 ' + escapeHtml(s.location) + ' · ' : ''}
-                ${s.duration ? s.duration + ' 分鐘' : ''}
-                ${recCount > 0 ? ' · 已記錄 ' + recCount + ' 項' : ' · 尚未記錄'}
-              </div>
-            </div>
-            <button class="card-menu-btn" data-menu="${s.id}" title="更多動作">⋯</button>
-          </div>
-        </div>`;
-    }).join('');
+    body = sessions.map(sessionCardHtml).join('');
   }
-  main.innerHTML = meta + body + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = meta + sortBar + body + `<button class="fab" id="fab">＋</button>`;
+  // 排序選單
+  const sortSelect = document.getElementById('sessionSort');
+  if (sortSelect) sortSelect.onchange = (e) => {
+    setSessionSortPref(e.target.value);
+    renderSessions();
+  };
   document.getElementById('editPet').onclick = () => openPetForm(pet);
   document.getElementById('bookingBtn').onclick = () => go('bookings', { petId: pet.id });
   main.querySelectorAll('.card[data-id]').forEach(el => {
