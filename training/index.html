@@ -2188,7 +2188,7 @@ function renderSessions() {
         ${pet.ownerAddress ? `<div class="card-meta" style="margin-top:6px">📍 ${escapeHtml(pet.ownerAddress)}</div>` : ''}
         ${pet.source === 'studio' && pet.studioAddress ? `<div class="card-meta" style="margin-top:6px">🏫 教室地址：${escapeHtml(pet.studioAddress)}</div>` : ''}
         ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
-        ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
+        ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">${escapeHtml(pet.notes)}</div>` : ''}
       </div>
     </div>
   `;
@@ -2327,7 +2327,7 @@ function renderSessions() {
   } else {
     body = sessions.map(sessionCardHtml).join('');
   }
-  main.innerHTML = meta + petActionBar + petPaymentHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = petActionBar + meta + petPaymentHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
   // 排序選單
   const sortSelect = document.getElementById('sessionSort');
   if (sortSelect) sortSelect.onchange = (e) => {
