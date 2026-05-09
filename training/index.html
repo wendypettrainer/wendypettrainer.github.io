@@ -229,6 +229,20 @@
   .aging-badge.aging-mild { background: #fbe8d4; color: #c97a4f; }
   .aging-badge.aging-warn { background: #f9d8a8; color: #a85f33; border: 1px solid #e8b894; }
   .aging-badge.aging-bad  { background: #f5b9a0; color: #8a3a1a; font-weight: 600; border: 1px solid #d88068; }
+
+  /* 教室派案 badge */
+  .studio-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-left: 6px;
+    background: #fdf6dc;
+    color: #8b6f47;
+    border: 1px solid #e8c870;
+    vertical-align: 2px;
+  }
   /* Section header（即將上課優先模式 3 段） */
   .session-section-header {
     font-size: 14px;
@@ -788,6 +802,7 @@ const KEYS = {
   bookings: 'petcare.bookings',                  // 預約 / 匯款通知記錄（合約 / 應收）
   bookingTemplate: 'petcare.bookingTemplate',    // 帳戶 + 須知 + 預設值
   payments: 'petcare.payments',                  // 實際金流：收款 / 退費（per booking）
+  studioPayments: 'petcare.studioPayments',      // 教室月結款（per studio + month）
   settings: 'petcare.settings',
   version: 'petcare.version',
   lastModified: 'petcare.lastModified',  // 雲端同步用
@@ -802,6 +817,7 @@ const SYNCABLE_KEYS = new Set([
   'petcare.bookings',
   'petcare.bookingTemplate',
   'petcare.payments',
+  'petcare.studioPayments',
 ]);
 
 const DEFAULT_DOG_ITEMS = [
@@ -1108,6 +1124,29 @@ function methodTableToHtml(table, opts = {}) {
  * 既有 sessions 都是 Wendy 已上完的紀錄 → status default 'done'。
  * sourceBookingId / sourceIndex 為 null 表示「不是從 booking spawn 出來的殼」。
  */
+/**
+ * Migration: pet 補新欄位（source / studioName / studioRates）。
+ * 既有 pet 全部視為 'direct'（直接客戶），不影響現況。
+ */
+function ensurePetShape(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(p => {
+    if (!p || typeof p !== 'object') return p;
+    const incomingRates = p.studioRates || {};
+    return {
+      ...p,
+      source: (p.source === 'studio') ? 'studio' : 'direct',
+      studioName: typeof p.studioName === 'string' ? p.studioName : '',
+      studioRates: {
+        oneOnOne: Number(incomingRates.oneOnOne) || 0,
+        group: Number(incomingRates.group) || 0,
+        firstConsult: Number(incomingRates.firstConsult) || 0,
+        other: Number(incomingRates.other) || 0,
+      },
+    };
+  });
+}
+
 function ensureSessionShape(arr) {
   if (!Array.isArray(arr)) return [];
   return arr.map(s => {
@@ -1202,6 +1241,7 @@ function initStorage() {
   if (!localStorage.getItem(KEYS.bookings)) _writeRaw(KEYS.bookings, []);
   if (!localStorage.getItem(KEYS.bookingTemplate)) _writeRaw(KEYS.bookingTemplate, DEFAULT_BOOKING_TEMPLATE);
   if (!localStorage.getItem(KEYS.payments)) _writeRaw(KEYS.payments, []);
+  if (!localStorage.getItem(KEYS.studioPayments)) _writeRaw(KEYS.studioPayments, []);
   if (!localStorage.getItem(KEYS.settings)) _writeRaw(KEYS.settings, {
     githubPat: '',
     githubUser: 'wendypettrainer',
@@ -1214,6 +1254,9 @@ function initStorage() {
   _writeRaw(KEYS.sessions, ensureSessionShape(load(KEYS.sessions, [])));
   // Migration: payments 確保 shape
   _writeRaw(KEYS.payments, ensurePaymentShape(load(KEYS.payments, [])));
+  _writeRaw(KEYS.studioPayments, ensureStudioPaymentShape(load(KEYS.studioPayments, [])));
+  // Migration: pet 補 source / studioName / studioRates（既有視為 direct）
+  _writeRaw(KEYS.pets, ensurePetShape(load(KEYS.pets, [])));
   _writeRaw(KEYS.version, 3);
 }
 
@@ -1295,7 +1338,7 @@ async function findOrCreateSyncGist() {
 
 function buildSyncPayload() {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     lastModified: load(KEYS.lastModified, ''),
     pets: load(KEYS.pets, []),
     sessions: load(KEYS.sessions, []),
@@ -1304,18 +1347,20 @@ function buildSyncPayload() {
     bookings: load(KEYS.bookings, []),
     bookingTemplate: load(KEYS.bookingTemplate, {}),
     payments: load(KEYS.payments, []),
+    studioPayments: load(KEYS.studioPayments, []),
   };
 }
 
 function applySyncPayload(remote) {
   if (!remote || typeof remote !== 'object') return false;
   // 用 _writeRaw 避免遞迴 push
-  if (Array.isArray(remote.pets)) _writeRaw(KEYS.pets, remote.pets);
+  if (Array.isArray(remote.pets)) _writeRaw(KEYS.pets, ensurePetShape(remote.pets));
   if (Array.isArray(remote.sessions)) _writeRaw(KEYS.sessions, ensureSessionShape(remote.sessions));
   if (Array.isArray(remote.itemsCat)) _writeRaw(KEYS.itemsCat, remote.itemsCat);
   if (Array.isArray(remote.itemsDog)) _writeRaw(KEYS.itemsDog, remote.itemsDog);
   if (Array.isArray(remote.bookings)) _writeRaw(KEYS.bookings, remote.bookings);
   if (Array.isArray(remote.payments)) _writeRaw(KEYS.payments, ensurePaymentShape(remote.payments));
+  if (Array.isArray(remote.studioPayments)) _writeRaw(KEYS.studioPayments, ensureStudioPaymentShape(remote.studioPayments));
   if (remote.bookingTemplate && typeof remote.bookingTemplate === 'object') {
     _writeRaw(KEYS.bookingTemplate, remote.bookingTemplate);
   }
@@ -1687,11 +1732,14 @@ function renderPets() {
         const cls = aging >= 60 ? 'aging-bad' : (aging >= 30 ? 'aging-warn' : 'aging-mild');
         return `<div style="margin-top:4px"><span class="aging-badge ${cls}">⏰ 帳齡 ${aging} 天</span></div>`;
       })();
+      const studioBadge = p.source === 'studio'
+        ? `<span class="studio-badge">🏫 ${escapeHtml(p.studioName || '教室派案')}</span>`
+        : '';
       return `
         <div class="card" data-id="${p.id}">
           <div class="card-row">
             <div>
-              <div class="card-title">${speciesEmoji(p.species)} ${escapeHtml(p.name)}</div>
+              <div class="card-title">${speciesEmoji(p.species)} ${escapeHtml(p.name)}${studioBadge}</div>
               <div class="card-meta">${escapeHtml(petTagline(p))} · 飼主：${escapeHtml(p.ownerName || '—')}</div>
               <div class="card-meta" style="margin-top:4px; font-size:12px">${recentLabel}</div>
               ${courseSummary}
@@ -1758,7 +1806,11 @@ function openPetForm(pet = null) {
     id: '', species: 'dog', name: '', breed: '', birth: '',
     gender: '', neutered: '',
     ownerName: '', ownerContact: '', ownerAddress: '', notes: '',
+    source: 'direct', studioName: '',
+    studioRates: { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 },
   };
+  // 確保 studioRates 物件結構存在（既有 pet 沒這 field 時）
+  if (!data.studioRates) data.studioRates = { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 };
   const html = `
     <div class="modal">
       <h2>${isEdit ? '編輯寵物' : '新增寵物'}</h2>
@@ -1816,6 +1868,31 @@ function openPetForm(pet = null) {
         <input id="f_address" type="text" value="${escapeAttr(data.ownerAddress || '')}" placeholder="例：嘉義縣民雄鄉⋯">
       </div>
       <div class="field">
+        <label>客戶來源</label>
+        <div class="radio-group">
+          <label class="radio-opt"><input type="radio" name="petSource" value="direct" ${data.source!=='studio'?'checked':''}> 直接客戶（你開合約 / 收款）</label>
+          <label class="radio-opt"><input type="radio" name="petSource" value="studio" ${data.source==='studio'?'checked':''}> 🏫 教室派案（教室收款 / 你拿鐘點費）</label>
+        </div>
+      </div>
+      <div id="studioFields" style="display:${data.source==='studio' ? 'block' : 'none'}; padding:10px 12px; background:rgba(240,230,214,0.4); border-radius:8px; margin-bottom:14px">
+        <div class="field">
+          <label>教室名稱 *</label>
+          <input id="f_studioName" type="text" value="${escapeAttr(data.studioName || '')}" placeholder="例：XX 寵物學院">
+        </div>
+        <div class="field">
+          <label>鐘點費（按課程類型，NT$ / 堂）</label>
+          <div class="row2">
+            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">一對一</div><input id="f_rate_oneOnOne" type="number" min="0" step="1" value="${data.studioRates.oneOnOne || ''}" placeholder="0"></div>
+            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">團體班</div><input id="f_rate_group" type="number" min="0" step="1" value="${data.studioRates.group || ''}" placeholder="0"></div>
+          </div>
+          <div class="row2" style="margin-top:6px">
+            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">首堂諮詢</div><input id="f_rate_firstConsult" type="number" min="0" step="1" value="${data.studioRates.firstConsult || ''}" placeholder="0"></div>
+            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">其他</div><input id="f_rate_other" type="number" min="0" step="1" value="${data.studioRates.other || ''}" placeholder="0"></div>
+          </div>
+          <p class="card-meta" style="margin-top:8px; font-size:12px">💡 教室付給你的單堂鐘點費。新建匯款通知時，會依據課程類型自動帶入對應金額。</p>
+        </div>
+      </div>
+      <div class="field">
         <label>⚠️ 目前困擾行為（客戶想解決的問題）</label>
         <textarea id="f_concerns" placeholder="例：吠叫、撲人、不上廁所、護食⋯">${escapeHtml(data.concerns || '')}</textarea>
       </div>
@@ -1832,9 +1909,21 @@ function openPetForm(pet = null) {
   `;
   const overlay = openModal(html);
   overlay.querySelector('#m_cancel').onclick = () => overlay.remove();
+  // 客戶來源切換 → 顯示 / 隱藏 studio 欄位
+  overlay.querySelectorAll('input[name="petSource"]').forEach(r => {
+    r.onchange = () => {
+      overlay.querySelector('#studioFields').style.display = (r.value === 'studio') ? 'block' : 'none';
+    };
+  });
   overlay.querySelector('#m_save').onclick = () => {
     const name = overlay.querySelector('#f_name').value.trim();
     if (!name) { showNotice('請填名字', 'err'); return; }
+    const sourceEl = overlay.querySelector('input[name="petSource"]:checked');
+    const source = sourceEl ? sourceEl.value : 'direct';
+    const studioName = overlay.querySelector('#f_studioName').value.trim();
+    if (source === 'studio' && !studioName) {
+      showNotice('教室派案請填教室名稱', 'err'); return;
+    }
     const updated = {
       id: data.id || uid(),
       species: overlay.querySelector('#f_species').value,
@@ -1848,6 +1937,14 @@ function openPetForm(pet = null) {
       ownerAddress: overlay.querySelector('#f_address').value.trim(),
       concerns: overlay.querySelector('#f_concerns').value.trim(),
       notes: overlay.querySelector('#f_notes').value.trim(),
+      source,
+      studioName,
+      studioRates: {
+        oneOnOne: Number(overlay.querySelector('#f_rate_oneOnOne').value) || 0,
+        group: Number(overlay.querySelector('#f_rate_group').value) || 0,
+        firstConsult: Number(overlay.querySelector('#f_rate_firstConsult').value) || 0,
+        other: Number(overlay.querySelector('#f_rate_other').value) || 0,
+      },
       createdAt: data.createdAt || new Date().toISOString(),
     };
     const pets = load(KEYS.pets, []);
@@ -2020,7 +2117,7 @@ function renderSessions() {
     <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
       <div id="petInfoToggle" style="display:flex; align-items:flex-start; justify-content:space-between; cursor:pointer; user-select:none; gap:8px">
         <div class="card-meta" style="margin:0; flex:1; min-width:0">
-          ${escapeHtml(petTagline(pet))} · 飼主 ${escapeHtml(pet.ownerName || '—')}${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
+          ${pet.source === 'studio' ? `<span class="studio-badge" style="margin-left:0; margin-right:6px">🏫 ${escapeHtml(pet.studioName || '教室派案')}</span>` : ''}${escapeHtml(petTagline(pet))} · 飼主 ${escapeHtml(pet.ownerName || '—')}${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
         </div>
         <span style="color:var(--text-soft); font-size:12px; flex-shrink:0">${petInfoCollapsed ? '▶ 展開' : '▼ 收起'}</span>
       </div>
@@ -2037,20 +2134,35 @@ function renderSessions() {
   `;
   // 寵物 payment section（列每筆 booking 的應收/實收/餘額 + inline 收款按鈕）
   const petBookings = load(KEYS.bookings, []).filter(b => b.petId === pet.id);
+  const isStudioPet = pet.source === 'studio';
+  const allSessions = load(KEYS.sessions, []);
   const petPaymentHtml = petBookings.length === 0 ? '' : `
     <div class="card" style="cursor:default; padding:12px 14px; margin-bottom:10px">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-        <h3 style="margin:0; font-size:15px; color:var(--brown-dark)">💰 款項</h3>
-        <span style="font-size:11px; color:var(--text-soft)">${petBookings.length} 筆匯款通知</span>
+        <h3 style="margin:0; font-size:15px; color:var(--brown-dark)">${isStudioPet ? '🏫 教室派案合約' : '💰 款項'}</h3>
+        <span style="font-size:11px; color:var(--text-soft)">${petBookings.length} 筆${isStudioPet ? '合約' : '匯款通知'}</span>
       </div>
       ${petBookings.map(b => {
+        const ctLab = courseTypeLabel(b);
+        const dateStr = (b.createdAt || '').slice(0, 10) || '—';
+        if (b.isStudioBooking) {
+          const doneCount = allSessions.filter(s => s.sourceBookingId === b.id && s.status === 'done').length;
+          const accrued = doneCount * (b.feePerClass || 0);
+          return `
+            <div data-bookingid="${b.id}" style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; background:white">
+              <div style="cursor:pointer" data-open-booking="${b.id}">
+                <div style="font-size:13px; color:var(--brown-dark); font-weight:500">🏫 ${escapeHtml(ctLab || '—')} · ${b.sessionCount} 堂 · ${escapeHtml(dateStr)}</div>
+                <div style="font-size:12px; color:var(--text-soft); margin-top:3px">
+                  鐘點費 ${fmtMoney(b.feePerClass)}/堂 · 已完成 ${doneCount}/${b.sessionCount} · <span style="color:var(--brown-dark); font-weight:600">累計應付 ${fmtMoney(accrued)}</span>
+                </div>
+              </div>
+            </div>`;
+        }
         const summary = bookingPaymentSummary(b);
         const balance = summary.balance;
         const balText = balance > 0 ? `<span style="color:var(--work); font-weight:600">應收餘 ${fmtMoney(balance)}</span>`
                      : balance < 0 ? `<span style="color:var(--good); font-weight:600">已超收 ${fmtMoney(Math.abs(balance))}</span>`
                      : `<span style="color:var(--good); font-weight:600">已結清</span>`;
-        const ctLab = courseTypeLabel(b);
-        const dateStr = (b.createdAt || '').slice(0, 10) || '—';
         return `
           <div data-bookingid="${b.id}" style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; background:white">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap">
@@ -2067,6 +2179,7 @@ function renderSessions() {
             </div>
           </div>`;
       }).join('')}
+      ${isStudioPet ? `<p class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(255,217,102,0.15); border-radius:6px; font-size:12px; line-height:1.6">💡 教室付款是月結、跨多隻寵物，請到 <b>📊 會計</b> → 教室派案 區記錄。</p>` : ''}
     </div>
   `;
 
@@ -2733,6 +2846,114 @@ function deletePayment(paymentId) {
   save(KEYS.payments, all.filter(p => p.id !== paymentId));
 }
 
+/* ============== STUDIO PAYMENT (教室月結款) ============== */
+function ensureStudioPaymentShape(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(p => {
+    if (!p || typeof p !== 'object') return p;
+    return {
+      id: p.id,
+      studioName: p.studioName || '',
+      date: p.date || '',
+      amount: Number(p.amount) || 0,
+      period: p.period || '',  // 'YYYY-MM'
+      note: p.note || '',
+      createdAt: p.createdAt || new Date().toISOString(),
+    };
+  });
+}
+
+function getAllStudioPayments() {
+  return load(KEYS.studioPayments, []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+function getStudioPaymentsByName(studioName) {
+  return getAllStudioPayments().filter(p => p.studioName === studioName);
+}
+function saveStudioPayment(payment) {
+  const all = load(KEYS.studioPayments, []);
+  const idx = all.findIndex(p => p.id === payment.id);
+  const final = Object.assign({}, payment, {
+    id: payment.id || uid(),
+    createdAt: payment.createdAt || new Date().toISOString(),
+  });
+  if (idx >= 0) all[idx] = final; else all.push(final);
+  save(KEYS.studioPayments, all);
+  return final;
+}
+function deleteStudioPayment(paymentId) {
+  const all = load(KEYS.studioPayments, []);
+  save(KEYS.studioPayments, all.filter(p => p.id !== paymentId));
+}
+
+/**
+ * 開新增 / 編輯教室月結款 modal。
+ */
+function openStudioPaymentForm(studioName, payment) {
+  const isEdit = !!payment;
+  const init = payment || { id: '', studioName, date: todayStr(), amount: '', period: todayStr().slice(0, 7), note: '' };
+  const html = `
+    <div class="modal" style="max-width:420px">
+      <h2>${isEdit ? '編輯教室付款' : '新增教室付款'}</h2>
+      <p class="card-meta" style="margin:0 0 10px">🏫 ${escapeHtml(studioName)}</p>
+      <div class="row2">
+        <div class="field">
+          <label>金額 *</label>
+          <input id="sp_amount" type="number" min="0" step="1" value="${init.amount || ''}" placeholder="例 24000">
+        </div>
+        <div class="field">
+          <label>收到日期 *</label>
+          <input id="sp_date" type="date" value="${init.date || todayStr()}">
+        </div>
+      </div>
+      <div class="field">
+        <label>對應月份 (YYYY-MM)</label>
+        <input id="sp_period" type="month" value="${init.period || ''}">
+        <p class="card-meta" style="margin-top:4px; font-size:12px">這筆款項是哪個月份的鐘點費（月結對帳用）</p>
+      </div>
+      <div class="field">
+        <label>備註</label>
+        <textarea id="sp_note" rows="2" placeholder="例：扣抽成 10%、含特例補貼 X">${escapeHtml(init.note || '')}</textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="sp_save">${isEdit ? '更新' : '新增'}</button>
+        ${isEdit ? '<button class="btn danger" id="sp_del">刪除</button>' : ''}
+        <button class="btn ghost" id="sp_cancel">取消</button>
+      </div>
+    </div>
+  `;
+  const overlay = openModal(html);
+  overlay.querySelector('#sp_save').onclick = () => {
+    const amount = Number(overlay.querySelector('#sp_amount').value);
+    const date = overlay.querySelector('#sp_date').value;
+    if (!amount || amount <= 0) { showNotice('金額必須 > 0', 'err'); return; }
+    if (!date) { showNotice('請選日期', 'err'); return; }
+    saveStudioPayment({
+      id: init.id || '',
+      studioName,
+      date,
+      amount,
+      period: overlay.querySelector('#sp_period').value || '',
+      note: overlay.querySelector('#sp_note').value.trim(),
+      createdAt: init.createdAt || null,
+    });
+    overlay.remove();
+    if (state.view === 'stats') renderStats();
+    else render();
+    showNotice(isEdit ? '已更新' : '已新增教室付款');
+  };
+  if (isEdit) {
+    overlay.querySelector('#sp_del').onclick = () => {
+      if (!confirm('刪除這筆教室付款？')) return;
+      deleteStudioPayment(payment.id);
+      overlay.remove();
+      if (state.view === 'stats') renderStats();
+      else render();
+      showNotice('已刪除');
+    };
+  }
+  overlay.querySelector('#sp_cancel').onclick = () => overlay.remove();
+}
+
 /** booking 刪除時，連帶刪 payments（避免孤兒） */
 function cleanupBookingPayments(bookingId) {
   const all = load(KEYS.payments, []);
@@ -2960,23 +3181,28 @@ function renderBooking() {
 
   // 帶入預設或既有資料
   // 新建 booking 時：地點優先用「飼主地址」（多數客戶到府上課），沒填才退到全域預設
+  const isStudioPet = pet.source === 'studio';
+  const defaultCourseType = 'oneOnOne';
+  const studioRate = (pet.studioRates && pet.studioRates[defaultCourseType]) || 0;
   const b = data ? JSON.parse(JSON.stringify(data)) : {
     id: '',
     petId: pet.id,
     sessionCount: 1,
     sessions: [{ date: '', startTime: '', endTime: '' }],
     location: (pet.ownerAddress && pet.ownerAddress.trim()) || tpl.defaultLocation,
-    feePerClass: tpl.defaultFeePerClass,
-    transportPerClass: tpl.defaultTransportPerClass,
+    feePerClass: isStudioPet ? studioRate : tpl.defaultFeePerClass,
+    transportPerClass: isStudioPet ? 0 : tpl.defaultTransportPerClass,
     discountType: '',     // '' | 'amount' | 'percent'
     discountValue: 0,
     discountLabel: '',
     paymentDueDate: '',
     paymentDueNote: '中午前',
-    courseType: 'oneOnOne',           // 'oneOnOne' | 'firstConsult' | 'group' | 'other'
+    courseType: defaultCourseType,    // 'oneOnOne' | 'firstConsult' | 'group' | 'other'
     groupSubType: 'puppy',            // 'puppy' | 'youth' | 'other'  (only if courseType==='group')
     groupSubTypeOther: '',            // 自填的團體班類型 (only if groupSubType==='other')
     courseTypeOther: '',              // 自填的課程類型 (only if courseType==='other')
+    isStudioBooking: isStudioPet,     // D3: 教室派案 booking
+    studioNameSnapshot: isStudioPet ? (pet.studioName || '') : '',
   };
   // 舊資料相容（之前沒這幾欄）
   if (b.discountType === undefined) b.discountType = '';
@@ -2986,6 +3212,8 @@ function renderBooking() {
   if (b.groupSubType === undefined) b.groupSubType = 'puppy';
   if (b.groupSubTypeOther === undefined) b.groupSubTypeOther = '';
   if (b.courseTypeOther === undefined) b.courseTypeOther = '';
+  if (b.isStudioBooking === undefined) b.isStudioBooking = false;
+  if (b.studioNameSnapshot === undefined) b.studioNameSnapshot = '';
   // 確保 sessions 長度跟 sessionCount 對齊（編輯舊資料時也修正）
   function alignSessions() {
     while (b.sessions.length < b.sessionCount) b.sessions.push({ date: '', startTime: '', endTime: '' });
@@ -3058,21 +3286,22 @@ function renderBooking() {
       </div>
 
       <div class="card" style="cursor:default">
-        <h3 style="font-size:14px; color:var(--brown-dark); margin-bottom:10px;">費用</h3>
+        <h3 style="font-size:14px; color:var(--brown-dark); margin-bottom:10px;">${b.isStudioBooking ? '🏫 教室派案 — 鐘點費' : '費用'}</h3>
+        ${b.isStudioBooking ? `<p class="card-meta" style="margin:0 0 8px; font-size:12px">教室「${escapeHtml(b.studioNameSnapshot || pet.studioName || '')}」派案。鐘點費依課程類型自動帶入，可手動覆寫；交通費 / 優惠不適用。</p>` : ''}
         <div style="display:grid; grid-template-columns: 1fr 100px 60px 1fr; gap:8px; align-items:center; margin-bottom:8px;">
-          <div>課程</div>
+          <div>${b.isStudioBooking ? '鐘點費' : '課程'}</div>
           <input id="bk_fee" type="number" min="0" value="${b.feePerClass}">
           <div style="text-align:center; color:var(--text-soft)">/ 堂</div>
           <div style="text-align:right; color:var(--text-soft)" id="bk_feeSubtotal">$ ${(b.feePerClass*b.sessionCount).toLocaleString()}</div>
         </div>
-        <div style="display:grid; grid-template-columns: 1fr 100px 60px 1fr; gap:8px; align-items:center; margin-bottom:8px;">
+        <div style="display:${b.isStudioBooking ? 'none' : 'grid'}; grid-template-columns: 1fr 100px 60px 1fr; gap:8px; align-items:center; margin-bottom:8px;">
           <div>交通費</div>
           <input id="bk_transport" type="number" min="0" value="${b.transportPerClass}">
           <div style="text-align:center; color:var(--text-soft)">/ 堂</div>
           <div style="text-align:right; color:var(--text-soft)" id="bk_transportSubtotal">$ ${(b.transportPerClass*b.sessionCount).toLocaleString()}</div>
         </div>
 
-        <div style="border-top:1px dashed var(--brown-light); padding-top:8px; margin-top:6px;">
+        <div style="border-top:1px dashed var(--brown-light); padding-top:8px; margin-top:6px; display:${b.isStudioBooking ? 'none' : 'block'}">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
             <div style="flex:0 0 60px; color:var(--text-soft); font-size:13px">優惠</div>
             <select id="bk_discountType" style="flex:0 0 110px; padding:6px 8px;">
@@ -3117,6 +3346,14 @@ function renderBooking() {
       </div>
 
       ${(() => {
+        if (b.isStudioBooking) return `
+          <div style="margin-top:18px; padding:14px; background:rgba(255,217,102,0.15); border:1px solid #c9a85a; border-radius:8px">
+            <div style="font-weight:600; color:var(--brown-dark); margin-bottom:4px">🏫 教室派案 booking</div>
+            <p class="card-meta" style="margin:0; font-size:12px; line-height:1.7">
+              教室付款是月結、跨多個 booking／多隻寵物，<b>不在這裡記</b>。<br>
+              請到 <b>📊 會計頁</b>「教室派案」區，按教室記錄每筆月結款項。
+            </p>
+          </div>`;
         if (!isEdit) return `
           <div style="margin-top:18px; padding:14px; background:rgba(240,230,214,0.3); border-radius:8px; text-align:center; color:var(--text-soft); font-size:13px">
             💡 請先儲存匯款通知（按下方「儲存」），才能記錄實際收款 / 退費
@@ -3189,6 +3426,10 @@ function renderBooking() {
         b.courseType = r.value;
         // 切到 group 而 groupSubType 是空字串時，預設選 puppy
         if (b.courseType === 'group' && !b.groupSubType) b.groupSubType = 'puppy';
+        // 教室派案：切換 courseType 時自動更新鐘點費
+        if (b.isStudioBooking && pet.studioRates) {
+          b.feePerClass = pet.studioRates[b.courseType] || 0;
+        }
         rerender();
       };
     });
@@ -5153,7 +5394,7 @@ function renderSettings() {
 
   document.getElementById('exportData').onclick = () => {
     const dump = {
-      version: 3,
+      version: 4,
       pets: load(KEYS.pets, []),
       sessions: load(KEYS.sessions, []),
       itemsCat: load(KEYS.itemsCat, []),
@@ -5161,6 +5402,7 @@ function renderSettings() {
       bookings: load(KEYS.bookings, []),
       bookingTemplate: load(KEYS.bookingTemplate, {}),
       payments: load(KEYS.payments, []),
+      studioPayments: load(KEYS.studioPayments, []),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
@@ -5188,6 +5430,7 @@ function renderSettings() {
         if (data.bookings) save(KEYS.bookings, data.bookings);
         if (data.bookingTemplate) save(KEYS.bookingTemplate, data.bookingTemplate);
         if (data.payments) save(KEYS.payments, data.payments);
+        if (data.studioPayments) save(KEYS.studioPayments, data.studioPayments);
         showNotice('匯入完成');
         render();
       } catch (e) {
@@ -5438,6 +5681,29 @@ function renderStats() {
   }
   closedDetails.sort((a, b) => b.amount - a.amount);
 
+  // 教室派案聚合（D7）
+  const studioMap = {};   // studioName → { accrued, doneCount, bookingCount }
+  for (const b of bookings) {
+    if (!b.isStudioBooking) continue;
+    const sName = b.studioNameSnapshot || '未指定教室';
+    if (!studioMap[sName]) studioMap[sName] = { accrued: 0, doneCount: 0, bookingCount: 0 };
+    const bSess = sessions.filter(s => s.sourceBookingId === b.id);
+    const dCnt = bSess.filter(s => s.status === 'done').length;
+    studioMap[sName].accrued += dCnt * (b.feePerClass || 0);
+    studioMap[sName].doneCount += dCnt;
+    studioMap[sName].bookingCount++;
+  }
+  // studio payments：套用 cutoff（按收到日期）
+  const allStudioPayments = load(KEYS.studioPayments, []);
+  const filteredStudioPayments = cutoff
+    ? allStudioPayments.filter(p => (p.date || '').slice(0,10) >= cutoff)
+    : allStudioPayments;
+  const studioReceivedMap = {};
+  for (const sp of filteredStudioPayments) {
+    studioReceivedMap[sp.studioName] = (studioReceivedMap[sp.studioName] || 0) + sp.amount;
+  }
+  const studioNames = [...new Set([...Object.keys(studioMap), ...Object.keys(studioReceivedMap)])].sort();
+
   // helpers
   const fmtMoney = n => 'NT$ ' + Math.round(n).toLocaleString('zh-TW');
   const pct = (num, denom) => denom ? (num / denom * 100).toFixed(1) + '%' : '0%';
@@ -5584,6 +5850,56 @@ function renderStats() {
     </div>
   `;
 
+  // 教室派案 section html
+  const studioSectionHtml = studioNames.length === 0 ? '' : `
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">🏫 教室派案</h3>
+    ${studioNames.map(name => {
+      const accrued = (studioMap[name] && studioMap[name].accrued) || 0;
+      const received = studioReceivedMap[name] || 0;
+      const balance = accrued - received;
+      const balLabel = balance > 0 ? '應收餘額' : (balance < 0 ? '已超付' : '已結清');
+      const balCls = balance > 0 ? 'warn' : 'good';
+      const sps = filteredStudioPayments.filter(p => p.studioName === name);
+      return `
+        <div class="card" style="cursor:default; padding:12px 14px; margin-bottom:10px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap">
+            <h4 style="margin:0; color:var(--brown-dark); font-size:14px">🏫 ${escapeHtml(name)}</h4>
+            <button class="small-btn" data-add-studio-pay="${escapeAttr(name)}" type="button">+ 新增教室付款</button>
+          </div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:8px">
+            <div class="stat-card good">
+              <div class="stat-label">累計應付</div>
+              <div class="stat-value">${fmtMoney(accrued)}</div>
+              <div class="stat-pct">${(studioMap[name] && studioMap[name].doneCount) || 0} 堂 done</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">累計實付</div>
+              <div class="stat-value">${fmtMoney(received)}</div>
+              <div class="stat-pct">${sps.length} 筆</div>
+            </div>
+            <div class="stat-card ${balCls}">
+              <div class="stat-label">${balLabel}</div>
+              <div class="stat-value">${fmtMoney(Math.abs(balance))}</div>
+            </div>
+          </div>
+          ${sps.length === 0 ? '<p style="font-size:12px; color:var(--text-soft); padding:6px 0; margin:0">尚無教室付款紀錄</p>' : `
+            <details>
+              <summary style="cursor:pointer; font-size:12px; color:var(--accent); user-select:none">📋 ${sps.length} 筆付款紀錄</summary>
+              <div style="overflow-x:auto; margin-top:6px">
+              <table style="width:100%; border-collapse:collapse; font-size:12px; min-width:480px">
+                <thead><tr style="background:#f0e6d6; color:#6b5435"><th style="padding:5px 8px; border:1px solid var(--border); text-align:left">收到日期</th><th style="padding:5px 8px; border:1px solid var(--border); text-align:left">對應月份</th><th style="padding:5px 8px; border:1px solid var(--border); text-align:right">金額</th><th style="padding:5px 8px; border:1px solid var(--border); text-align:left">備註</th></tr></thead>
+                <tbody>
+                  ${sps.map(sp => `<tr data-edit-sp="${sp.id}" style="cursor:pointer"><td style="padding:5px 8px; border:1px solid var(--border)">${escapeHtml(fmtDate(sp.date))}</td><td style="padding:5px 8px; border:1px solid var(--border)">${escapeHtml(sp.period || '—')}</td><td style="padding:5px 8px; border:1px solid var(--border); text-align:right; font-weight:600">${fmtMoney(sp.amount)}</td><td style="padding:5px 8px; border:1px solid var(--border); color:var(--text-soft)">${escapeHtml(sp.note || '')}</td></tr>`).join('')}
+                </tbody>
+              </table>
+              </div>
+            </details>
+          `}
+        </div>
+      `;
+    }).join('')}
+  `;
+
   main.innerHTML = `
     ${header}
     ${summaryGrid}
@@ -5593,11 +5909,13 @@ function renderStats() {
       <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 按課程類型</h3>
       ${byTypeHtml}
     ` : ''}
+    ${studioSectionHtml}
     <p style="margin-top:24px; font-size:12px; color:var(--text-soft); line-height:1.7">
       💡 <b>金流（合約 / payments）：</b>「應收」= 合約總額；「實收 / 退費」= 你在每筆 booking 記錄的 payments；「應收餘額」= 應收 − 實收 + 退費<br>
-      💡 <b>收入認列（權責發生制）：</b>「已認列」= 已上完課對應的金額（收到沒收到都算收入）；「預收款」= 客戶已付但還沒上的（會計上算負債）；「已上未收」= 已上完但客戶還沒付齊（應收帳款）<br>
+      💡 <b>收入認列（權責發生制）：</b>「已認列」= 已上完課對應的金額；「預收款」= 客戶已付但還沒上；「已上未收」= 已上完但客戶還沒付齊<br>
       💡 <b>課時履約：</b>「已兌現」= done 的堂數 × 單堂單價；「未兌現」= closed（強制結案）；「進行中」= 預約中 / 待安排 / 待結案<br>
-      💡 範圍切換按 booking 建立時間 (createdAt) 篩選
+      💡 <b>教室派案：</b>累計應付 = 該教室所有 done 課時 × 鐘點費；累計實付 = 教室付款紀錄總額；月份對帳用<br>
+      💡 範圍切換按 booking 建立時間 / 教室付款收到日期 篩選
     </p>
   `;
 
@@ -5659,6 +5977,16 @@ function renderStats() {
   };
   main.querySelectorAll('.card[data-petid]').forEach(el => {
     el.onclick = () => go('sessions', { petId: el.dataset.petid });
+  });
+  // 教室付款 binding
+  main.querySelectorAll('[data-add-studio-pay]').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); openStudioPaymentForm(btn.dataset.addStudioPay, null); };
+  });
+  main.querySelectorAll('[data-edit-sp]').forEach(tr => {
+    tr.onclick = () => {
+      const sp = (load(KEYS.studioPayments, [])).find(p => p.id === tr.dataset.editSp);
+      if (sp) openStudioPaymentForm(sp.studioName, sp);
+    };
   });
 }
 
