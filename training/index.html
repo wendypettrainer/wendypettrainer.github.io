@@ -779,7 +779,40 @@ const DEFAULT_BOOKING_TEMPLATE = {
   ],
 };
 
-// 把任何舊版資料自動升級成 v3：{ name, methods: [{name, steps}] }
+// 把任何舊版資料自動升級成 v4：{ name, methods: [{name, steps, table?}] }
+function normalizeTable(t) {
+  if (!t || !Array.isArray(t.headers) || !Array.isArray(t.rows)) return null;
+  const cols = t.headers.length;
+  if (cols === 0) return null;
+  const headers = t.headers.map(h => String(h || ''));
+  const rows = t.rows.map(r => {
+    const row = Array.isArray(r) ? r.slice(0, cols).map(c => String(c || '')) : [];
+    while (row.length < cols) row.push('');
+    return row;
+  });
+  return { headers, rows };
+}
+function emptyTable(cols = 3, rowCount = 2) {
+  return {
+    headers: Array.from({ length: cols }, (_, i) => `欄${i+1}`),
+    rows: Array.from({ length: rowCount }, () => Array.from({ length: cols }, () => '')),
+  };
+}
+// 訓練方法表格 → HTML（顯示用，escapeHtml 過）
+function methodTableToHtml(table, opts = {}) {
+  const t = normalizeTable(table);
+  if (!t) return '';
+  const headerStyle = opts.compact
+    ? 'background:#f0e6d6; color:#6b5435; font-weight:600; padding:6px 8px; border:1px solid #c9b89a; font-size:12px;'
+    : 'background:#f0e6d6; color:#6b5435; font-weight:700; padding:8px 10px; border:1px solid #c9b89a;';
+  const cellStyle = opts.compact
+    ? 'padding:6px 8px; border:1px solid #d8cdb6; vertical-align:top; font-size:12px; line-height:1.5;'
+    : 'padding:8px 10px; border:1px solid #d8cdb6; vertical-align:top; line-height:1.55;';
+  return `<table style="border-collapse:collapse; width:100%; margin:6px 0; background:white;">
+    <thead><tr>${t.headers.map(h => `<th style="${headerStyle}; text-align:left;">${escapeHtml(h)}</th>`).join('')}</tr></thead>
+    <tbody>${t.rows.map(row => `<tr>${row.map((c, i) => `<td style="${cellStyle}${i===0 ? ' font-weight:600;' : ''}">${escapeHtml(c).replace(/\n/g, '<br>')}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
 function ensureItemShape(arr) {
   if (!Array.isArray(arr)) return [];
   return arr.map(it => {
@@ -788,18 +821,19 @@ function ensureItemShape(arr) {
       return { name: it, methods: [] };
     }
     if (Array.isArray(it.methods)) {
-      // v3 already
+      // v3+ → 升級為 v4（加 table 欄位）
       return {
         name: it.name || '',
         methods: it.methods.map(m => ({
           name: (m && m.name) || '',
           steps: (m && m.steps) || '',
+          table: (m && m.table) ? normalizeTable(m.table) : null,
         })),
       };
     }
     // v2: had {name, steps}
     if (it.steps && it.steps.trim()) {
-      return { name: it.name || '', methods: [{ name: '基本方法', steps: it.steps }] };
+      return { name: it.name || '', methods: [{ name: '基本方法', steps: it.steps, table: null }] };
     }
     return { name: it.name || '', methods: [] };
   });
@@ -2488,12 +2522,26 @@ function renderSession() {
     const methodsBlock = hasMethods ? `
       <div class="methods-section">
         <div class="methods-label">🎯 今天用的方法（可複選）</div>
-        ${itMethods.map(m => `
-          <label class="method-check">
-            <input type="checkbox" data-method="${escapeAttr(m.name)}" ${checkedSet.has(m.name)?'checked':''}>
-            <span>${escapeHtml(m.name || '（未命名方法）')}</span>
-          </label>
-        `).join('')}
+        ${itMethods.map(m => {
+          const stepsTxt = (m.steps || '').trim();
+          const hasTbl = !!normalizeTable(m.table);
+          const hasDetails = stepsTxt || hasTbl;
+          return `
+            <div style="margin-bottom:6px">
+              <label class="method-check" style="margin-bottom:2px">
+                <input type="checkbox" data-method="${escapeAttr(m.name)}" ${checkedSet.has(m.name)?'checked':''}>
+                <span>${escapeHtml(m.name || '（未命名方法）')}</span>
+              </label>
+              ${hasDetails ? `
+                <details style="margin-left:24px; margin-top:2px;">
+                  <summary style="cursor:pointer; font-size:11px; color:var(--text-soft); user-select:none;">📖 步驟${hasTbl ? ' / 表格' : ''}</summary>
+                  <div style="margin-top:4px; padding:8px 10px; background:rgba(240,230,214,0.4); border-left:2px solid var(--brown-light); border-radius:4px; font-size:12px; line-height:1.6;">
+                    ${stepsTxt ? `<div style="white-space:pre-wrap; margin-bottom:${hasTbl?'6px':'0'}">${escapeHtml(stepsTxt)}</div>` : ''}
+                    ${hasTbl ? methodTableToHtml(m.table, {compact:true}) : ''}
+                  </div>
+                </details>` : ''}
+            </div>`;
+        }).join('')}
       </div>` : '';
     return `
       <div class="item ${r.selected ? 'selected' : ''}" data-name="${escapeAttr(name)}">
@@ -2767,10 +2815,12 @@ function exportPdf(sess, pet) {
         const methodsHtml = checkedNames.map(mn => {
           const m = itMethods.find(im => im.name === mn);
           const stepsTxt = (m && m.steps || '').trim();
+          const tblHtml = m && m.table ? methodTableToHtml(m.table) : '';
           return `
             <div class="item-method">
               <div class="item-label">🎯 方法：${escapeHtml(mn || '（未命名方法）')}</div>
               ${stepsTxt ? `<div class="item-method-steps">${escapeHtml(stepsTxt)}</div>` : ''}
+              ${tblHtml ? `<div style="margin-top:6px">${tblHtml}</div>` : ''}
             </div>`;
         }).join('');
         const noteHtml = (r.petNote && r.petNote.trim())
@@ -3757,6 +3807,9 @@ function renderSettings() {
     const list = ensureItemShape(load(key, []));
 
     function methodHtml(m, i, j) {
+      const tbl = normalizeTable(m.table);
+      const tableInfo = tbl ? `（${tbl.headers.length} 欄 × ${tbl.rows.length} 列）` : '';
+      const tableBtnLabel = tbl ? `📊 編輯表格 ${tableInfo}` : '📊 加入表格';
       return `
         <div class="method-block">
           <div class="method-top">
@@ -3766,6 +3819,11 @@ function renderSettings() {
           <textarea data-i="${i}" data-j="${j}" data-mfield="steps"
             placeholder="（可選）這個方法的步驟，例：1. 食物在鼻子前  2. 慢慢往頭頂移..."
             rows="2">${escapeHtml(m.steps)}</textarea>
+          <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <button class="small-btn" data-mtable="${i}_${j}">${tableBtnLabel}</button>
+            ${tbl ? `<button class="small-btn danger" data-mtdel="${i}_${j}">移除表格</button>` : ''}
+          </div>
+          ${tbl ? `<div style="margin-top:8px; overflow-x:auto;">${methodTableToHtml(tbl, {compact:true})}</div>` : ''}
         </div>`;
     }
 
@@ -3835,7 +3893,31 @@ function renderSettings() {
       btn.onclick = () => {
         const i = parseInt(btn.dataset.addmethod);
         const cur = ensureItemShape(load(key, []));
-        cur[i].methods.push({ name: '', steps: '' });
+        cur[i].methods.push({ name: '', steps: '', table: null });
+        save(key, cur);
+        renderItemEditor();
+      };
+    });
+    // 表格編輯器
+    document.querySelectorAll('[data-mtable]').forEach(btn => {
+      btn.onclick = () => {
+        const [i, j] = btn.dataset.mtable.split('_').map(Number);
+        const cur = ensureItemShape(load(key, []));
+        const initial = cur[i].methods[j].table || emptyTable(3, 3);
+        openTableEditor(initial, (newTable) => {
+          const c = ensureItemShape(load(key, []));
+          c[i].methods[j].table = newTable;
+          save(key, c);
+          renderItemEditor();
+        });
+      };
+    });
+    document.querySelectorAll('[data-mtdel]').forEach(btn => {
+      btn.onclick = () => {
+        const [i, j] = btn.dataset.mtdel.split('_').map(Number);
+        if (!confirm('移除這個表格？\n\n（純文字步驟不會被刪）')) return;
+        const cur = ensureItemShape(load(key, []));
+        cur[i].methods[j].table = null;
         save(key, cur);
         renderItemEditor();
       };
@@ -4411,6 +4493,106 @@ function openModal(html) {
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   document.body.appendChild(overlay);
   return overlay;
+}
+// 訓練方法表格編輯器
+function openTableEditor(initialTable, onSave) {
+  let t = normalizeTable(initialTable) || emptyTable(3, 3);
+
+  function render() {
+    const colWidth = `minmax(80px, 1fr)`;
+    const gridCols = `40px ${Array.from({length: t.headers.length}, () => colWidth).join(' ')} 40px`;
+    overlay.querySelector('#te_grid').innerHTML = `
+      <div style="display:grid; grid-template-columns:${gridCols}; gap:4px; min-width:fit-content;">
+        <div></div>
+        ${t.headers.map((h, ci) => `
+          <div style="position:relative;">
+            <input data-tehdr="${ci}" value="${escapeAttr(h)}" placeholder="欄${ci+1}標題"
+              style="width:100%; padding:6px 8px; background:#f0e6d6; border:1px solid #c9a85a; border-radius:4px; font-weight:600; color:#6b5435; font-size:13px;">
+          </div>
+        `).join('')}
+        <div style="display:flex; align-items:center; justify-content:center;">
+          <button class="small-btn danger" data-tedelcol style="padding:2px 6px; font-size:11px;" title="刪最後一欄">−欄</button>
+        </div>
+        ${t.rows.map((row, ri) => `
+          <div style="display:flex; align-items:center; justify-content:center; color:var(--text-soft); font-size:11px;">${ri+1}</div>
+          ${row.map((c, ci) => `
+            <textarea data-tecell="${ri}_${ci}" rows="1" placeholder=""
+              style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:4px; resize:vertical; font-family:inherit; font-size:13px;">${escapeHtml(c)}</textarea>
+          `).join('')}
+          <div style="display:flex; align-items:center; justify-content:center;">
+            <button class="small-btn danger" data-tedelrow="${ri}" style="padding:2px 6px; font-size:11px;" title="刪這列">×</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    // 即時 binding
+    overlay.querySelectorAll('[data-tehdr]').forEach(inp => {
+      inp.oninput = () => {
+        t.headers[parseInt(inp.dataset.tehdr)] = inp.value;
+      };
+    });
+    overlay.querySelectorAll('[data-tecell]').forEach(ta => {
+      ta.oninput = () => {
+        const [ri, ci] = ta.dataset.tecell.split('_').map(Number);
+        t.rows[ri][ci] = ta.value;
+      };
+    });
+    overlay.querySelectorAll('[data-tedelrow]').forEach(btn => {
+      btn.onclick = () => {
+        const ri = parseInt(btn.dataset.tedelrow);
+        if (t.rows.length <= 1) { showNotice('至少要保留 1 列', 'err'); return; }
+        t.rows.splice(ri, 1);
+        render();
+      };
+    });
+    overlay.querySelector('[data-tedelcol]').onclick = () => {
+      if (t.headers.length <= 1) { showNotice('至少要保留 1 欄', 'err'); return; }
+      t.headers.pop();
+      t.rows.forEach(r => r.pop());
+      render();
+    };
+  }
+
+  const overlay = openModal(`
+    <div class="modal" style="max-width:900px; width:95vw;">
+      <h2>訓練方法表格編輯</h2>
+      <p style="color:var(--text-soft); font-size:12px; margin-bottom:10px">
+        💡 第一行（淺色）是欄標題；其他列每格自由填。第 1 欄會自動加粗（適合放「步驟名稱」「階段」等）。
+      </p>
+      <div id="te_grid" style="overflow-x:auto; padding:4px 0;"></div>
+      <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+        <button class="small-btn" id="te_addrow">＋ 新增列</button>
+        <button class="small-btn" id="te_addcol">＋ 新增欄</button>
+        <button class="small-btn danger" id="te_clear">清空表格</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="te_cancel">取消</button>
+        <button class="btn" id="te_save">儲存</button>
+      </div>
+    </div>
+  `);
+
+  render();
+
+  overlay.querySelector('#te_addrow').onclick = () => {
+    t.rows.push(Array.from({length: t.headers.length}, () => ''));
+    render();
+  };
+  overlay.querySelector('#te_addcol').onclick = () => {
+    t.headers.push(`欄${t.headers.length + 1}`);
+    t.rows.forEach(r => r.push(''));
+    render();
+  };
+  overlay.querySelector('#te_clear').onclick = () => {
+    if (!confirm('清空整個表格？')) return;
+    t = emptyTable(3, 3);
+    render();
+  };
+  overlay.querySelector('#te_cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#te_save').onclick = () => {
+    onSave(normalizeTable(t));
+    overlay.remove();
+  };
 }
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
