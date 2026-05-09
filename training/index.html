@@ -217,6 +217,18 @@
   .status-badge.pending     { background: #fbe8d4; color: #c97a4f; border: 1px solid #e8b894; }
   .status-badge.done        { background: rgba(107,158,110,0.15); color: #4a7d4d; }
   .status-badge.closed      { background: #d8d4ce; color: #6a6258; text-decoration: line-through; }
+
+  /* 寵物列表帳齡 badge */
+  .aging-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .aging-badge.aging-mild { background: #fbe8d4; color: #c97a4f; }
+  .aging-badge.aging-warn { background: #f9d8a8; color: #a85f33; border: 1px solid #e8b894; }
+  .aging-badge.aging-bad  { background: #f5b9a0; color: #8a3a1a; font-weight: 600; border: 1px solid #d88068; }
   /* Section header（即將上課優先模式 3 段） */
   .session-section-header {
     font-size: 14px;
@@ -772,8 +784,9 @@ const KEYS = {
   sessions: 'petcare.sessions',
   itemsCat: 'petcare.trainingItems.cat',
   itemsDog: 'petcare.trainingItems.dog',
-  bookings: 'petcare.bookings',                  // 預約 / 匯款通知記錄
+  bookings: 'petcare.bookings',                  // 預約 / 匯款通知記錄（合約 / 應收）
   bookingTemplate: 'petcare.bookingTemplate',    // 帳戶 + 須知 + 預設值
+  payments: 'petcare.payments',                  // 實際金流：收款 / 退費（per booking）
   settings: 'petcare.settings',
   version: 'petcare.version',
   lastModified: 'petcare.lastModified',  // 雲端同步用
@@ -787,6 +800,7 @@ const SYNCABLE_KEYS = new Set([
   'petcare.trainingItems.dog',
   'petcare.bookings',
   'petcare.bookingTemplate',
+  'petcare.payments',
 ]);
 
 const DEFAULT_DOG_ITEMS = [
@@ -1186,6 +1200,7 @@ function initStorage() {
   if (!localStorage.getItem(KEYS.itemsDog)) _writeRaw(KEYS.itemsDog, DEFAULT_DOG_ITEMS);
   if (!localStorage.getItem(KEYS.bookings)) _writeRaw(KEYS.bookings, []);
   if (!localStorage.getItem(KEYS.bookingTemplate)) _writeRaw(KEYS.bookingTemplate, DEFAULT_BOOKING_TEMPLATE);
+  if (!localStorage.getItem(KEYS.payments)) _writeRaw(KEYS.payments, []);
   if (!localStorage.getItem(KEYS.settings)) _writeRaw(KEYS.settings, {
     githubPat: '',
     githubUser: 'wendypettrainer',
@@ -1196,6 +1211,8 @@ function initStorage() {
   _writeRaw(KEYS.itemsDog, ensureItemShape(load(KEYS.itemsDog, [])));
   // Migration: session 補 status / sourceBookingId / sourceIndex（既有視為 done）
   _writeRaw(KEYS.sessions, ensureSessionShape(load(KEYS.sessions, [])));
+  // Migration: payments 確保 shape
+  _writeRaw(KEYS.payments, ensurePaymentShape(load(KEYS.payments, [])));
   _writeRaw(KEYS.version, 3);
 }
 
@@ -1277,7 +1294,7 @@ async function findOrCreateSyncGist() {
 
 function buildSyncPayload() {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     lastModified: load(KEYS.lastModified, ''),
     pets: load(KEYS.pets, []),
     sessions: load(KEYS.sessions, []),
@@ -1285,6 +1302,7 @@ function buildSyncPayload() {
     itemsDog: load(KEYS.itemsDog, []),
     bookings: load(KEYS.bookings, []),
     bookingTemplate: load(KEYS.bookingTemplate, {}),
+    payments: load(KEYS.payments, []),
   };
 }
 
@@ -1296,6 +1314,7 @@ function applySyncPayload(remote) {
   if (Array.isArray(remote.itemsCat)) _writeRaw(KEYS.itemsCat, remote.itemsCat);
   if (Array.isArray(remote.itemsDog)) _writeRaw(KEYS.itemsDog, remote.itemsDog);
   if (Array.isArray(remote.bookings)) _writeRaw(KEYS.bookings, remote.bookings);
+  if (Array.isArray(remote.payments)) _writeRaw(KEYS.payments, ensurePaymentShape(remote.payments));
   if (remote.bookingTemplate && typeof remote.bookingTemplate === 'object') {
     _writeRaw(KEYS.bookingTemplate, remote.bookingTemplate);
   }
@@ -1420,6 +1439,20 @@ function getPetSessions(petId) {
   return load(KEYS.sessions, [])
     .filter(s => s.petId === petId)
     .sort((a,b) => b.date.localeCompare(a.date));
+}
+
+/**
+ * 帳齡天數：該寵物最早 status='booked' 且 date < today 的 session 距今天數。
+ * 沒有逾期 booked → 回傳 0。
+ */
+function getPetAgingDays(petId) {
+  const today = todayStr();
+  const overdue = load(KEYS.sessions, [])
+    .filter(s => s.petId === petId && s.status === 'booked' && s.date && s.date < today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (overdue.length === 0) return 0;
+  const ms = new Date(today) - new Date(overdue[0].date);
+  return Math.floor(ms / 86400000);
 }
 
 // 排序鍵：最近的 session 日期，沒 session 用 createdAt 當 fallback
@@ -1644,6 +1677,12 @@ function renderPets() {
           .map(([label, n]) => `${escapeHtml(label)} ×${n}`);
         return `<div class="card-meta" style="margin-top:4px; font-size:12px; color:var(--brown-dark)">📋 ${parts.join(' · ')}</div>`;
       })();
+      // 帳齡 badge：最久 booked 過期天數
+      const aging = getPetAgingDays(p.id);
+      const agingHtml = aging === 0 ? '' : (() => {
+        const cls = aging >= 60 ? 'aging-bad' : (aging >= 30 ? 'aging-warn' : 'aging-mild');
+        return `<div style="margin-top:4px"><span class="aging-badge ${cls}">⏰ 帳齡 ${aging} 天</span></div>`;
+      })();
       return `
         <div class="card" data-id="${p.id}">
           <div class="card-row">
@@ -1652,6 +1691,7 @@ function renderPets() {
               <div class="card-meta">${escapeHtml(petTagline(p))} · 飼主：${escapeHtml(p.ownerName || '—')}</div>
               <div class="card-meta" style="margin-top:4px; font-size:12px">${recentLabel}</div>
               ${courseSummary}
+              ${agingHtml}
             </div>
             <span class="badge">${count} 堂</span>
           </div>
@@ -2532,6 +2572,164 @@ function cleanupBookingShells(bookingId) {
   return { ok: true, removed: shells.length };
 }
 
+/* ============== 全局 money / method helpers ============== */
+function fmtMoney(n) {
+  if (n == null || isNaN(n)) return 'NT$ 0';
+  return 'NT$ ' + Math.round(Number(n)).toLocaleString('zh-TW');
+}
+function methodLabel(m) {
+  return ({
+    cash: '現金', transfer: '轉帳', linepay: 'Line Pay', other: '其他',
+  })[m] || (m || '—');
+}
+
+/* ============== PAYMENT (收款 / 退費) ============== */
+/**
+ * 確保 payment 物件 shape（讀取時做 migration / 防呆）
+ */
+function ensurePaymentShape(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(p => {
+    if (!p || typeof p !== 'object') return p;
+    return {
+      id: p.id,
+      bookingId: p.bookingId || '',
+      type: (p.type === 'in' || p.type === 'refund') ? p.type : 'in',
+      amount: Number(p.amount) || 0,
+      date: p.date || '',
+      method: p.method || '',  // cash / transfer / linepay / other
+      note: p.note || '',
+      createdAt: p.createdAt || new Date().toISOString(),
+    };
+  });
+}
+
+/** 取某 booking 的所有 payments（按日期新→舊） */
+function getBookingPayments(bookingId) {
+  const all = load(KEYS.payments, []);
+  return all
+    .filter(p => p.bookingId === bookingId)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+/** 該 booking 的應收 / 實收 / 退費 / 餘額 */
+function bookingPaymentSummary(booking) {
+  const total = bookingTotal(booking);
+  const payments = getBookingPayments(booking.id);
+  const received = payments.filter(p => p.type === 'in').reduce((s, p) => s + p.amount, 0);
+  const refunded = payments.filter(p => p.type === 'refund').reduce((s, p) => s + p.amount, 0);
+  // 應收餘額 = 總額 - 實收 + 退費
+  const balance = total - received + refunded;
+  return { total, received, refunded, balance, payments };
+}
+
+/** 寫入 / 更新 / 刪除 payment */
+function savePayment(payment) {
+  const all = load(KEYS.payments, []);
+  const idx = all.findIndex(p => p.id === payment.id);
+  const now = new Date().toISOString();
+  const final = Object.assign({}, payment, {
+    id: payment.id || uid(),
+    createdAt: payment.createdAt || now,
+  });
+  if (idx >= 0) all[idx] = final;
+  else all.push(final);
+  save(KEYS.payments, all);
+  return final;
+}
+function deletePayment(paymentId) {
+  const all = load(KEYS.payments, []);
+  save(KEYS.payments, all.filter(p => p.id !== paymentId));
+}
+
+/** booking 刪除時，連帶刪 payments（避免孤兒） */
+function cleanupBookingPayments(bookingId) {
+  const all = load(KEYS.payments, []);
+  const removed = all.filter(p => p.bookingId === bookingId).length;
+  if (removed === 0) return 0;
+  save(KEYS.payments, all.filter(p => p.bookingId !== bookingId));
+  return removed;
+}
+
+/** 開啟新增 / 編輯 payment 的 modal */
+function openPaymentForm(bookingId, payment, defaultType) {
+  const isEdit = !!payment;
+  const init = payment || { id: '', bookingId, type: defaultType || 'in', amount: '', date: todayStr(), method: '', note: '' };
+  const titleStr = isEdit ? '編輯收款紀錄' : (init.type === 'in' ? '新增收款' : '新增退費');
+  const html = `
+    <div class="modal" style="max-width:420px">
+      <h2>${titleStr}</h2>
+      <div class="field">
+        <label>類型</label>
+        <div class="radio-group">
+          <label class="radio-opt"><input type="radio" name="payType" value="in" ${init.type==='in'?'checked':''}> + 收款</label>
+          <label class="radio-opt"><input type="radio" name="payType" value="refund" ${init.type==='refund'?'checked':''}> − 退費</label>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>金額 *</label>
+          <input id="pay_amount" type="number" min="0" step="1" value="${init.amount || ''}" placeholder="例 4000">
+        </div>
+        <div class="field">
+          <label>日期 *</label>
+          <input id="pay_date" type="date" value="${init.date || todayStr()}">
+        </div>
+      </div>
+      <div class="field">
+        <label>方式</label>
+        <select id="pay_method">
+          <option value="" ${!init.method?'selected':''}>—</option>
+          <option value="cash" ${init.method==='cash'?'selected':''}>現金</option>
+          <option value="transfer" ${init.method==='transfer'?'selected':''}>轉帳</option>
+          <option value="linepay" ${init.method==='linepay'?'selected':''}>Line Pay</option>
+          <option value="other" ${init.method==='other'?'selected':''}>其他</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>備註</label>
+        <textarea id="pay_note" rows="2" placeholder="例：訂金 50%、分期第 1 期、退一半 because XXX">${escapeHtml(init.note || '')}</textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="pay_save">${isEdit ? '更新' : '新增'}</button>
+        ${isEdit ? '<button class="btn danger" id="pay_del">刪除</button>' : ''}
+        <button class="btn ghost" id="pay_cancel">取消</button>
+      </div>
+    </div>
+  `;
+  const overlay = openModal(html);
+  overlay.querySelector('#pay_save').onclick = () => {
+    const type = overlay.querySelector('input[name="payType"]:checked').value;
+    const amount = Number(overlay.querySelector('#pay_amount').value);
+    const date = overlay.querySelector('#pay_date').value;
+    const method = overlay.querySelector('#pay_method').value;
+    const note = overlay.querySelector('#pay_note').value.trim();
+    if (!amount || amount <= 0) { showNotice('金額必須 > 0', 'err'); return; }
+    if (!date) { showNotice('請選日期', 'err'); return; }
+    savePayment({
+      id: init.id || '',
+      bookingId,
+      type, amount, date, method, note,
+      createdAt: init.createdAt || null,
+    });
+    overlay.remove();
+    if (typeof renderBooking === 'function' && state.view === 'booking') renderBooking();
+    else render();
+    showNotice(isEdit ? '已更新' : (type === 'in' ? '已新增收款' : '已新增退費'));
+  };
+  if (isEdit) {
+    overlay.querySelector('#pay_del').onclick = () => {
+      if (!confirm('刪除這筆收款紀錄？')) return;
+      deletePayment(payment.id);
+      overlay.remove();
+      if (typeof renderBooking === 'function' && state.view === 'booking') renderBooking();
+      else render();
+      showNotice('已刪除');
+    };
+  }
+  overlay.querySelector('#pay_cancel').onclick = () => overlay.remove();
+}
+
 // 24h "16:00" → 「下午4:00」；空字串維持空
 function fmtTime12(hhmm) {
   if (!hhmm) return '';
@@ -2650,8 +2848,10 @@ function openBookingMenu(anchorBtn, bookingId) {
       return;
     }
     save(KEYS.bookings, load(KEYS.bookings, []).filter(b => b.id !== bookingId));
+    const removedPayments = cleanupBookingPayments(bookingId);
     let msg = '已刪除';
-    if (cleanup.removed > 0) msg += ` · 連帶移除 ${cleanup.removed} 顆空殼`;
+    if (cleanup.removed > 0) msg += ` · 移除 ${cleanup.removed} 顆空殼`;
+    if (removedPayments > 0) msg += ` · 移除 ${removedPayments} 筆收款紀錄`;
     showNotice(msg);
     render();
   };
@@ -2825,6 +3025,57 @@ function renderBooking() {
         </div>
       </div>
 
+      ${(() => {
+        if (!isEdit) return `
+          <div style="margin-top:18px; padding:14px; background:rgba(240,230,214,0.3); border-radius:8px; text-align:center; color:var(--text-soft); font-size:13px">
+            💡 請先儲存匯款通知（按下方「儲存」），才能記錄實際收款 / 退費
+          </div>`;
+        const summary = bookingPaymentSummary(b);
+        const balanceLabel = summary.balance > 0 ? '應收餘額' : (summary.balance < 0 ? '已超收' : '已結清');
+        const balanceCls = summary.balance > 0 ? 'warn' : (summary.balance < 0 ? 'warn' : 'good');
+        const paymentRows = summary.payments.length === 0
+          ? `<tr><td colspan="6" style="padding:14px; text-align:center; color:var(--text-soft); border:1px solid var(--border)">尚無收款 / 退費紀錄</td></tr>`
+          : summary.payments.map(p => `
+              <tr data-payid="${p.id}" style="cursor:pointer">
+                <td style="padding:6px 8px; border:1px solid var(--border); white-space:nowrap">${escapeHtml(fmtDate(p.date) || '—')}</td>
+                <td style="padding:6px 8px; border:1px solid var(--border); color:${p.type==='in'?'#4a7d4d':'var(--work)'}; white-space:nowrap">${p.type==='in'?'+ 收款':'− 退費'}</td>
+                <td style="padding:6px 8px; border:1px solid var(--border); text-align:right; font-weight:600; color:${p.type==='in'?'#4a7d4d':'var(--work)'}; white-space:nowrap">${p.type==='refund'?'−':''}${fmtMoney(p.amount)}</td>
+                <td style="padding:6px 8px; border:1px solid var(--border); white-space:nowrap">${escapeHtml(methodLabel(p.method))}</td>
+                <td style="padding:6px 8px; border:1px solid var(--border); font-size:12px; color:var(--text-soft)">${escapeHtml(p.note || '')}</td>
+                <td style="padding:6px 8px; border:1px solid var(--border); text-align:center; color:var(--text-soft)">⋯</td>
+              </tr>
+            `).join('');
+        return `
+          <div style="margin-top:18px; padding:14px; background:rgba(240,230,214,0.4); border-radius:8px">
+            <h3 style="margin:0 0 12px; font-size:15px; color:var(--brown-dark)">💰 收款紀錄</h3>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:12px">
+              <div class="stat-card"><div class="stat-label">應收</div><div class="stat-value">${fmtMoney(summary.total)}</div></div>
+              <div class="stat-card good"><div class="stat-label">實收</div><div class="stat-value">${fmtMoney(summary.received)}</div></div>
+              <div class="stat-card warn"><div class="stat-label">退費</div><div class="stat-value">${fmtMoney(summary.refunded)}</div></div>
+              <div class="stat-card ${balanceCls}"><div class="stat-label">${balanceLabel}</div><div class="stat-value">${fmtMoney(Math.abs(summary.balance))}</div></div>
+            </div>
+            <div style="overflow-x:auto">
+            <table style="width:100%; border-collapse:collapse; font-size:13px; min-width:520px">
+              <thead>
+                <tr style="background:#f0e6d6; color:#6b5435; text-align:left">
+                  <th style="padding:6px 8px; border:1px solid var(--border)">日期</th>
+                  <th style="padding:6px 8px; border:1px solid var(--border)">類型</th>
+                  <th style="padding:6px 8px; border:1px solid var(--border); text-align:right">金額</th>
+                  <th style="padding:6px 8px; border:1px solid var(--border)">方式</th>
+                  <th style="padding:6px 8px; border:1px solid var(--border)">備註</th>
+                  <th style="padding:6px 8px; border:1px solid var(--border)"></th>
+                </tr>
+              </thead>
+              <tbody id="paymentsTbody">${paymentRows}</tbody>
+            </table>
+            </div>
+            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
+              <button type="button" class="small-btn" id="addPaymentIn">+ 新增收款</button>
+              <button type="button" class="small-btn" id="addPaymentRefund" style="border-color:var(--work); color:var(--work)">− 新增退費</button>
+            </div>
+          </div>`;
+      })()}
+
       <div class="actions-row" style="margin-top:14px">
         <button class="btn" id="bk_save">💾 儲存</button>
         <button class="btn ghost" id="bk_pdf">🖨 預覽 / 列印 PDF</button>
@@ -2918,6 +3169,21 @@ function renderBooking() {
 
     document.getElementById('bk_save').onclick = () => commitBooking({ thenPdf: false });
     document.getElementById('bk_pdf').onclick = () => commitBooking({ thenPdf: true });
+
+    // 收款 / 退費 按鈕（只在 isEdit 時存在）
+    const addInBtn = document.getElementById('addPaymentIn');
+    if (addInBtn) addInBtn.onclick = () => openPaymentForm(b.id, null, 'in');
+    const addRefBtn = document.getElementById('addPaymentRefund');
+    if (addRefBtn) addRefBtn.onclick = () => openPaymentForm(b.id, null, 'refund');
+    // 點 payment row → 編輯
+    document.querySelectorAll('#paymentsTbody tr[data-payid]').forEach(tr => {
+      tr.onclick = () => {
+        const pid = tr.dataset.payid;
+        const all = load(KEYS.payments, []);
+        const p = all.find(x => x.id === pid);
+        if (p) openPaymentForm(b.id, p);
+      };
+    });
     if (isEdit) {
       document.getElementById('bk_del').onclick = () => {
         if (!confirm('刪除這筆匯款通知？')) return;
@@ -2927,8 +3193,10 @@ function renderBooking() {
           return;
         }
         save(KEYS.bookings, load(KEYS.bookings, []).filter(x => x.id !== b.id));
+        const removedPayments = cleanupBookingPayments(b.id);
         let msg = '已刪除';
-        if (cleanup.removed > 0) msg += ` · 連帶移除 ${cleanup.removed} 顆空殼`;
+        if (cleanup.removed > 0) msg += ` · 移除 ${cleanup.removed} 顆空殼`;
+        if (removedPayments > 0) msg += ` · 移除 ${removedPayments} 筆收款紀錄`;
         showNotice(msg);
         go('bookings', { petId: pet.id });
       };
@@ -4799,13 +5067,14 @@ function renderSettings() {
 
   document.getElementById('exportData').onclick = () => {
     const dump = {
-      version: 2,
+      version: 3,
       pets: load(KEYS.pets, []),
       sessions: load(KEYS.sessions, []),
       itemsCat: load(KEYS.itemsCat, []),
       itemsDog: load(KEYS.itemsDog, []),
       bookings: load(KEYS.bookings, []),
       bookingTemplate: load(KEYS.bookingTemplate, {}),
+      payments: load(KEYS.payments, []),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
@@ -4832,6 +5101,7 @@ function renderSettings() {
         if (data.itemsDog) save(KEYS.itemsDog, data.itemsDog);
         if (data.bookings) save(KEYS.bookings, data.bookings);
         if (data.bookingTemplate) save(KEYS.bookingTemplate, data.bookingTemplate);
+        if (data.payments) save(KEYS.payments, data.payments);
         showNotice('匯入完成');
         render();
       } catch (e) {
@@ -4993,8 +5263,10 @@ function renderStats() {
 
   // 累計
   let totalRev = 0, realizedRev = 0, unrealizedRev = 0, pendingRev = 0, overdueRev = 0;
+  let totalReceived = 0, totalRefunded = 0;  // L2: 實際金流（payments）
   const closedDetails = [];
   const byType = {};
+  const csvRows = [];  // L1-b: CSV 匯出每筆 booking 一行
 
   for (const b of bookings) {
     const sessCount = b.sessionCount || 0;
@@ -5005,6 +5277,11 @@ function renderStats() {
     const total = subtotal - discount;
     const pricePerSess = total / sessCount;
     totalRev += total;
+
+    // L2: 累計實收 / 退費（payments）
+    const summary = bookingPaymentSummary(b);
+    totalReceived += summary.received;
+    totalRefunded += summary.refunded;
 
     const bSess = sessions.filter(s => s.sourceBookingId === b.id);
     let realized = 0, unrealized = 0, pending = 0, overdue = 0;
@@ -5036,8 +5313,8 @@ function renderStats() {
     byType[ctLab].unrealized += unrealized;
     byType[ctLab].count++;
 
+    const pet = pets.find(p => p.id === b.petId) || {};
     if (closedCount > 0) {
-      const pet = pets.find(p => p.id === b.petId) || {};
       closedDetails.push({
         petName: pet.name || '?',
         petSpecies: pet.species || '',
@@ -5050,6 +5327,22 @@ function renderStats() {
         petId: b.petId,
       });
     }
+    // CSV row（每筆 booking 一行，不論是否呆帳）
+    csvRows.push({
+      bookingDate: (b.createdAt || '').slice(0, 10),
+      petName: pet.name || '?',
+      ownerName: pet.ownerName || '',
+      courseType: ctLab,
+      sessCount,
+      total,
+      received: summary.received,
+      refunded: summary.refunded,
+      balance: total - summary.received + summary.refunded,
+      doneCount,
+      closedCount,
+      pendingCount: bSess.filter(s => s.status === 'booked').length + remaining,
+      closedReasons: closedReasons.join('；'),
+    });
   }
   closedDetails.sort((a, b) => b.amount - a.amount);
 
@@ -5067,8 +5360,9 @@ function renderStats() {
 
   const closedTotalCount = closedDetails.reduce((sum, d) => sum + d.closedCount, 0);
 
+  const query = (settings.statsQuery || '').trim().toLowerCase();
   const header = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:8px; flex-wrap:wrap">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap">
       <div>
         <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📊 呆帳統計</div>
         <div style="font-size:12px; color:var(--text-soft); margin-top:2px">範圍內 ${bookings.length} 筆匯款通知 · ${closedTotalCount} 堂強制結案</div>
@@ -5077,14 +5371,36 @@ function renderStats() {
         ${RANGE_OPTS.map(o => `<option value="${o.k}" ${o.k===range?'selected':''}>${o.l}</option>`).join('')}
       </select>
     </div>
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap">
+      <input type="text" id="statsQuery" value="${escapeAttr(settings.statsQuery || '')}" placeholder="🔍 搜尋呆帳明細：寵物名 / 飼主 / 結案原因 / 課程類型" style="flex:1; min-width:220px; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-family:inherit; font-size:13px">
+      <button class="small-btn" id="exportStatsCsv" type="button">📤 匯出 CSV</button>
+    </div>
   `;
 
+  const balance = totalRev - totalReceived + totalRefunded;
   const summaryGrid = `
-    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:18px">
+    <div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">💰 金流（payments）</div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:14px">
       <div class="stat-card">
-        <div class="stat-label">總收費</div>
+        <div class="stat-label">應收（合約）</div>
         <div class="stat-value">${fmtMoney(totalRev)}</div>
       </div>
+      <div class="stat-card good">
+        <div class="stat-label">實收</div>
+        <div class="stat-value">${fmtMoney(totalReceived)}</div>
+        <div class="stat-pct">${pct(totalReceived, totalRev)}</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="stat-label">退費</div>
+        <div class="stat-value">${fmtMoney(totalRefunded)}</div>
+      </div>
+      <div class="stat-card ${balance > 0 ? 'warn' : 'good'}">
+        <div class="stat-label">${balance > 0 ? '應收餘額' : (balance < 0 ? '已超收' : '已結清')}</div>
+        <div class="stat-value">${fmtMoney(Math.abs(balance))}</div>
+      </div>
+    </div>
+    <div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">📋 課時履約（sessions）</div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:18px">
       <div class="stat-card good">
         <div class="stat-label">已兌現</div>
         <div class="stat-value">${fmtMoney(realizedRev)}</div>
@@ -5103,9 +5419,17 @@ function renderStats() {
     </div>
   `;
 
-  const closedHtml = closedDetails.length === 0
-    ? `<div class="empty" style="padding:20px; text-align:center; color:var(--text-soft); background:rgba(107,158,110,0.05); border-radius:8px">期間內沒有強制結案紀錄 🎉</div>`
-    : closedDetails.map(d => `
+  const filteredClosed = !query ? closedDetails : closedDetails.filter(d =>
+    d.petName.toLowerCase().includes(query)
+    || (d.ownerName || '').toLowerCase().includes(query)
+    || d.courseType.toLowerCase().includes(query)
+    || d.reasons.some(r => (r || '').toLowerCase().includes(query))
+  );
+  const closedHtml = filteredClosed.length === 0
+    ? (closedDetails.length === 0
+        ? `<div class="empty" style="padding:20px; text-align:center; color:var(--text-soft); background:rgba(107,158,110,0.05); border-radius:8px">期間內沒有強制結案紀錄 🎉</div>`
+        : `<div class="empty" style="padding:20px; text-align:center; color:var(--text-soft)">「${escapeHtml(query)}」沒有 match 的呆帳明細</div>`)
+    : filteredClosed.map(d => `
         <div class="card" data-petid="${d.petId}">
           <div class="card-row">
             <div style="flex:1; min-width:0">
@@ -5160,9 +5484,10 @@ function renderStats() {
       ${byTypeHtml}
     ` : ''}
     <p style="margin-top:24px; font-size:12px; color:var(--text-soft); line-height:1.7">
-      💡 「已兌現」= status=done 的堂數 × 單堂單價（含交通扣折扣後）<br>
-      💡 「未兌現」= status=closed（強制結案）的堂數 — 這些是已收錢但無法兌現的呆帳<br>
-      💡 「進行中」含已預約、待安排、待結案，預設這些會兌現<br>
+      💡 <b>金流區（合約 / payments）：</b><br>
+      「應收」= 所有 booking 的合約總額（含交通扣折扣後）；「實收 / 退費」= 你在每筆 booking 裡記錄的 payments；「應收餘額」= 應收 − 實收 + 退費<br>
+      💡 <b>課時履約區（sessions 角度）：</b><br>
+      「已兌現」= status=done 的堂數 × 單堂單價；「未兌現」= status=closed（強制結案）的堂數 — 已收錢但無法上完的呆帳；「進行中」含已預約、待安排、待結案<br>
       💡 範圍切換按 booking 建立時間 (createdAt) 篩選
     </p>
   `;
@@ -5172,6 +5497,56 @@ function renderStats() {
     s.statsRange = e.target.value;
     save(KEYS.settings, s);
     renderStats();
+  };
+  const queryInput = document.getElementById('statsQuery');
+  if (queryInput) queryInput.oninput = () => {
+    const s = load(KEYS.settings, {});
+    s.statsQuery = queryInput.value;
+    save(KEYS.settings, s);
+    renderStats();
+    const newInput = document.getElementById('statsQuery');
+    if (newInput) {
+      newInput.focus();
+      newInput.setSelectionRange(newInput.value.length, newInput.value.length);
+    }
+  };
+  const csvBtn = document.getElementById('exportStatsCsv');
+  if (csvBtn) csvBtn.onclick = () => {
+    const escapeCsv = v => {
+      const str = String(v == null ? '' : v);
+      if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+      return str;
+    };
+    const headers = ['Booking 建立日', '寵物', '飼主', '課程類型', '堂數', '應收', '實收', '退費', '應收餘額', '已完成堂', '結案堂', '進行中堂', '結案原因'];
+    const lines = [headers.join(',')].concat(
+      csvRows.map(r => [
+        escapeCsv(r.bookingDate),
+        escapeCsv(r.petName),
+        escapeCsv(r.ownerName),
+        escapeCsv(r.courseType),
+        r.sessCount,
+        r.total,
+        r.received,
+        r.refunded,
+        r.balance,
+        r.doneCount,
+        r.closedCount,
+        r.pendingCount,
+        escapeCsv(r.closedReasons),
+      ].join(','))
+    );
+    // 加 BOM 讓 Excel 開繁中正常
+    const csv = '﻿' + lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `petcare-stats-${todayStr()}-${range}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showNotice(`已匯出 ${csvRows.length} 筆 booking`);
   };
   main.querySelectorAll('.card[data-petid]').forEach(el => {
     el.onclick = () => go('sessions', { petId: el.dataset.petid });
