@@ -2018,14 +2018,13 @@ function renderSessions() {
   const petInfoCollapsed = _settings.petInfoCollapsed === true;
   const meta = `
     <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
-      <div id="petInfoToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none">
-        <div class="card-meta" style="margin:0">
-          ${escapeHtml(petTagline(pet))} · 飼主 ${escapeHtml(pet.ownerName || '—')}
+      <div id="petInfoToggle" style="display:flex; align-items:flex-start; justify-content:space-between; cursor:pointer; user-select:none; gap:8px">
+        <div class="card-meta" style="margin:0; flex:1; min-width:0">
+          ${escapeHtml(petTagline(pet))} · 飼主 ${escapeHtml(pet.ownerName || '—')}${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
         </div>
-        <span style="color:var(--text-soft); font-size:12px">${petInfoCollapsed ? '▶ 展開資料' : '▼ 收起'}</span>
+        <span style="color:var(--text-soft); font-size:12px; flex-shrink:0">${petInfoCollapsed ? '▶ 展開' : '▼ 收起'}</span>
       </div>
       <div id="petInfoBody" style="display:${petInfoCollapsed ? 'none' : 'block'}">
-        ${pet.ownerContact ? `<div class="card-meta" style="margin-top:6px">📞 ${escapeHtml(pet.ownerContact)}</div>` : ''}
         ${pet.ownerAddress ? `<div class="card-meta" style="margin-top:6px">📍 ${escapeHtml(pet.ownerAddress)}</div>` : ''}
         ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
         ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
