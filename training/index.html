@@ -3024,11 +3024,22 @@ function ensureMaterialShape(arr) {
     return {
       id: m.id,
       title: m.title || '',
-      content: ensureColorHtml(m.content || ''),  // HTML（用 colorEditor）
+      url: typeof m.url === 'string' ? m.url : '',  // 外部連結（如 YT 影片 URL，可空）
+      content: ensureColorHtml(m.content || ''),     // HTML 文章內容（可空）
       createdAt: m.createdAt || new Date().toISOString(),
       updatedAt: m.updatedAt || m.createdAt || new Date().toISOString(),
     };
   });
+}
+/** 判斷教材有哪些 type（給 UI 顯示 icon 用） */
+function materialTypeLabel(m) {
+  if (!m) return '';
+  const hasContent = m.content && m.content.replace(/<[^>]+>/g, '').trim().length > 0;
+  const hasUrl = m.url && m.url.trim();
+  if (hasContent && hasUrl) return '📝🔗';
+  if (hasContent) return '📝';
+  if (hasUrl) return '🔗';
+  return '';
 }
 function getAllMaterials() {
   return load(KEYS.materials, []).slice().sort((a, b) =>
@@ -3074,30 +3085,42 @@ function deleteMaterial(materialId) {
 function attachmentPdfHtml(sess) {
   if (!sess) return '';
   const matIds = sess.attachedMaterialIds || [];
-  // 合併「全域預設連結」+「session 額外連結」，按 URL 去重
-  const settings = load(KEYS.settings, {});
-  const defaultLinks = (settings.defaultExternalLinks || []).filter(l => l && l.url);
   const sessLinks = (sess.externalLinks || []).filter(l => l && l.url);
-  const seenUrl = new Set();
-  const links = [...defaultLinks, ...sessLinks].filter(l => {
-    if (seenUrl.has(l.url)) return false;
-    seenUrl.add(l.url);
-    return true;
-  });
-  if (matIds.length === 0 && links.length === 0) return '';
+  if (matIds.length === 0 && sessLinks.length === 0) return '';
+
   const allMats = load(KEYS.materials, []);
   const matMap = {};
   allMats.forEach(m => { matMap[m.id] = m; });
-  const matsHtml = matIds.map(id => {
+
+  // 把 attached materials 拆兩堆：有 content 的進「文章附錄頁」、有 url 的進「連結 list」
+  const articleMats = [];
+  const linkEntries = [];
+  for (const id of matIds) {
     const m = matMap[id];
-    if (!m) return '';
-    return `
-      <section style="page-break-before:always; padding-top:18pt">
-        <h2 style="color:#6b5435; font-size:16pt; margin:0 0 12pt; border-bottom:2pt solid #c9a85a; padding-bottom:6pt">📚 ${escapeHtml(m.title || '附錄')}</h2>
-        <div style="font-size:11pt; line-height:1.7; color:#2d2620">${ensureColorHtml(m.content)}</div>
-      </section>
-    `;
-  }).join('');
+    if (!m) continue;
+    const hasContent = m.content && m.content.replace(/<[^>]+>/g, '').trim().length > 0;
+    const hasUrl = m.url && m.url.trim();
+    if (hasContent) articleMats.push(m);
+    if (hasUrl) linkEntries.push({ title: m.title || '', url: m.url });
+  }
+  // session 額外連結（ad-hoc）
+  for (const l of sessLinks) linkEntries.push(l);
+  // 去重
+  const seenUrl = new Set();
+  const links = linkEntries.filter(l => {
+    if (!l.url || seenUrl.has(l.url)) return false;
+    seenUrl.add(l.url);
+    return true;
+  });
+
+  if (articleMats.length === 0 && links.length === 0) return '';
+
+  const matsHtml = articleMats.map(m => `
+    <section style="page-break-before:always; padding-top:18pt">
+      <h2 style="color:#6b5435; font-size:16pt; margin:0 0 12pt; border-bottom:2pt solid #c9a85a; padding-bottom:6pt">📚 ${escapeHtml(m.title || '附錄')}</h2>
+      <div style="font-size:11pt; line-height:1.7; color:#2d2620">${ensureColorHtml(m.content)}</div>
+    </section>
+  `).join('');
   const linksHtml = links.length === 0 ? '' : `
     <section style="page-break-before:always; padding-top:18pt">
       <h2 style="color:#6b5435; font-size:16pt; margin:0 0 12pt; border-bottom:2pt solid #c9a85a; padding-bottom:6pt">🔗 相關資源連結</h2>
@@ -3127,7 +3150,6 @@ function openAttachmentForm(sess, onSaved) {
   const allMats = getAllMaterials();
   let links = JSON.parse(JSON.stringify(sess.externalLinks || []));
   const attachedSet = new Set(sess.attachedMaterialIds || []);
-  const settingsLinks = (load(KEYS.settings, {}).defaultExternalLinks || []).filter(l => l && l.url);
 
   const html = `
     <div class="modal" style="max-width:520px">
@@ -3136,27 +3158,28 @@ function openAttachmentForm(sess, onSaved) {
         勾選的教材 + 填好的連結，會出現在這堂課 PDF 報告的「附錄」頁。
       </p>
 
-      <h3 style="font-size:14px; color:var(--brown-dark); margin:8px 0">📚 從教材庫挑</h3>
+      <h3 style="font-size:14px; color:var(--brown-dark); margin:8px 0">📚 從教材庫挑（這隻狗適合的）</h3>
       ${allMats.length === 0
         ? '<div style="padding:10px; color:var(--text-soft); font-size:12px; background:rgba(0,0,0,0.03); border-radius:6px">尚無教材。請到 ⚙ 設定 → 教材庫 新增。</div>'
-        : `<div style="max-height:200px; overflow-y:auto; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:14px">
-            ${allMats.map(m => `
-              <label style="display:flex; align-items:center; gap:8px; padding:5px 0; cursor:pointer; border-bottom:1px solid rgba(0,0,0,0.05)">
-                <input type="checkbox" data-mat-attach="${m.id}" ${attachedSet.has(m.id) ? 'checked' : ''} style="width:16px; height:16px; flex-shrink:0">
-                <span style="font-size:13px">${escapeHtml(m.title || '(未命名)')}</span>
-              </label>
-            `).join('')}
-          </div>`}
-
-      <h3 style="font-size:14px; color:var(--brown-dark); margin:14px 0 8px">📌 預設連結（每堂課自動附）</h3>
-      ${settingsLinks.length === 0
-        ? '<p class="card-meta" style="font-size:12px; margin-bottom:14px">尚無預設連結。請到 ⚙ 設定 → 預設外部連結 設定（例如你的 YT 頻道常推影片）。</p>'
-        : `<ul style="font-size:12px; color:var(--text-soft); padding-left:20px; margin:0 0 14px; line-height:1.8">
-            ${settingsLinks.map(l => `<li><b>${escapeHtml(l.title || l.url)}</b>${l.title ? '：<span style=\"font-size:11px\">' + escapeHtml(l.url) + '</span>' : ''}</li>`).join('')}
-          </ul>`}
+        : `<div style="max-height:280px; overflow-y:auto; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:14px">
+            ${allMats.map(m => {
+              const typeIcon = materialTypeLabel(m);
+              const urlPreview = m.url ? `<div style="font-size:11px; color:var(--text-soft); word-break:break-all; padding-left:24px">${escapeHtml(m.url)}</div>` : '';
+              return `
+                <label style="display:block; padding:6px 0; cursor:pointer; border-bottom:1px solid rgba(0,0,0,0.05)">
+                  <div style="display:flex; align-items:center; gap:8px">
+                    <input type="checkbox" data-mat-attach="${m.id}" ${attachedSet.has(m.id) ? 'checked' : ''} style="width:16px; height:16px; flex-shrink:0">
+                    <span style="font-size:13px"><span style="margin-right:4px">${typeIcon}</span>${escapeHtml(m.title || '(未命名)')}</span>
+                  </div>
+                  ${urlPreview}
+                </label>
+              `;
+            }).join('')}
+          </div>
+          <p class="card-meta" style="font-size:11px; margin:0 0 14px">📝 = 文章 / 🔗 = 外部連結 / 📝🔗 = 兩者都有</p>`}
 
       <h3 style="font-size:14px; color:var(--brown-dark); margin:14px 0 8px">🔗 這堂課額外加的連結</h3>
-      <p class="card-meta" style="font-size:12px; margin-bottom:8px">只給這堂課用的（如：客戶問了某個特殊問題，給對應教學連結）</p>
+      <p class="card-meta" style="font-size:12px; margin-bottom:8px">只給這堂課用的（如：客戶問了某個特殊問題，給對應教學連結）— 不會進教材庫</p>
       <div id="linksList"></div>
       <button class="small-btn" id="addLinkBtn" type="button" style="margin-top:6px">+ 新增連結</button>
 
@@ -5422,22 +5445,6 @@ function renderSettings() {
     </div>
     </details>
 
-    <details class="settings-section">
-    <summary>預設外部連結</summary>
-    <div class="card" style="cursor:default">
-      <p class="card-meta" style="margin-bottom:12px">
-        • 每堂課的 PDF 報告會自動印上這些連結（在「相關資源連結」頁）<br>
-        • 例如：你自己 YT 頻道常推給家長看的影片<br>
-        • session 詳情頁的「附加資料」可額外加連結（這堂課獨有），不會動到預設清單<br>
-        • 編輯後記得按「儲存預設連結」
-      </p>
-      <div id="defaultLinksList"></div>
-      <button class="btn ghost" id="dl_addLink" style="margin-top:8px">+ 新增連結</button>
-      <div class="actions-row" style="margin-top:14px">
-        <button class="btn" id="dl_save">儲存預設連結</button>
-      </div>
-    </div>
-    </details>
 
     <details class="settings-section">
     <summary>訓練項目清單</summary>
@@ -5625,18 +5632,25 @@ function renderSettings() {
             <button class="btn danger" data-mat-del="${i}" style="height:36px">刪除</button>
           </div>
         </div>
+        <div class="field" style="margin-bottom:6px">
+          <label>外部連結 URL（純連結教材只填這欄，留空表示沒有連結）</label>
+          <input type="url" data-mat-url="${i}" value="${escapeAttr(m.url||'')}" placeholder="https://youtu.be/...">
+        </div>
         <div class="field" style="margin-bottom:0">
-          <label>內容（會印在 PDF 附錄頁）</label>
+          <label>文章內容（純文章 / 連結 + 補充說明才填，留空表示純連結教材）</label>
           ${colorToolbarHtml('mat_' + i)}
           <div class="color-editor" contenteditable="true"
                data-mat-content="${i}" data-tb-id="mat_${i}"
-               style="font-size:13px; line-height:1.6; min-height:120px;"
+               style="font-size:13px; line-height:1.6; min-height:80px;"
                data-placeholder="點選文字 + 顏色按鈕上色">${ensureColorHtml(m.content)}</div>
         </div>
       </div>
     `).join('');
     wrap.querySelectorAll('[data-mat-title]').forEach(el => {
       el.oninput = (e) => { mats[parseInt(el.dataset.matTitle,10)].title = e.target.value; };
+    });
+    wrap.querySelectorAll('[data-mat-url]').forEach(el => {
+      el.oninput = (e) => { mats[parseInt(el.dataset.matUrl,10)].url = e.target.value; };
     });
     wrap.querySelectorAll('[data-mat-content]').forEach(el => {
       el.onblur = () => { mats[parseInt(el.dataset.matContent,10)].content = sanitizeColorHtml(el.innerHTML); };
@@ -5660,12 +5674,18 @@ function renderSettings() {
   };
   const matSaveBtn = document.getElementById('mat_save');
   if (matSaveBtn) matSaveBtn.onclick = () => {
-    // 過濾空標題（無標題視為未填的、不存）
+    // 過濾：標題空 OR (url 跟 content 都空) → 不存
     const cleaned = mats
-      .filter(m => (m.title || '').trim() !== '')
+      .filter(m => {
+        if (!(m.title || '').trim()) return false;
+        const hasUrl = (m.url || '').trim();
+        const hasContent = sanitizeColorHtml(m.content || '').replace(/<[^>]+>/g, '').trim();
+        return hasUrl || hasContent;
+      })
       .map(m => ({
         id: m.id || uid(),
         title: (m.title || '').trim(),
+        url: (m.url || '').trim(),
         content: sanitizeColorHtml(m.content || ''),
         createdAt: m.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -5674,45 +5694,6 @@ function renderSettings() {
     showNotice(`已儲存 ${cleaned.length} 份教材`);
   };
 
-  // 預設外部連結 inline editor
-  let defaultLinks = JSON.parse(JSON.stringify(s.defaultExternalLinks || []));
-  function renderDefaultLinksList() {
-    const wrap = document.getElementById('defaultLinksList');
-    if (!wrap) return;
-    if (defaultLinks.length === 0) {
-      wrap.innerHTML = '<div style="font-size:12px; color:var(--text-soft); padding:6px">尚無預設連結，點下方「+ 新增連結」開始</div>';
-      return;
-    }
-    wrap.innerHTML = defaultLinks.map((l, i) => `
-      <div style="display:flex; gap:6px; margin-bottom:6px; align-items:center">
-        <input type="text" data-dl-title="${i}" placeholder="標題（如「定點大小便教學」）" value="${escapeAttr(l.title || '')}" style="flex:1; min-width:100px">
-        <input type="url" data-dl-url="${i}" placeholder="https://..." value="${escapeAttr(l.url || '')}" style="flex:2; min-width:140px">
-        <button class="small-btn" data-dl-del="${i}" type="button" style="border-color:var(--work); color:var(--work); flex-shrink:0">×</button>
-      </div>
-    `).join('');
-    wrap.querySelectorAll('[data-dl-title]').forEach(el => {
-      el.oninput = () => { defaultLinks[parseInt(el.dataset.dlTitle,10)].title = el.value; };
-    });
-    wrap.querySelectorAll('[data-dl-url]').forEach(el => {
-      el.oninput = () => { defaultLinks[parseInt(el.dataset.dlUrl,10)].url = el.value; };
-    });
-    wrap.querySelectorAll('[data-dl-del]').forEach(el => {
-      el.onclick = () => { defaultLinks.splice(parseInt(el.dataset.dlDel,10), 1); renderDefaultLinksList(); };
-    });
-  }
-  renderDefaultLinksList();
-  const dlAddBtn = document.getElementById('dl_addLink');
-  if (dlAddBtn) dlAddBtn.onclick = () => { defaultLinks.push({ title: '', url: '' }); renderDefaultLinksList(); };
-  const dlSaveBtn = document.getElementById('dl_save');
-  if (dlSaveBtn) dlSaveBtn.onclick = () => {
-    const cleaned = defaultLinks
-      .map(l => ({ title: (l.title || '').trim(), url: (l.url || '').trim() }))
-      .filter(l => l.url);
-    const cur = load(KEYS.settings, {});
-    cur.defaultExternalLinks = cleaned;
-    save(KEYS.settings, cur);
-    showNotice(`已儲存 ${cleaned.length} 個預設連結`);
-  };
 
   // 同步：開關
   const syncCheckbox = document.getElementById('s_syncEnabled');
