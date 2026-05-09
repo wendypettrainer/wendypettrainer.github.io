@@ -914,6 +914,7 @@ const KEYS = {
   bookingTemplate: 'petcare.bookingTemplate',    // 帳戶 + 須知 + 預設值
   payments: 'petcare.payments',                  // 實際金流：收款 / 退費（per booking）
   studioPayments: 'petcare.studioPayments',      // 教室月結款（per studio + month）
+  materials: 'petcare.materials',                // 教材庫（給家長 PDF 附錄用）
   settings: 'petcare.settings',
   version: 'petcare.version',
   lastModified: 'petcare.lastModified',  // 雲端同步用
@@ -929,6 +930,7 @@ const SYNCABLE_KEYS = new Set([
   'petcare.bookingTemplate',
   'petcare.payments',
   'petcare.studioPayments',
+  'petcare.materials',
 ]);
 
 const DEFAULT_DOG_ITEMS = [
@@ -1271,6 +1273,11 @@ function ensureSessionShape(arr) {
       sourceIndex: (typeof s.sourceIndex === 'number') ? s.sourceIndex : null,
       closeReason: typeof s.closeReason === 'string' ? s.closeReason : '',
       closedAt: s.closedAt || null,
+      // F2: PDF 附錄附件
+      attachedMaterialIds: Array.isArray(s.attachedMaterialIds) ? s.attachedMaterialIds : [],
+      externalLinks: Array.isArray(s.externalLinks)
+        ? s.externalLinks.map(l => ({ title: (l && l.title) || '', url: (l && l.url) || '' }))
+        : [],
     };
   });
 }
@@ -1354,6 +1361,7 @@ function initStorage() {
   if (!localStorage.getItem(KEYS.bookingTemplate)) _writeRaw(KEYS.bookingTemplate, DEFAULT_BOOKING_TEMPLATE);
   if (!localStorage.getItem(KEYS.payments)) _writeRaw(KEYS.payments, []);
   if (!localStorage.getItem(KEYS.studioPayments)) _writeRaw(KEYS.studioPayments, []);
+  if (!localStorage.getItem(KEYS.materials)) _writeRaw(KEYS.materials, []);
   if (!localStorage.getItem(KEYS.settings)) _writeRaw(KEYS.settings, {
     githubPat: '',
     githubUser: 'wendypettrainer',
@@ -1367,6 +1375,7 @@ function initStorage() {
   // Migration: payments 確保 shape
   _writeRaw(KEYS.payments, ensurePaymentShape(load(KEYS.payments, [])));
   _writeRaw(KEYS.studioPayments, ensureStudioPaymentShape(load(KEYS.studioPayments, [])));
+  _writeRaw(KEYS.materials, ensureMaterialShape(load(KEYS.materials, [])));
   // Migration: pet 補 source / studioName / studioRates（既有視為 direct）
   _writeRaw(KEYS.pets, ensurePetShape(load(KEYS.pets, [])));
   _writeRaw(KEYS.version, 3);
@@ -1461,6 +1470,7 @@ function buildSyncPayload() {
     bookingTemplate: load(KEYS.bookingTemplate, {}),
     payments: load(KEYS.payments, []),
     studioPayments: load(KEYS.studioPayments, []),
+    materials: load(KEYS.materials, []),
   };
 }
 
@@ -1474,6 +1484,7 @@ function applySyncPayload(remote) {
   if (Array.isArray(remote.bookings)) _writeRaw(KEYS.bookings, remote.bookings);
   if (Array.isArray(remote.payments)) _writeRaw(KEYS.payments, ensurePaymentShape(remote.payments));
   if (Array.isArray(remote.studioPayments)) _writeRaw(KEYS.studioPayments, ensureStudioPaymentShape(remote.studioPayments));
+  if (Array.isArray(remote.materials)) _writeRaw(KEYS.materials, ensureMaterialShape(remote.materials));
   if (remote.bookingTemplate && typeof remote.bookingTemplate === 'object') {
     _writeRaw(KEYS.bookingTemplate, remote.bookingTemplate);
   }
@@ -2664,6 +2675,9 @@ function openSessionForm(session = null) {
       // 強制結案專用（status === 'closed' 時填）
       closeReason: data.closeReason || '',
       closedAt: data.closedAt || null,
+      // PDF 附錄附件（手動建立 session 時保留既有）
+      attachedMaterialIds: Array.isArray(data.attachedMaterialIds) ? data.attachedMaterialIds : [],
+      externalLinks: Array.isArray(data.externalLinks) ? data.externalLinks : [],
     };
     const sessions = load(KEYS.sessions, []);
     if (isEdit) {
@@ -3000,6 +3014,194 @@ function savePayment(payment) {
 function deletePayment(paymentId) {
   const all = load(KEYS.payments, []);
   save(KEYS.payments, all.filter(p => p.id !== paymentId));
+}
+
+/* ============== MATERIAL (給家長 PDF 附錄用的教材) ============== */
+function ensureMaterialShape(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(m => {
+    if (!m || typeof m !== 'object') return m;
+    return {
+      id: m.id,
+      title: m.title || '',
+      content: ensureColorHtml(m.content || ''),  // HTML（用 colorEditor）
+      createdAt: m.createdAt || new Date().toISOString(),
+      updatedAt: m.updatedAt || m.createdAt || new Date().toISOString(),
+    };
+  });
+}
+function getAllMaterials() {
+  return load(KEYS.materials, []).slice().sort((a, b) =>
+    (b.updatedAt || '').localeCompare(a.updatedAt || '')
+  );
+}
+function getMaterialById(id) {
+  return load(KEYS.materials, []).find(m => m.id === id) || null;
+}
+function saveMaterial(material) {
+  const all = load(KEYS.materials, []);
+  const idx = all.findIndex(m => m.id === material.id);
+  const now = new Date().toISOString();
+  const final = Object.assign({}, material, {
+    id: material.id || uid(),
+    content: sanitizeColorHtml(material.content || ''),
+    createdAt: material.createdAt || now,
+    updatedAt: now,
+  });
+  if (idx >= 0) all[idx] = final; else all.push(final);
+  save(KEYS.materials, all);
+  return final;
+}
+function deleteMaterial(materialId) {
+  const all = load(KEYS.materials, []);
+  save(KEYS.materials, all.filter(m => m.id !== materialId));
+  // 也清掉 sessions 引用
+  const sessions = load(KEYS.sessions, []);
+  let dirty = false;
+  for (const s of sessions) {
+    if (Array.isArray(s.attachedMaterialIds) && s.attachedMaterialIds.includes(materialId)) {
+      s.attachedMaterialIds = s.attachedMaterialIds.filter(id => id !== materialId);
+      dirty = true;
+    }
+  }
+  if (dirty) save(KEYS.sessions, sessions);
+}
+
+/**
+ * 給 PDF 模板用：產出附錄頁 HTML（教材內容 + 外部連結）。
+ * 每筆教材一個 page-break-before 的新頁；連結也獨立一頁。
+ */
+function attachmentPdfHtml(sess) {
+  if (!sess) return '';
+  const matIds = sess.attachedMaterialIds || [];
+  const links = (sess.externalLinks || []).filter(l => l && l.url);
+  if (matIds.length === 0 && links.length === 0) return '';
+  const allMats = load(KEYS.materials, []);
+  const matMap = {};
+  allMats.forEach(m => { matMap[m.id] = m; });
+  const matsHtml = matIds.map(id => {
+    const m = matMap[id];
+    if (!m) return '';
+    return `
+      <section style="page-break-before:always; padding-top:18pt">
+        <h2 style="color:#6b5435; font-size:16pt; margin:0 0 12pt; border-bottom:2pt solid #c9a85a; padding-bottom:6pt">📚 ${escapeHtml(m.title || '附錄')}</h2>
+        <div style="font-size:11pt; line-height:1.7; color:#2d2620">${ensureColorHtml(m.content)}</div>
+      </section>
+    `;
+  }).join('');
+  const linksHtml = links.length === 0 ? '' : `
+    <section style="page-break-before:always; padding-top:18pt">
+      <h2 style="color:#6b5435; font-size:16pt; margin:0 0 12pt; border-bottom:2pt solid #c9a85a; padding-bottom:6pt">🔗 相關資源連結</h2>
+      <ul style="font-size:11pt; line-height:1.9; color:#2d2620; padding-left:20pt">
+        ${links.map(l => `
+          <li style="margin-bottom:8pt">
+            <b>${escapeHtml(l.title || l.url)}</b><br>
+            <span style="font-size:9pt; color:#8a7e6f; word-break:break-all">${escapeHtml(l.url)}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </section>
+  `;
+  return matsHtml + linksHtml;
+}
+
+/** session 已附加的教材 + 連結 數量摘要（給按鈕 label 用） */
+function attachmentSummary(sess) {
+  if (!sess) return { total: 0, mat: 0, link: 0 };
+  const mat = (sess.attachedMaterialIds || []).length;
+  const link = (sess.externalLinks || []).filter(l => l && l.url).length;
+  return { total: mat + link, mat, link };
+}
+
+/** 開「附加資料」modal — 勾教材 + 外部連結，存到 session */
+function openAttachmentForm(sess, onSaved) {
+  const allMats = getAllMaterials();
+  let links = JSON.parse(JSON.stringify(sess.externalLinks || []));
+  const attachedSet = new Set(sess.attachedMaterialIds || []);
+
+  const html = `
+    <div class="modal" style="max-width:520px">
+      <h2>📎 附加資料給家長</h2>
+      <p class="card-meta" style="margin:0 0 12px; font-size:12px">
+        勾選的教材 + 填好的連結，會出現在這堂課 PDF 報告的「附錄」頁。
+      </p>
+
+      <h3 style="font-size:14px; color:var(--brown-dark); margin:8px 0">📚 從教材庫挑</h3>
+      ${allMats.length === 0
+        ? '<div style="padding:10px; color:var(--text-soft); font-size:12px; background:rgba(0,0,0,0.03); border-radius:6px">尚無教材。請到 ⚙ 設定 → 教材庫 新增。</div>'
+        : `<div style="max-height:200px; overflow-y:auto; padding:6px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:14px">
+            ${allMats.map(m => `
+              <label style="display:flex; align-items:center; gap:8px; padding:5px 0; cursor:pointer; border-bottom:1px solid rgba(0,0,0,0.05)">
+                <input type="checkbox" data-mat-attach="${m.id}" ${attachedSet.has(m.id) ? 'checked' : ''} style="width:16px; height:16px; flex-shrink:0">
+                <span style="font-size:13px">${escapeHtml(m.title || '(未命名)')}</span>
+              </label>
+            `).join('')}
+          </div>`}
+
+      <h3 style="font-size:14px; color:var(--brown-dark); margin:14px 0 8px">🔗 外部連結</h3>
+      <p class="card-meta" style="font-size:12px; margin-bottom:8px">外部影片 / 文章 URL，PDF 上會印出供飼主上網查看</p>
+      <div id="linksList"></div>
+      <button class="small-btn" id="addLinkBtn" type="button" style="margin-top:6px">+ 新增連結</button>
+
+      <div class="modal-actions" style="margin-top:18px">
+        <button class="btn ghost" id="att_cancel">取消</button>
+        <button class="btn" id="att_save">儲存</button>
+      </div>
+    </div>
+  `;
+  const overlay = openModal(html);
+  function renderLinksList() {
+    const wrap = overlay.querySelector('#linksList');
+    if (!wrap) return;
+    if (links.length === 0) {
+      wrap.innerHTML = '<div style="font-size:12px; color:var(--text-soft); padding:6px">尚無連結</div>';
+      return;
+    }
+    wrap.innerHTML = links.map((l, i) => `
+      <div style="display:flex; gap:6px; margin-bottom:6px; align-items:center">
+        <input type="text" data-link-title="${i}" placeholder="標題（如「散步教學影片」）" value="${escapeAttr(l.title || '')}" style="flex:1; min-width:80px">
+        <input type="url" data-link-url="${i}" placeholder="https://..." value="${escapeAttr(l.url || '')}" style="flex:2; min-width:120px">
+        <button class="small-btn" data-link-del="${i}" type="button" style="border-color:var(--work); color:var(--work); flex-shrink:0">×</button>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('[data-link-title]').forEach(el => {
+      el.oninput = () => { links[parseInt(el.dataset.linkTitle,10)].title = el.value; };
+    });
+    wrap.querySelectorAll('[data-link-url]').forEach(el => {
+      el.oninput = () => { links[parseInt(el.dataset.linkUrl,10)].url = el.value; };
+    });
+    wrap.querySelectorAll('[data-link-del]').forEach(el => {
+      el.onclick = () => { links.splice(parseInt(el.dataset.linkDel,10), 1); renderLinksList(); };
+    });
+  }
+  renderLinksList();
+  overlay.querySelector('#addLinkBtn').onclick = () => {
+    links.push({ title: '', url: '' });
+    renderLinksList();
+  };
+  overlay.querySelector('#att_cancel').onclick = () => overlay.remove();
+  overlay.querySelector('#att_save').onclick = () => {
+    const newAttached = [];
+    overlay.querySelectorAll('[data-mat-attach]').forEach(cb => {
+      if (cb.checked) newAttached.push(cb.dataset.matAttach);
+    });
+    const cleanLinks = links
+      .map(l => ({ title: (l.title || '').trim(), url: (l.url || '').trim() }))
+      .filter(l => l.url);
+    const all = load(KEYS.sessions, []);
+    const idx = all.findIndex(s => s.id === sess.id);
+    if (idx >= 0) {
+      all[idx].attachedMaterialIds = newAttached;
+      all[idx].externalLinks = cleanLinks;
+      save(KEYS.sessions, all);
+      // 同步更新傳入的 sess 物件（caller 可繼續用）
+      sess.attachedMaterialIds = newAttached;
+      sess.externalLinks = cleanLinks;
+    }
+    overlay.remove();
+    if (typeof onSaved === 'function') onSaved();
+    showNotice(`已儲存附加資料：${newAttached.length} 教材 / ${cleanLinks.length} 連結`);
+  };
 }
 
 /* ============== STUDIO PAYMENT (教室月結款) ============== */
@@ -3847,10 +4049,12 @@ function renderFirstConsultSession(sess, pet) {
         ? `<button class="btn ghost" id="closeSessBtn" style="border-color:#b8b3aa; color:#6a6258">⊘ 強制結案</button>`
         : ''}
       <button class="btn" id="saveBtn">💾 儲存</button>
+      <button class="btn ghost" id="attachBtn">📎 附加資料${attachmentSummary(sess).total > 0 ? ' ('+attachmentSummary(sess).total+')' : ''}</button>
       <button class="btn ghost" id="pdfBtn">📄 報告 PDF</button>
     </div>
   `;
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
+  document.getElementById('attachBtn').onclick = () => openAttachmentForm(sess, () => renderSession());
   document.getElementById('toggleStatusBtn').onclick = () => {
     toggleSessionStatus(sess.id);
     renderSession();
@@ -4065,12 +4269,14 @@ function renderSession() {
         ? `<button class="btn ghost" id="closeSessBtn" style="border-color:#b8b3aa; color:#6a6258">⊘ 強制結案</button>`
         : ''}
       <button class="btn" id="saveBtn">💾 儲存</button>
+      <button class="btn ghost" id="attachBtn">📎 附加資料${attachmentSummary(sess).total > 0 ? ' ('+attachmentSummary(sess).total+')' : ''}</button>
       <button class="btn ghost" id="pdfBtn">📄 下載 PDF</button>
       <button class="btn ghost" id="shareBtn">🔗 產生分享連結</button>
     </div>
   `;
 
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
+  document.getElementById('attachBtn').onclick = () => openAttachmentForm(sess, () => renderSession());
   document.getElementById('toggleStatusBtn').onclick = () => {
     toggleSessionStatus(sess.id);
     renderSession();
@@ -4285,6 +4491,8 @@ function exportFirstConsultPdf(sess, pet) {
       Wendy 溫蒂．貓與狗訓練日常 製作
     </div>
   </section>
+
+  ${attachmentPdfHtml(sess)}
 
   <scr` + `ipt>
     window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
@@ -4548,6 +4756,8 @@ function exportPdf(sess, pet) {
   <footer>
     Wendy 溫蒂．貓與狗訓練日常
   </footer>
+
+  ${attachmentPdfHtml(sess)}
 
   <scr` + `ipt>
     window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
@@ -5180,6 +5390,22 @@ function renderSettings() {
     </details>
 
     <details class="settings-section">
+    <summary>教材庫</summary>
+    <div class="card" style="cursor:default">
+      <p class="card-meta" style="margin-bottom:12px">
+        • 寫一次、重複用：撰寫教養文章 / 補充教材，可以在每堂課的「附加資料」中勾選附加給家長 PDF。<br>
+        • 例：「散步禮儀詳細指引」「陌生人來訪的應對」「咬手解決步驟」<br>
+        • 編輯後記得按「儲存教材庫」，否則離開頁面會遺失。
+      </p>
+      <div id="materialsList"></div>
+      <button class="btn ghost" id="mat_addMat" style="margin-top:8px;">+ 新增教材</button>
+      <div class="actions-row" style="margin-top:14px">
+        <button class="btn" id="mat_save">儲存教材庫</button>
+      </div>
+    </div>
+    </details>
+
+    <details class="settings-section">
     <summary>訓練項目清單</summary>
     <div class="tabs">
       <button class="tab active" data-tab="dog">🐶 狗 (${dogItems.length})</button>
@@ -5343,6 +5569,75 @@ function renderSettings() {
     }));
     showNotice('已重設首堂諮詢模板');
     renderSettings();
+  };
+
+  // 教材庫編輯器
+  let mats = JSON.parse(JSON.stringify(load(KEYS.materials, [])));
+  function renderMaterialsList() {
+    const wrap = document.getElementById('materialsList');
+    if (!wrap) return;
+    if (mats.length === 0) {
+      wrap.innerHTML = '<div style="text-align:center; padding:14px; color:var(--text-soft); font-size:12px">尚無教材，點下方「+ 新增教材」開始建立</div>';
+      return;
+    }
+    wrap.innerHTML = mats.map((m, i) => `
+      <div style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px">
+        <div class="row2" style="margin-bottom:6px">
+          <div class="field" style="margin-bottom:0">
+            <label>標題</label>
+            <input type="text" data-mat-title="${i}" value="${escapeAttr(m.title||'')}" placeholder="例：散步禮儀詳細指引">
+          </div>
+          <div class="field" style="margin-bottom:0; display:flex; align-items:flex-end">
+            <button class="btn danger" data-mat-del="${i}" style="height:36px">刪除</button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>內容（會印在 PDF 附錄頁）</label>
+          ${colorToolbarHtml('mat_' + i)}
+          <div class="color-editor" contenteditable="true"
+               data-mat-content="${i}" data-tb-id="mat_${i}"
+               style="font-size:13px; line-height:1.6; min-height:120px;"
+               data-placeholder="點選文字 + 顏色按鈕上色">${ensureColorHtml(m.content)}</div>
+        </div>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('[data-mat-title]').forEach(el => {
+      el.oninput = (e) => { mats[parseInt(el.dataset.matTitle,10)].title = e.target.value; };
+    });
+    wrap.querySelectorAll('[data-mat-content]').forEach(el => {
+      el.onblur = () => { mats[parseInt(el.dataset.matContent,10)].content = sanitizeColorHtml(el.innerHTML); };
+      el.oninput = () => { mats[parseInt(el.dataset.matContent,10)].content = el.innerHTML; };
+      const tb = wrap.querySelector(`[data-tb-for="${el.dataset.tbId}"]`);
+      if (tb) bindColorToolbar(tb, el);
+    });
+    wrap.querySelectorAll('[data-mat-del]').forEach(el => {
+      el.onclick = () => {
+        if (!confirm('刪除這份教材？\n\n（要儲存後才會真的刪除；尚未儲存可重新進設定頁恢復。）')) return;
+        mats.splice(parseInt(el.dataset.matDel,10), 1);
+        renderMaterialsList();
+      };
+    });
+  }
+  renderMaterialsList();
+  const matAddBtn = document.getElementById('mat_addMat');
+  if (matAddBtn) matAddBtn.onclick = () => {
+    mats.push({ id: uid(), title: '', content: '', createdAt: new Date().toISOString() });
+    renderMaterialsList();
+  };
+  const matSaveBtn = document.getElementById('mat_save');
+  if (matSaveBtn) matSaveBtn.onclick = () => {
+    // 過濾空標題（無標題視為未填的、不存）
+    const cleaned = mats
+      .filter(m => (m.title || '').trim() !== '')
+      .map(m => ({
+        id: m.id || uid(),
+        title: (m.title || '').trim(),
+        content: sanitizeColorHtml(m.content || ''),
+        createdAt: m.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+    save(KEYS.materials, cleaned);
+    showNotice(`已儲存 ${cleaned.length} 份教材`);
   };
 
   // 同步：開關
@@ -5585,6 +5880,7 @@ function renderSettings() {
       bookingTemplate: load(KEYS.bookingTemplate, {}),
       payments: load(KEYS.payments, []),
       studioPayments: load(KEYS.studioPayments, []),
+      materials: load(KEYS.materials, []),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
@@ -5613,6 +5909,7 @@ function renderSettings() {
         if (data.bookingTemplate) save(KEYS.bookingTemplate, data.bookingTemplate);
         if (data.payments) save(KEYS.payments, data.payments);
         if (data.studioPayments) save(KEYS.studioPayments, data.studioPayments);
+        if (data.materials) save(KEYS.materials, data.materials);
         showNotice('匯入完成');
         render();
       } catch (e) {
