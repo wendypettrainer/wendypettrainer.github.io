@@ -230,6 +230,76 @@
   .aging-badge.aging-warn { background: #f9d8a8; color: #a85f33; border: 1px solid #e8b894; }
   .aging-badge.aging-bad  { background: #f5b9a0; color: #8a3a1a; font-weight: 600; border: 1px solid #d88068; }
 
+  /* 月曆 view */
+  .cal-week-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-soft);
+    margin-bottom: 4px;
+  }
+  .cal-week-header .sun { color: #c97a4f; }
+  .cal-week-header .sat { color: #5a7a9e; }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+  .cal-cell {
+    background: white;
+    min-height: 78px;
+    padding: 4px;
+    font-size: 11px;
+    overflow: hidden;
+  }
+  .cal-cell.empty { background: rgba(0,0,0,0.03); }
+  .cal-cell.today { background: rgba(255,217,102,0.18); border: 2px solid #c9a85a; padding: 2px; }
+  .cal-day { font-weight: 600; color: var(--brown-dark); margin-bottom: 2px; font-size: 12px; }
+  .cal-cell.empty .cal-day { color: var(--text-soft); opacity: 0.4; }
+  .cal-sess {
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    margin-bottom: 2px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cal-sess-booked  { background: #f0e6d6; color: #6b5435; }
+  .cal-sess-pending { background: #fbe8d4; color: #c97a4f; border: 1px solid #e8b894; }
+  .cal-sess-done    { background: rgba(107,158,110,0.2); color: #4a7d4d; text-decoration: line-through; }
+  .cal-sess-closed  { background: #d8d4ce; color: #6a6258; text-decoration: line-through; }
+
+  /* 設定頁可摺疊 section */
+  .settings-section { margin-bottom: 14px; }
+  .settings-section > summary {
+    list-style: none;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--brown-dark);
+    padding: 8px 4px;
+    user-select: none;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .settings-section > summary::-webkit-details-marker { display: none; }
+  .settings-section > summary::after {
+    content: '▶';
+    color: var(--text-soft);
+    font-size: 12px;
+  }
+  .settings-section[open] > summary::after { content: '▼'; }
+
   /* 寵物列表來源 chips */
   .source-chips {
     display: flex;
@@ -791,6 +861,7 @@
     <button class="icon-btn" id="backBtn" title="返回上一層">‹</button>
     <nav class="breadcrumb" id="breadcrumb"></nav>
     <span class="sync-dot" id="syncDot" title="同步狀態（點開設定查看）"></span>
+    <button class="icon-btn" id="calendarBtn" title="月曆">📅</button>
     <button class="icon-btn" id="statsBtn" title="會計">📊</button>
     <button class="icon-btn" id="settingsBtn" title="設定">⚙</button>
   </header>
@@ -1600,6 +1671,9 @@ function updateHeader() {
   } else if (state.view === 'stats') {
     segs.push({ label: '寵物列表', action: 'pets' });
     segs.push({ label: '📊 會計', current: true });
+  } else if (state.view === 'calendar') {
+    segs.push({ label: '寵物列表', action: 'pets' });
+    segs.push({ label: '📅 月曆', current: true });
   }
 
   breadcrumb.innerHTML = segs.map((seg, i) => {
@@ -1666,6 +1740,7 @@ document.getElementById('backBtn').onclick = () => {
   else if (state.view === 'booking') go('bookings', { petId: state.petId });
   else if (state.view === 'settings') go(state._returnView || 'pets');
   else if (state.view === 'stats') go(state._returnView || 'pets');
+  else if (state.view === 'calendar') go(state._returnView || 'pets');
 };
 document.getElementById('settingsBtn').onclick = () => {
   state._returnView = state.view;
@@ -1674,6 +1749,10 @@ document.getElementById('settingsBtn').onclick = () => {
 document.getElementById('statsBtn').onclick = () => {
   state._returnView = state.view;
   go('stats');
+};
+document.getElementById('calendarBtn').onclick = () => {
+  state._returnView = state.view;
+  go('calendar');
 };
 
 /* ============== VIEW: PETS ============== */
@@ -4944,7 +5023,8 @@ function renderSettings() {
       💾 訓練項目區會<b>自動儲存</b>（離開欄位即存）。GitHub 設定要按下方「儲存設定」鈕。
     </div>
 
-    <h3 style="color:var(--brown-dark); margin: 4px 0 10px; font-size:15px">☁️ 跨裝置同步</h3>
+    <details class="settings-section" open>
+    <summary>跨裝置同步</summary>
     <div class="card" style="cursor:default">
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
         <input type="checkbox" id="s_syncEnabled" ${s.syncEnabled?'checked':''}
@@ -4966,8 +5046,10 @@ function renderSettings() {
         💡 <b>需要</b>：下方 GitHub PAT 已設定（gist 權限）。
       </p>
     </div>
+    </details>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">GitHub 同步</h3>
+    <details class="settings-section">
+    <summary>GitHub 同步</summary>
     <div class="card" style="cursor:default">
       <div class="field">
         <label>GitHub Personal Access Token（gist 權限）</label>
@@ -4997,8 +5079,10 @@ function renderSettings() {
         飼主開連結時匿名讀取，不需 PAT。
       </p>
     </div>
+    </details>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 課程預約樣板</h3>
+    <details class="settings-section">
+    <summary>課程預約樣板</summary>
     <div class="card" style="cursor:default">
       <p class="card-meta" style="margin-bottom:12px">
         💡 這裡編輯的內容會出現在每隻寵物的課程預約 PDF 上。<br>
@@ -5058,8 +5142,10 @@ function renderSettings() {
         <button class="btn ghost" id="bt_reset">重設為預設文字</button>
       </div>
     </div>
+    </details>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📨 首堂諮詢報告模板</h3>
+    <details class="settings-section">
+    <summary>首堂諮詢報告模板</summary>
     <div class="card" style="cursor:default">
       <p class="card-meta" style="margin-bottom:12px">
         💡 這些是<b>給家長看的報告</b>快速插入文字。建立首堂諮詢課程時，按模板按鈕會把對應段落插到報告內容游標位置，你再改填具體內容。
@@ -5071,15 +5157,19 @@ function renderSettings() {
         <button class="btn ghost" id="fc_reset">重設為預設模板</button>
       </div>
     </div>
+    </details>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">訓練項目清單</h3>
+    <details class="settings-section">
+    <summary>訓練項目清單</summary>
     <div class="tabs">
       <button class="tab active" data-tab="dog">🐶 狗 (${dogItems.length})</button>
       <button class="tab" data-tab="cat">🐱 貓 (${catItems.length})</button>
     </div>
     <div id="itemEditor"></div>
+    </details>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">資料管理</h3>
+    <details class="settings-section">
+    <summary>資料管理</summary>
     <div class="card" style="cursor:default">
       <div class="actions-row">
         <button class="btn ghost" id="exportData">匯出全部資料 (JSON)</button>
@@ -5091,8 +5181,10 @@ function renderSettings() {
         匯出 JSON 是備份用，匯入 JSON 會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
       </p>
     </div>
+    </details>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">資料修復</h3>
+    <details class="settings-section">
+    <summary>資料修復</summary>
     <div class="card" style="cursor:default">
       <div class="actions-row">
         <button class="btn ghost" id="linkOldData">🔗 連結舊課程預約 / 補產殼</button>
@@ -5102,6 +5194,7 @@ function renderSettings() {
         正常情況新建匯款已自動產殼，這個按鈕只在你舊資料還沒連結時用。可以重複按、不會重複產生。
       </p>
     </div>
+    </details>
 
   `;
 
@@ -5625,6 +5718,136 @@ function findExistingPet(parsed) {
     }
     // 任一方沒填飼主，視為同一隻（保守判斷）
     return true;
+  });
+}
+
+/* ============== VIEW: CALENDAR（全局月曆）============== */
+function renderCalendar() {
+  const main = document.getElementById('main');
+  const settings = load(KEYS.settings, {});
+  const todayStrV = todayStr();
+  const monthStr = settings.calendarMonth || todayStrV.slice(0, 7);  // 'YYYY-MM'
+  const [year, month] = monthStr.split('-').map(Number);
+
+  const allSessions = load(KEYS.sessions, []);
+  const allPets = load(KEYS.pets, []);
+  const petById = {};
+  allPets.forEach(p => { petById[p.id] = p; });
+
+  // 收集該月所有 sessions（依日期分組）
+  const sessionsByDate = {};
+  for (const s of allSessions) {
+    if (!s.date) continue;
+    if (s.date.slice(0, 7) !== monthStr) continue;
+    if (!sessionsByDate[s.date]) sessionsByDate[s.date] = [];
+    sessionsByDate[s.date].push(s);
+  }
+
+  // 月份 grid
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+  const daysInMonth = lastDay.getDate();
+  const firstWeekday = firstDay.getDay();  // 0=Sun
+
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    cells.push({ day: d, dateStr, sessions: sessionsByDate[dateStr] || [] });
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  // 上下月
+  const prevMonth = (() => {
+    const d = new Date(year, month - 2, 1);
+    return d.toISOString().slice(0, 7);
+  })();
+  const nextMonth = (() => {
+    const d = new Date(year, month, 1);
+    return d.toISOString().slice(0, 7);
+  })();
+
+  // 該月統計
+  let totalCount = 0, doneCount = 0, closedCount = 0, bookedFutureCount = 0, pendingCount = 0;
+  for (const arr of Object.values(sessionsByDate)) {
+    for (const s of arr) {
+      totalCount++;
+      if (s.status === 'closed') closedCount++;
+      else if (s.status === 'done') doneCount++;
+      else if (s.date && s.date < todayStrV) pendingCount++;
+      else bookedFutureCount++;
+    }
+  }
+
+  const headerHtml = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap">
+      <div>
+        <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📅 ${year} 年 ${month} 月</div>
+        <div style="font-size:12px; color:var(--text-soft); margin-top:2px">本月共 ${totalCount} 堂 · 已完成 ${doneCount} · 預約 ${bookedFutureCount} · 待結案 ${pendingCount} · 已結案 ${closedCount}</div>
+      </div>
+      <div style="display:flex; gap:6px">
+        <button class="small-btn" id="calPrev" type="button">◀</button>
+        <button class="small-btn" id="calToday" type="button">本月</button>
+        <button class="small-btn" id="calNext" type="button">▶</button>
+      </div>
+    </div>
+  `;
+
+  const weekHeader = `
+    <div class="cal-week-header">
+      <div class="sun">日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div class="sat">六</div>
+    </div>
+  `;
+
+  const cellsHtml = cells.map(c => {
+    if (!c) return `<div class="cal-cell empty"></div>`;
+    const isToday = c.dateStr === todayStrV;
+    const sessHtml = c.sessions.map(s => {
+      const pet = petById[s.petId];
+      const petName = pet ? pet.name : '?';
+      let cls;
+      if (s.status === 'closed') cls = 'cal-sess-closed';
+      else if (s.status === 'done') cls = 'cal-sess-done';
+      else if (s.date && s.date < todayStrV) cls = 'cal-sess-pending';
+      else cls = 'cal-sess-booked';
+      return `<div class="cal-sess ${cls}" data-cal-sid="${s.id}" title="${escapeAttr(petName)}">${escapeHtml(petName)}</div>`;
+    }).join('');
+    return `<div class="cal-cell ${isToday ? 'today' : ''}">
+      <div class="cal-day">${c.day}</div>
+      ${sessHtml}
+    </div>`;
+  }).join('');
+
+  main.innerHTML = headerHtml + weekHeader + `<div class="cal-grid">${cellsHtml}</div>` + `
+    <p style="margin-top:14px; font-size:11px; color:var(--text-soft); line-height:1.7">
+      💡 顏色：<span class="cal-sess cal-sess-booked" style="display:inline-block; padding:1px 6px">已預約</span>
+      <span class="cal-sess cal-sess-pending" style="display:inline-block; padding:1px 6px">待結案</span>
+      <span class="cal-sess cal-sess-done" style="display:inline-block; padding:1px 6px">已完成</span>
+      <span class="cal-sess cal-sess-closed" style="display:inline-block; padding:1px 6px">已結案</span><br>
+      💡 點任一格 session 跳到該堂課詳情頁；待安排（沒日期）的 session 不會出現在月曆。
+    </p>
+  `;
+
+  document.getElementById('calPrev').onclick = () => {
+    const sx = load(KEYS.settings, {});
+    sx.calendarMonth = prevMonth;
+    save(KEYS.settings, sx);
+    renderCalendar();
+  };
+  document.getElementById('calNext').onclick = () => {
+    const sx = load(KEYS.settings, {});
+    sx.calendarMonth = nextMonth;
+    save(KEYS.settings, sx);
+    renderCalendar();
+  };
+  document.getElementById('calToday').onclick = () => {
+    const sx = load(KEYS.settings, {});
+    sx.calendarMonth = todayStrV.slice(0, 7);
+    save(KEYS.settings, sx);
+    renderCalendar();
+  };
+  main.querySelectorAll('[data-cal-sid]').forEach(el => {
+    el.onclick = () => go('session', { sessionId: el.dataset.calSid });
   });
 }
 
@@ -6571,6 +6794,7 @@ function render() {
   else if (state.view === 'booking') renderBooking();
   else if (state.view === 'settings') renderSettings();
   else if (state.view === 'stats') renderStats();
+  else if (state.view === 'calendar') renderCalendar();
 }
 
 initStorage();
