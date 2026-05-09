@@ -900,6 +900,60 @@ function ensureColorHtml(s) {
   if (!s) return '';
   return looksLikeHtml(s) ? sanitizeColorHtml(s) : plainTextToHtml(s);
 }
+// 共用：產生顏色 toolbar HTML
+function colorToolbarHtml(idForBind = '') {
+  const dataAttr = idForBind ? ` data-tb-for="${idForBind}"` : '';
+  return `<div class="color-toolbar"${dataAttr}>
+    <button type="button" class="tb-clear" data-color="">清色</button>
+    <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
+    <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
+    <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
+  </div>`;
+}
+// 共用：綁定 toolbar 跟 editor
+function bindColorToolbar(toolbarEl, editorEl) {
+  toolbarEl.querySelectorAll('button[data-color]').forEach(btn => {
+    btn.onmousedown = (e) => e.preventDefault();
+    btn.onclick = (e) => {
+      e.preventDefault();
+      applyColorToSelection(btn.dataset.color, editorEl);
+    };
+  });
+}
+// 共用：插入純文字到 contenteditable 游標位置（\n 自動轉 <br>）
+function insertTextAtCursor(editorEl, text) {
+  editorEl.focus();
+  const sel = window.getSelection();
+  let range;
+  if (sel.rangeCount === 0 || !editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(editorEl);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    range = sel.getRangeAt(0);
+  }
+  range.deleteContents();
+  const parts = String(text).split('\n');
+  parts.forEach((part, i) => {
+    if (i > 0) {
+      const br = document.createElement('br');
+      range.insertNode(br);
+      range.setStartAfter(br);
+      range.collapse(true);
+    }
+    if (part) {
+      const tn = document.createTextNode(part);
+      range.insertNode(tn);
+      range.setStartAfter(tn);
+      range.collapse(true);
+    }
+  });
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editorEl.dispatchEvent(new Event('input', { bubbles: true }));
+}
 // 訓練方法表格 → HTML（cell 內容已是 sanitized HTML）
 function methodTableToHtml(table, opts = {}) {
   const t = normalizeTable(table);
@@ -2500,7 +2554,10 @@ function renderFirstConsultSession(sess, pet) {
     <div class="card" style="cursor:default">
       <div class="field">
         <label>FAS 觀察筆記</label>
-        <textarea id="fasNotes" rows="10" placeholder="點下方色帶按鈕插入帶顏色的等級標記。例：&#10;🔴 高度 進門時瞳孔放大、僵住 5 秒&#10;🟢 輕微 接受零食後緩和&#10;🟡 中度 飼主大聲說話時又緊繃...">${escapeHtml(sess.fasNotes||'')}</textarea>
+        ${colorToolbarHtml('fasNotes')}
+        <div id="fasNotes" class="color-editor" contenteditable="true"
+             style="min-height:180px;"
+             data-placeholder="點下方色帶按鈕插入等級標記，或選文字 + 顏色按鈕上色">${ensureColorHtml(sess.fasNotes)}</div>
         <div style="margin-top:8px; font-size:12px; color:var(--text-soft)">點按鈕在游標位置插入帶顏色的等級標記：</div>
         <div class="fas-bar" style="margin-top:6px">
           ${['0','1','2','3','4','5'].map(lv => `
@@ -2524,7 +2581,10 @@ function renderFirstConsultSession(sess, pet) {
     <div class="card" style="cursor:default">
       <div class="field">
         <label>報告內容</label>
-        <textarea id="firstConsultReport" rows="14" placeholder="這裡的內容會印在給飼主的 PDF 報告上...">${escapeHtml(sess.firstConsultReport||'')}</textarea>
+        ${colorToolbarHtml('firstConsultReport')}
+        <div id="firstConsultReport" class="color-editor" contenteditable="true"
+             style="min-height:280px;"
+             data-placeholder="這裡的內容會印在給飼主的 PDF 報告上...">${ensureColorHtml(sess.firstConsultReport)}</div>
         <div class="template-buttons">
           ${templates.length === 0 ? '<span style="font-size:12px; color:var(--text-soft)">（尚未設定模板，去設定頁編輯）</span>' :
             templates.map((t, i) => `<button type="button" class="small-btn" data-tpl-idx="${i}">+ ${escapeHtml(t.label)}</button>`).join('')}
@@ -2540,30 +2600,27 @@ function renderFirstConsultSession(sess, pet) {
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
 
   function saveAll() {
-    sess.fasNotes = document.getElementById('fasNotes').value;
-    sess.firstConsultReport = document.getElementById('firstConsultReport').value;
+    const fasEl = document.getElementById('fasNotes');
+    const reportEl = document.getElementById('firstConsultReport');
+    sess.fasNotes = sanitizeColorHtml(fasEl.innerHTML);
+    sess.firstConsultReport = sanitizeColorHtml(reportEl.innerHTML);
     const sessions = load(KEYS.sessions, []);
     const idx = sessions.findIndex(s => s.id === sess.id);
     if (idx >= 0) { sessions[idx] = sess; save(KEYS.sessions, sessions); }
   }
 
-  // FAS 按鈕
-  // FAS 色帶按鈕：在 fasNotes 游標位置插入「[FAS X] 」標記
+  // 顏色 toolbar 綁定
+  bindColorToolbar(main.querySelector('[data-tb-for="fasNotes"]'), document.getElementById('fasNotes'));
+  bindColorToolbar(main.querySelector('[data-tb-for="firstConsultReport"]'), document.getElementById('firstConsultReport'));
+
+  // FAS 色帶按鈕：插入「🔴 高度 」這種標記
   main.querySelectorAll('.fas-btn').forEach(btn => {
     btn.onclick = () => {
       const lv = btn.dataset.fas;
-      const ta = document.getElementById('fasNotes');
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const before = ta.value.substring(0, start);
-      const after = ta.value.substring(end);
-      // 自動換行：如果游標前不是行首，先加 \n
-      const needsNewline = before && !before.endsWith('\n');
-      const marker = (needsNewline ? '\n' : '') + fasMarker(lv);
-      ta.value = before + marker + after;
-      const newPos = start + marker.length;
-      ta.selectionStart = ta.selectionEnd = newPos;
-      ta.focus();
+      const editor = document.getElementById('fasNotes');
+      const isEmpty = editor.textContent.trim() === '';
+      const marker = (isEmpty ? '' : '\n') + fasMarker(lv);
+      insertTextAtCursor(editor, marker);
       saveAll();
     };
   });
@@ -2574,22 +2631,15 @@ function renderFirstConsultSession(sess, pet) {
       const i = parseInt(btn.dataset.tplIdx, 10);
       const tplItem = templates[i];
       if (!tplItem) return;
-      const ta = document.getElementById('firstConsultReport');
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const before = ta.value.substring(0, start);
-      const after = ta.value.substring(end);
-      const sep = (before && !before.endsWith('\n\n')) ? (before.endsWith('\n') ? '\n' : '\n\n') : '';
-      const inserted = sep + tplItem.content;
-      ta.value = before + inserted + after;
-      const newPos = start + inserted.length;
-      ta.selectionStart = ta.selectionEnd = newPos;
-      ta.focus();
+      const editor = document.getElementById('firstConsultReport');
+      const isEmpty = editor.textContent.trim() === '';
+      const text = (isEmpty ? '' : '\n\n') + (tplItem.content || '');
+      insertTextAtCursor(editor, text);
       saveAll();
     };
   });
 
-  // Auto-save
+  // Auto-save on blur
   ['fasNotes', 'firstConsultReport'].forEach(id => {
     document.getElementById(id).addEventListener('blur', saveAll);
   });
@@ -2689,11 +2739,17 @@ function renderSession() {
 
     <div class="field" style="margin-top:18px">
       <label>📝 本週飼主作業</label>
-      <textarea id="homework" placeholder="例：每天早晚各 5 分鐘練習坐下，遛狗時遇到其他狗保持距離 3 公尺以上⋯">${escapeHtml(sess.homework||'')}</textarea>
+      ${colorToolbarHtml('homework')}
+      <div id="homework" class="color-editor" contenteditable="true"
+           style="min-height:80px;"
+           data-placeholder="例：每天早晚各 5 分鐘練習坐下，遛狗時遇到其他狗保持距離 3 公尺以上⋯">${ensureColorHtml(sess.homework)}</div>
     </div>
     <div class="field">
       <label>👀 訓練師備註（不會輸出給飼主）</label>
-      <textarea id="trainerNotes" placeholder="自己的觀察、下次計畫⋯">${escapeHtml(sess.notes||'')}</textarea>
+      ${colorToolbarHtml('trainerNotes')}
+      <div id="trainerNotes" class="color-editor" contenteditable="true"
+           style="min-height:80px;"
+           data-placeholder="自己的觀察、下次計畫⋯">${ensureColorHtml(sess.notes)}</div>
     </div>
 
     <div class="actions-row">
@@ -2753,8 +2809,8 @@ function renderSession() {
 
   function saveRecords() {
     sess.records = Object.values(recordsByName).filter(r => r.selected);
-    sess.homework = document.getElementById('homework').value;
-    sess.notes = document.getElementById('trainerNotes').value;
+    sess.homework = sanitizeColorHtml(document.getElementById('homework').innerHTML);
+    sess.notes = sanitizeColorHtml(document.getElementById('trainerNotes').innerHTML);
     const sessions = load(KEYS.sessions, []);
     const idx = sessions.findIndex(s => s.id === sess.id);
     sessions[idx] = sess;
@@ -2778,6 +2834,12 @@ function renderSession() {
   ['homework','trainerNotes'].forEach(id => {
     document.getElementById(id).addEventListener('blur', saveRecords);
   });
+  // 顏色 toolbar 綁定 (homework + trainerNotes)
+  ['homework','trainerNotes'].forEach(id => {
+    const tb = main.querySelector(`[data-tb-for="${id}"]`);
+    const ed = document.getElementById(id);
+    if (tb && ed) bindColorToolbar(tb, ed);
+  });
 }
 
 /* ============== PDF EXPORT (走瀏覽器列印對話框，中文完美) ============== */
@@ -2785,7 +2847,8 @@ function exportFirstConsultPdf(sess, pet) {
   const logoSrc = LOGO_DATA || (window.location.protocol.startsWith('http')
     ? window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'logo.png'
     : '');
-  const reportText = (sess.firstConsultReport || '').trim();
+  const reportHtml = ensureColorHtml(sess.firstConsultReport);
+  const hasReportContent = reportHtml && reportHtml.replace(/<[^>]+>/g, '').trim().length > 0;
   const titleStr = `${pet.name}_首堂諮詢報告`;
   const dateStr = fmtDate(sess.date);
   const ownerLine = pet.ownerName ? `飼主：${escapeHtml(pet.ownerName)}` : '';
@@ -2870,7 +2933,7 @@ function exportFirstConsultPdf(sess, pet) {
       ${escapeHtml(dateStr)}${ownerLine ? ' · ' + ownerLine : ''}
     </div>
 
-    <div class="report-body">${escapeHtml(reportText) || '（尚未填寫報告內容）'}</div>
+    <div class="report-body">${hasReportContent ? reportHtml : '（尚未填寫報告內容）'}</div>
 
     <div class="signoff">
       Wendy 溫蒂．貓與狗訓練日常 製作
@@ -3118,10 +3181,14 @@ function exportPdf(sess, pet) {
   <h2>🎯 本堂訓練項目</h2>
   ${recordsHtml}
 
-  ${sess.homework ? `
+  ${(() => {
+    const hw = ensureColorHtml(sess.homework);
+    const hasHw = hw && hw.replace(/<[^>]+>/g, '').trim().length > 0;
+    return hasHw ? `
     <h2>📝 本週飼主作業</h2>
-    <div class="homework">${escapeHtml(sess.homework)}</div>
-  ` : ''}
+    <div class="homework">${hw}</div>
+  ` : '';
+  })()}
 
   <footer>
     Wendy 溫蒂．貓與狗訓練日常
@@ -3829,7 +3896,11 @@ function renderSettings() {
         </div>
         <div class="field" style="margin-bottom:0">
           <label>插入文字內容</label>
-          <textarea rows="5" data-fc-content="${i}" style="font-size:12px; line-height:1.5;">${escapeHtml(t.content||'')}</textarea>
+          ${colorToolbarHtml('fcTpl_' + i)}
+          <div class="color-editor" contenteditable="true"
+               data-fc-content="${i}" data-tb-id="fcTpl_${i}"
+               style="font-size:12px; line-height:1.55; min-height:80px;"
+               data-placeholder="點選文字 + 顏色按鈕上色">${ensureColorHtml(t.content)}</div>
         </div>
       </div>
     `).join('');
@@ -3837,7 +3908,12 @@ function renderSettings() {
       el.oninput = (e) => { fcTpls[parseInt(el.dataset.fcLabel,10)].label = e.target.value; };
     });
     wrap.querySelectorAll('[data-fc-content]').forEach(el => {
-      el.oninput = (e) => { fcTpls[parseInt(el.dataset.fcContent,10)].content = e.target.value; };
+      el.onblur = () => { fcTpls[parseInt(el.dataset.fcContent,10)].content = sanitizeColorHtml(el.innerHTML); };
+      // 即時更新（非 sanitized，儲存時再 sanitize）
+      el.oninput = () => { fcTpls[parseInt(el.dataset.fcContent,10)].content = el.innerHTML; };
+      // 綁定 toolbar
+      const tb = wrap.querySelector(`[data-tb-for="${el.dataset.tbId}"]`);
+      if (tb) bindColorToolbar(tb, el);
     });
     wrap.querySelectorAll('[data-fc-del]').forEach(el => {
       el.onclick = () => {
@@ -3854,7 +3930,12 @@ function renderSettings() {
   };
   document.getElementById('fc_save').onclick = () => {
     const cur = loadBookingTemplate();
-    save(KEYS.bookingTemplate, Object.assign({}, cur, { firstConsultTemplates: fcTpls }));
+    // 儲存前 sanitize 每個 content
+    const cleaned = fcTpls.map(t => ({
+      label: (t.label || '').trim(),
+      content: sanitizeColorHtml(t.content || ''),
+    }));
+    save(KEYS.bookingTemplate, Object.assign({}, cur, { firstConsultTemplates: cleaned }));
     showNotice('首堂諮詢模板已儲存');
   };
   document.getElementById('fc_reset').onclick = () => {
