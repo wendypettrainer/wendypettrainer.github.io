@@ -167,6 +167,44 @@
   }
   .card-menu-btn:hover { background: rgba(139,111,71,0.12); color: var(--brown-dark); }
 
+  /* Session 狀態 toggle 圓圈（booked/done） */
+  .status-toggle {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border, #c9b89a);
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-right: 12px;
+    margin-top: 2px;
+    padding: 0;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .status-toggle.done {
+    background: var(--good, #6b9e6e);
+    border-color: var(--good, #6b9e6e);
+  }
+  .status-toggle.booked:hover { border-color: var(--accent, #8b6f47); }
+  /* done 卡片視覺：灰底 + 標題刪除線 */
+  .card.session-done { background: #f5f0e8; opacity: 0.72; }
+  .card.session-done .card-title { text-decoration: line-through; color: var(--text-soft); }
+  /* Section header（即將上課優先模式 3 段） */
+  .session-section-header {
+    font-size: 14px;
+    color: var(--brown-dark);
+    margin: 18px 4px 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+    font-weight: 600;
+  }
+  .session-section-header.pending { color: var(--work, #c97a4f); }
+
   .card-menu {
     background: white;
     border-radius: 10px;
@@ -1011,6 +1049,24 @@ function methodTableToHtml(table, opts = {}) {
     <tbody>${t.rows.map(row => `<tr>${row.map((c, i) => `<td style="${cellStyle}${i===0 ? ' font-weight:600;' : ''}">${ensureColorHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>
   </table>`;
 }
+/**
+ * Migration: 補既有 session 的新欄位（status / sourceBookingId / sourceIndex）。
+ * 既有 sessions 都是 Wendy 已上完的紀錄 → status default 'done'。
+ * sourceBookingId / sourceIndex 為 null 表示「不是從 booking spawn 出來的殼」。
+ */
+function ensureSessionShape(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(s => {
+    if (!s || typeof s !== 'object') return s;
+    return {
+      ...s,
+      status: (s.status === 'booked' || s.status === 'done') ? s.status : 'done',
+      sourceBookingId: s.sourceBookingId || null,
+      sourceIndex: (typeof s.sourceIndex === 'number') ? s.sourceIndex : null,
+    };
+  });
+}
+
 function ensureItemShape(arr) {
   if (!Array.isArray(arr)) return [];
   return arr.map(it => {
@@ -1096,6 +1152,8 @@ function initStorage() {
   // Migration: 任何舊格式（string[] / {name,steps}）→ v3 {name, methods[]}
   _writeRaw(KEYS.itemsCat, ensureItemShape(load(KEYS.itemsCat, [])));
   _writeRaw(KEYS.itemsDog, ensureItemShape(load(KEYS.itemsDog, [])));
+  // Migration: session 補 status / sourceBookingId / sourceIndex（既有視為 done）
+  _writeRaw(KEYS.sessions, ensureSessionShape(load(KEYS.sessions, [])));
   _writeRaw(KEYS.version, 3);
 }
 
@@ -1192,7 +1250,7 @@ function applySyncPayload(remote) {
   if (!remote || typeof remote !== 'object') return false;
   // 用 _writeRaw 避免遞迴 push
   if (Array.isArray(remote.pets)) _writeRaw(KEYS.pets, remote.pets);
-  if (Array.isArray(remote.sessions)) _writeRaw(KEYS.sessions, remote.sessions);
+  if (Array.isArray(remote.sessions)) _writeRaw(KEYS.sessions, ensureSessionShape(remote.sessions));
   if (Array.isArray(remote.itemsCat)) _writeRaw(KEYS.itemsCat, remote.itemsCat);
   if (Array.isArray(remote.itemsDog)) _writeRaw(KEYS.itemsDog, remote.itemsDog);
   if (Array.isArray(remote.bookings)) _writeRaw(KEYS.bookings, remote.bookings);
@@ -1745,6 +1803,8 @@ function applySessionSort(sessions, key) {
     case 'date_asc':
       return arr.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     case 'upcoming_first':
+      // 注意：'upcoming_first' 在 renderSessions 走 3 段 partition path，不會進這裡。
+      // 保留這 case 以防其他 caller 直接 call applySessionSort。
       return arr.sort((a, b) => {
         const aFut = (a.date || '') >= today;
         const bFut = (b.date || '') >= today;
@@ -1764,6 +1824,47 @@ function applySessionSort(sessions, key) {
     default:
       return arr.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }
+}
+
+/**
+ * 'upcoming_first' 模式專用：把 sessions 切成 3 段。
+ * - upcoming：booked + (date >= today 或 date 空白「待安排」)
+ * - pending： booked + date < today（待結案，呆帳訊號）
+ * - done：    status === 'done'
+ * 各段內部排序見內文。
+ */
+function partitionSessions(sessions) {
+  const today = todayStr();
+  const upcoming = [], pending = [], done = [];
+  for (const s of sessions) {
+    if (s.status === 'done') done.push(s);
+    else if (!s.date || s.date >= today) upcoming.push(s);
+    else pending.push(s);
+  }
+  // upcoming：日期近 → 遠；待安排（date 空）排該段最後
+  upcoming.sort((a, b) => {
+    if (!a.date && b.date) return 1;
+    if (a.date && !b.date) return -1;
+    if (!a.date && !b.date) return 0;
+    return a.date.localeCompare(b.date);
+  });
+  // pending：最久過期 → 最近過期（最該追的呆帳浮上來）
+  pending.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  // done：日期新 → 舊（最近上的最前）
+  done.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return { upcoming, pending, done };
+}
+
+/**
+ * 翻轉 session.status booked ↔ done。回傳更新後的 session（caller 自己 re-render）。
+ */
+function toggleSessionStatus(sessionId) {
+  const all = load(KEYS.sessions, []);
+  const idx = all.findIndex(s => s.id === sessionId);
+  if (idx < 0) return null;
+  all[idx].status = all[idx].status === 'done' ? 'booked' : 'done';
+  save(KEYS.sessions, all);
+  return all[idx];
 }
 
 function renderSessions() {
@@ -1801,21 +1902,36 @@ function renderSessions() {
   function sessionCardHtml(s) {
     const recCount = (s.records || []).filter(r => r.selected).length;
     const isToday = s.date === todayStr();
+    const isDone = s.status === 'done';
     const ctLab = courseTypeLabel(s);
     const seqLab = sessionSeqLabel(s);
     const courseLine = (ctLab || seqLab)
       ? `<div class="card-meta" style="color:var(--brown-dark); font-weight:500">📋 ${escapeHtml(ctLab)}${ctLab && seqLab ? ' · ' : ''}${escapeHtml(seqLab)}</div>`
       : '';
+    // 標題：有 date 顯示日期；date 空顯示「第 N 堂（待安排）」灰字
+    let titleHtml;
+    if (s.date) {
+      titleHtml = `${fmtDate(s.date)} ${isToday ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}`;
+    } else {
+      const seq = (s.sessionSeq || '?').toString();
+      titleHtml = `<span style="color:var(--text-soft); font-weight:500">第 ${escapeHtml(seq)} 堂（待安排）</span>`;
+    }
+    const toggleBtn = `<button class="status-toggle ${isDone ? 'done' : 'booked'}" data-toggle="${s.id}" title="${isDone ? '取消完成' : '標記已完成'}">${isDone ? '✓' : ''}</button>`;
+    const cardCls = isDone ? 'card session-done' : 'card';
+    const metaTail = recCount > 0
+      ? ' · 已記錄 ' + recCount + ' 項'
+      : (isDone ? ' · 已完成' : (s.date ? ' · 尚未記錄' : ' · 待填日期'));
     return `
-      <div class="card" data-id="${s.id}">
+      <div class="${cardCls}" data-id="${s.id}">
         <div class="card-row">
-          <div>
-            <div class="card-title">${fmtDate(s.date)} ${isToday ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}</div>
+          ${toggleBtn}
+          <div style="flex:1; min-width:0">
+            <div class="card-title">${titleHtml}</div>
             ${courseLine}
             <div class="card-meta">
               ${s.location ? '📍 ' + escapeHtml(s.location) + ' · ' : ''}
               ${s.duration ? s.duration + ' 分鐘' : ''}
-              ${recCount > 0 ? ' · 已記錄 ' + recCount + ' 項' : ' · 尚未記錄'}
+              ${metaTail}
             </div>
           </div>
           <button class="card-menu-btn" data-menu="${s.id}" title="更多動作">⋯</button>
@@ -1826,6 +1942,16 @@ function renderSessions() {
   let body;
   if (sessions.length === 0) {
     body = `<div class="empty"><h3>還沒有課程</h3><p>點右下角 ＋ 新增第一堂</p></div>`;
+  } else if (sortKey === 'upcoming_first') {
+    // 3 段顯示：即將上課 / 待結案 / 已完成
+    const parts = partitionSessions(sessions);
+    const sectionHtml = (label, list, cls) => list.length === 0 ? '' : `
+      <h3 class="session-section-header${cls ? ' ' + cls : ''}">${label} <span style="color:var(--text-soft); font-weight:400">(${list.length})</span></h3>
+      ${list.map(sessionCardHtml).join('')}
+    `;
+    body = sectionHtml('📅 即將上課', parts.upcoming, '')
+         + sectionHtml('⚠ 待結案', parts.pending, 'pending')
+         + sectionHtml('✓ 已完成', parts.done, '');
   } else if (sortKey === 'by_type') {
     // 課程類型分組：加分類標頭
     const groups = {};
@@ -1835,9 +1961,7 @@ function renderSessions() {
       groups[lab].push(s);
     });
     body = Object.keys(groups).sort().map(label => `
-      <h3 style="font-size:14px; color:var(--brown-dark); margin:18px 4px 8px; border-bottom:1px solid var(--border); padding-bottom:4px">
-        📋 ${escapeHtml(label)} <span style="color:var(--text-soft); font-weight:400">(${groups[label].length})</span>
-      </h3>
+      <h3 class="session-section-header">📋 ${escapeHtml(label)} <span style="color:var(--text-soft); font-weight:400">(${groups[label].length})</span></h3>
       ${groups[label].map(sessionCardHtml).join('')}
     `).join('');
   } else {
@@ -1854,8 +1978,9 @@ function renderSessions() {
   document.getElementById('bookingBtn').onclick = () => go('bookings', { petId: pet.id });
   main.querySelectorAll('.card[data-id]').forEach(el => {
     el.onclick = (e) => {
-      // 點到 ⋯ 按鈕時不要進入該堂課
-      if (e.target.classList.contains('card-menu-btn')) return;
+      // 點到 ⋯ 按鈕、toggle 按鈕時不要進入該堂課
+      if (e.target.closest('.card-menu-btn')) return;
+      if (e.target.closest('.status-toggle')) return;
       go('session', { sessionId: el.dataset.id });
     };
   });
@@ -1867,6 +1992,14 @@ function renderSessions() {
       const sess = getSession(sid);
       if (!sess) return;
       openSessionMenu(btn, sess);
+    };
+  });
+  // 狀態 toggle 圓圈：booked ↔ done
+  main.querySelectorAll('.status-toggle[data-toggle]').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      toggleSessionStatus(btn.dataset.toggle);
+      renderSessions();
     };
   });
   document.getElementById('fab').onclick = () => openSessionForm();
@@ -2046,6 +2179,11 @@ function openSessionForm(session = null) {
       notes: data.notes || '',
       gistId: data.gistId,
       createdAt: data.createdAt || new Date().toISOString(),
+      // booked/done 狀態：edit 保留既有；新建（手動建）default 'done'（記過去的紀錄是主要場景）
+      status: (data.status === 'booked' || data.status === 'done') ? data.status : 'done',
+      // booking 來源（手動建為 null；從 booking spawn 出來的會帶 booking id + 第幾堂）
+      sourceBookingId: data.sourceBookingId || null,
+      sourceIndex: (typeof data.sourceIndex === 'number') ? data.sourceIndex : null,
     };
     const sessions = load(KEYS.sessions, []);
     if (isEdit) {
@@ -2123,6 +2261,170 @@ function bookingDiscount(booking) {
 function bookingTotal(booking) {
   return bookingSubtotal(booking) - bookingDiscount(booking);
 }
+
+/* ============== BOOKING ⇄ SESSION 殼 SYNC ============== */
+/**
+ * 判斷一個 session 殼是不是「空殼」— 沒有任何訓練紀錄、沒有 done 狀態。
+ * 空殼可以被自動刪除；非空殼縮減 booking 時要擋住、刪 booking 時要擋住。
+ */
+function isEmptyShell(s) {
+  if (!s) return true;
+  return (!Array.isArray(s.records) || s.records.length === 0)
+      && !s.homework
+      && !s.notes
+      && !s.firstConsultReport
+      && !s.fasNotes
+      && s.status === 'booked';
+}
+
+/**
+ * Dry-run：給定一份 booking，計算需要 spawn / 刪除的殼。
+ * 回傳 { ok, error?, toAdd: [sourceIndex], toRemove: [sessionId] }。
+ * 規則（採用 Steven「booking 是合約 snapshot」原則）：
+ * - 沒對應殼的 sourceIndex → spawn 新殼
+ * - 已有殼的 sourceIndex → 不更新（殼是排程 source of truth，改期改在殼上）
+ * - 超出新 sessionCount 的殼：空殼可刪、非空殼擋住整次 save
+ */
+function planBookingShellSync(booking) {
+  const all = load(KEYS.sessions, []);
+  const existing = all.filter(s => s.sourceBookingId === booking.id);
+  const sessionCount = booking.sessionCount || 0;
+  const toAdd = [];
+  for (let i = 0; i < sessionCount; i++) {
+    if (!existing.find(s => s.sourceIndex === i)) toAdd.push(i);
+  }
+  const toRemove = [];
+  const blockers = [];
+  for (const s of existing) {
+    if (s.sourceIndex == null) continue;
+    if (s.sourceIndex >= sessionCount) {
+      if (isEmptyShell(s)) toRemove.push(s.id);
+      else blockers.push(s.sourceIndex + 1);
+    }
+  }
+  if (blockers.length > 0) {
+    return {
+      ok: false,
+      error: `第 ${blockers.join('、')} 堂已有紀錄或被標記已完成，無法縮減堂數`,
+    };
+  }
+  return { ok: true, toAdd, toRemove };
+}
+
+/**
+ * 套用 plan：實際把殼新增 / 刪除進 KEYS.sessions。回傳 {spawned, removed}。
+ */
+function applyBookingShellSync(booking, plan) {
+  let arr = load(KEYS.sessions, []);
+  if (plan.toRemove.length > 0) {
+    arr = arr.filter(s => !plan.toRemove.includes(s.id));
+  }
+  for (const i of plan.toAdd) {
+    const bs = (booking.sessions && booking.sessions[i]) || {};
+    arr.push({
+      id: uid(),
+      petId: booking.petId,
+      date: bs.date || '',
+      duration: 0,
+      location: booking.location || '',
+      courseType: booking.courseType || '',
+      groupSubType: booking.groupSubType || '',
+      groupSubTypeOther: booking.groupSubTypeOther || '',
+      courseTypeOther: booking.courseTypeOther || '',
+      sessionSeq: String(i + 1),
+      sessionTotal: String(booking.sessionCount || 0),
+      records: [],
+      homework: '',
+      notes: '',
+      gistId: undefined,
+      createdAt: new Date().toISOString(),
+      status: 'booked',
+      sourceBookingId: booking.id,
+      sourceIndex: i,
+    });
+  }
+  save(KEYS.sessions, arr);
+  return { spawned: plan.toAdd.length, removed: plan.toRemove.length };
+}
+
+/**
+ * 認親 + 補殼工具（migration / 一次性修復）。
+ * 對每份 booking 的每個 sourceIndex：
+ *   1. 已有殼 → 跳過
+ *   2. 沒殼但有日期 → 找同 petId + 同 date 且未連結的既有 session，補上 sourceBookingId/sourceIndex
+ *   3. 還是找不到 → spawn 新空殼
+ * 回傳 { newSessions, linked, spawned }。caller 自行決定是否寫入。
+ */
+function linkLegacyBookingsToSessions() {
+  const bookings = load(KEYS.bookings, []);
+  const sessions = load(KEYS.sessions, []);
+  const newSessions = sessions.slice();
+  let linked = 0, spawned = 0;
+  for (const b of bookings) {
+    const sessionCount = b.sessionCount || 0;
+    for (let i = 0; i < sessionCount; i++) {
+      const bs = (b.sessions && b.sessions[i]) || {};
+      // 該 sourceIndex 已有殼？跳過
+      if (newSessions.find(s => s.sourceBookingId === b.id && s.sourceIndex === i)) continue;
+      // 找日期 + 寵物 match 的既有 session（未被連結到任何 booking）
+      let matched = null;
+      if (bs.date) {
+        matched = newSessions.find(s =>
+          s.petId === b.petId && s.date === bs.date && !s.sourceBookingId
+        );
+      }
+      if (matched) {
+        matched.sourceBookingId = b.id;
+        matched.sourceIndex = i;
+        linked++;
+      } else {
+        newSessions.push({
+          id: uid(),
+          petId: b.petId,
+          date: bs.date || '',
+          duration: 0,
+          location: b.location || '',
+          courseType: b.courseType || '',
+          groupSubType: b.groupSubType || '',
+          groupSubTypeOther: b.groupSubTypeOther || '',
+          courseTypeOther: b.courseTypeOther || '',
+          sessionSeq: String(i + 1),
+          sessionTotal: String(sessionCount),
+          records: [],
+          homework: '',
+          notes: '',
+          gistId: undefined,
+          createdAt: new Date().toISOString(),
+          status: 'booked',
+          sourceBookingId: b.id,
+          sourceIndex: i,
+        });
+        spawned++;
+      }
+    }
+  }
+  return { newSessions, linked, spawned };
+}
+
+/**
+ * 刪除 booking 時連帶處理殼：空殼直接刪、有紀錄則 throw（block 整次 booking 刪除）。
+ * 回傳 { ok, error?, removed }。
+ */
+function cleanupBookingShells(bookingId) {
+  const all = load(KEYS.sessions, []);
+  const shells = all.filter(s => s.sourceBookingId === bookingId);
+  const blockers = shells.filter(s => !isEmptyShell(s));
+  if (blockers.length > 0) {
+    return {
+      ok: false,
+      error: `匯款通知對應的第 ${blockers.map(s => s.sourceIndex + 1).join('、')} 堂已有紀錄或已完成，請先處理那幾堂再刪`,
+    };
+  }
+  const filtered = all.filter(s => s.sourceBookingId !== bookingId);
+  save(KEYS.sessions, filtered);
+  return { ok: true, removed: shells.length };
+}
+
 // 24h "16:00" → 「下午4:00」；空字串維持空
 function fmtTime12(hhmm) {
   if (!hhmm) return '';
@@ -2235,8 +2537,15 @@ function openBookingMenu(anchorBtn, bookingId) {
   menu.querySelector('[data-act="delete"]').onclick = () => {
     menu.remove();
     if (!confirm('刪除這筆匯款通知？')) return;
+    const cleanup = cleanupBookingShells(bookingId);
+    if (!cleanup.ok) {
+      showNotice(cleanup.error, 'err');
+      return;
+    }
     save(KEYS.bookings, load(KEYS.bookings, []).filter(b => b.id !== bookingId));
-    showNotice('已刪除');
+    let msg = '已刪除';
+    if (cleanup.removed > 0) msg += ` · 連帶移除 ${cleanup.removed} 顆空殼`;
+    showNotice(msg);
     render();
   };
 }
@@ -2505,8 +2814,15 @@ function renderBooking() {
     if (isEdit) {
       document.getElementById('bk_del').onclick = () => {
         if (!confirm('刪除這筆匯款通知？')) return;
+        const cleanup = cleanupBookingShells(b.id);
+        if (!cleanup.ok) {
+          showNotice(cleanup.error, 'err');
+          return;
+        }
         save(KEYS.bookings, load(KEYS.bookings, []).filter(x => x.id !== b.id));
-        showNotice('已刪除');
+        let msg = '已刪除';
+        if (cleanup.removed > 0) msg += ` · 連帶移除 ${cleanup.removed} 顆空殼`;
+        showNotice(msg);
         go('bookings', { petId: pet.id });
       };
     }
@@ -2524,11 +2840,21 @@ function renderBooking() {
       createdAt: b.createdAt || now,
       updatedAt: now,
     });
+    // 先 dry-run 殼同步，能過再真的存 booking（避免 booking 跟殼 desync）
+    const plan = planBookingShellSync(updated);
+    if (!plan.ok) {
+      showNotice(plan.error, 'err');
+      return;
+    }
     const all = load(KEYS.bookings, []);
     const idx = all.findIndex(x => x.id === updated.id);
     if (idx >= 0) all[idx] = updated; else all.push(updated);
     save(KEYS.bookings, all);
-    showNotice('已儲存');
+    const sync = applyBookingShellSync(updated, plan);
+    let msg = '已儲存';
+    if (sync.spawned > 0) msg += ` · 新增 ${sync.spawned} 堂預約`;
+    if (sync.removed > 0) msg += ` · 移除 ${sync.removed} 顆空殼`;
+    showNotice(msg);
     if (thenPdf) {
       exportBookingPdf(updated, pet);
     } else if (!isEdit) {
@@ -2635,11 +2961,18 @@ function renderFirstConsultSession(sess, pet) {
     </div>
 
     <div class="actions-row">
+      ${sess.status === 'done'
+        ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消完成</button>`
+        : `<button class="btn" id="toggleStatusBtn" style="background:var(--good); color:white">✓ 標記已完成</button>`}
       <button class="btn" id="saveBtn">💾 儲存</button>
       <button class="btn ghost" id="pdfBtn">📄 報告 PDF</button>
     </div>
   `;
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
+  document.getElementById('toggleStatusBtn').onclick = () => {
+    toggleSessionStatus(sess.id);
+    renderSession();
+  };
 
   function saveAll() {
     const fasEl = document.getElementById('fasNotes');
@@ -2813,6 +3146,9 @@ function renderSession() {
     </div>
 
     <div class="actions-row">
+      ${sess.status === 'done'
+        ? `<button class="btn ghost" id="toggleStatusBtn" style="border-color:var(--text-soft); color:var(--text-soft)">↺ 取消完成</button>`
+        : `<button class="btn" id="toggleStatusBtn" style="background:var(--good); color:white">✓ 標記已完成</button>`}
       <button class="btn" id="saveBtn">💾 儲存</button>
       <button class="btn ghost" id="pdfBtn">📄 下載 PDF</button>
       <button class="btn ghost" id="shareBtn">🔗 產生分享連結</button>
@@ -2820,6 +3156,10 @@ function renderSession() {
   `;
 
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
+  document.getElementById('toggleStatusBtn').onclick = () => {
+    toggleSessionStatus(sess.id);
+    renderSession();
+  };
 
   // Item interaction
   main.querySelectorAll('.item').forEach(el => {
@@ -3905,6 +4245,17 @@ function renderSettings() {
         匯出 JSON 是備份用，匯入 JSON 會覆蓋現有資料。重設清單只會還原訓練項目，寵物與課程不受影響。
       </p>
     </div>
+
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">資料修復</h3>
+    <div class="card" style="cursor:default">
+      <div class="actions-row">
+        <button class="btn ghost" id="linkOldData">🔗 連結舊匯款通知 / 補產殼</button>
+      </div>
+      <p class="card-meta" style="margin-top:10px">
+        💡 把舊匯款通知跟既有課程紀錄認親（用<b>同寵物 + 同日期</b> match 沒被連結過的紀錄），找不到 match 的會補產空白課程殼。<br>
+        正常情況新建匯款已自動產殼，這個按鈕只在你舊資料還沒連結時用。可以重複按、不會重複產生。
+      </p>
+    </div>
   `;
 
   function refreshUrlPreview() {
@@ -4242,6 +4593,21 @@ function renderSettings() {
   renderItemEditor();
 
   // Data management（CSV / Email 匯入入口已搬到寵物列表 ＋ 按鈕，這裡不再綁定）
+
+  // 資料修復：連結舊 booking 到既有 sessions + 補產殼
+  const linkOldBtn = document.getElementById('linkOldData');
+  if (linkOldBtn) linkOldBtn.onclick = () => {
+    const result = linkLegacyBookingsToSessions();
+    if (result.linked === 0 && result.spawned === 0) {
+      showNotice('沒有要連結 / 補產的項目（舊資料已 OK）');
+      return;
+    }
+    const msg = `掃描完成：\n• 連結 ${result.linked} 筆既有紀錄到匯款通知\n• 補產 ${result.spawned} 顆空殼\n\n繼續？`;
+    if (!confirm(msg)) return;
+    save(KEYS.sessions, result.newSessions);
+    showNotice(`已連結 ${result.linked} 筆 · 補產 ${result.spawned} 顆`);
+    renderSettings();
+  };
 
   document.getElementById('exportData').onclick = () => {
     const dump = {
