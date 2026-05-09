@@ -754,6 +754,7 @@
     <button class="icon-btn" id="backBtn" title="返回上一層">‹</button>
     <nav class="breadcrumb" id="breadcrumb"></nav>
     <span class="sync-dot" id="syncDot" title="同步狀態（點開設定查看）"></span>
+    <button class="icon-btn" id="statsBtn" title="會計">📊</button>
     <button class="icon-btn" id="settingsBtn" title="設定">⚙</button>
   </header>
   <main id="main"></main>
@@ -1528,8 +1529,7 @@ function updateHeader() {
     segs.push({ label: '⚙ 設定', current: true });
   } else if (state.view === 'stats') {
     segs.push({ label: '寵物列表', action: 'pets' });
-    segs.push({ label: '⚙ 設定', action: 'settings' });
-    segs.push({ label: '📊 呆帳統計', current: true });
+    segs.push({ label: '📊 會計', current: true });
   }
 
   breadcrumb.innerHTML = segs.map((seg, i) => {
@@ -1595,11 +1595,15 @@ document.getElementById('backBtn').onclick = () => {
   else if (state.view === 'bookings') go('sessions', { petId: state.petId });
   else if (state.view === 'booking') go('bookings', { petId: state.petId });
   else if (state.view === 'settings') go(state._returnView || 'pets');
-  else if (state.view === 'stats') go('settings');
+  else if (state.view === 'stats') go(state._returnView || 'pets');
 };
 document.getElementById('settingsBtn').onclick = () => {
   state._returnView = state.view;
   go('settings');
+};
+document.getElementById('statsBtn').onclick = () => {
+  state._returnView = state.view;
+  go('stats');
 };
 
 /* ============== VIEW: PETS ============== */
@@ -2010,22 +2014,63 @@ function renderSessions() {
   if (!pet) { go('pets'); return; }
   const sortKey = getSessionSortPref();
   const sessions = applySessionSort(getPetSessions(pet.id), sortKey);
+  const _settings = load(KEYS.settings, {});
+  const petInfoCollapsed = _settings.petInfoCollapsed === true;
   const meta = `
     <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
-      <div class="card-meta">
-        ${escapeHtml(petTagline(pet))} ·
-        飼主 ${escapeHtml(pet.ownerName || '—')}
-        ${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
+      <div id="petInfoToggle" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none">
+        <div class="card-meta" style="margin:0">
+          ${escapeHtml(petTagline(pet))} · 飼主 ${escapeHtml(pet.ownerName || '—')}
+        </div>
+        <span style="color:var(--text-soft); font-size:12px">${petInfoCollapsed ? '▶ 展開資料' : '▼ 收起'}</span>
       </div>
-      ${pet.ownerAddress ? `<div class="card-meta" style="margin-top:6px">📍 ${escapeHtml(pet.ownerAddress)}</div>` : ''}
-      ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
-      ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
-        <button class="small-btn" id="editPet">編輯寵物資料</button>
-        <button class="small-btn" id="bookingBtn">📋 匯款通知</button>
+      <div id="petInfoBody" style="display:${petInfoCollapsed ? 'none' : 'block'}">
+        ${pet.ownerContact ? `<div class="card-meta" style="margin-top:6px">📞 ${escapeHtml(pet.ownerContact)}</div>` : ''}
+        ${pet.ownerAddress ? `<div class="card-meta" style="margin-top:6px">📍 ${escapeHtml(pet.ownerAddress)}</div>` : ''}
+        ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
+        ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
+          <button class="small-btn" id="editPet">編輯寵物資料</button>
+          <button class="small-btn" id="bookingBtn">📋 匯款通知</button>
+        </div>
       </div>
     </div>
   `;
+  // 寵物 payment section（列每筆 booking 的應收/實收/餘額 + inline 收款按鈕）
+  const petBookings = load(KEYS.bookings, []).filter(b => b.petId === pet.id);
+  const petPaymentHtml = petBookings.length === 0 ? '' : `
+    <div class="card" style="cursor:default; padding:12px 14px; margin-bottom:10px">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <h3 style="margin:0; font-size:15px; color:var(--brown-dark)">💰 款項</h3>
+        <span style="font-size:11px; color:var(--text-soft)">${petBookings.length} 筆匯款通知</span>
+      </div>
+      ${petBookings.map(b => {
+        const summary = bookingPaymentSummary(b);
+        const balance = summary.balance;
+        const balText = balance > 0 ? `<span style="color:var(--work); font-weight:600">應收餘 ${fmtMoney(balance)}</span>`
+                     : balance < 0 ? `<span style="color:var(--good); font-weight:600">已超收 ${fmtMoney(Math.abs(balance))}</span>`
+                     : `<span style="color:var(--good); font-weight:600">已結清</span>`;
+        const ctLab = courseTypeLabel(b);
+        const dateStr = (b.createdAt || '').slice(0, 10) || '—';
+        return `
+          <div data-bookingid="${b.id}" style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; background:white">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap">
+              <div style="flex:1; min-width:0; cursor:pointer" data-open-booking="${b.id}">
+                <div style="font-size:13px; color:var(--brown-dark); font-weight:500">${escapeHtml(ctLab || '—')} · ${b.sessionCount} 堂 · ${escapeHtml(dateStr)}</div>
+                <div style="font-size:12px; color:var(--text-soft); margin-top:3px">
+                  應收 ${fmtMoney(summary.total)} · 實收 ${fmtMoney(summary.received)}${summary.refunded ? ' · 退 ' + fmtMoney(summary.refunded) : ''} · ${balText}
+                </div>
+              </div>
+              <div style="display:flex; gap:4px; flex-shrink:0">
+                <button class="small-btn" data-add-pay-in="${b.id}" type="button">+收款</button>
+                <button class="small-btn" data-add-pay-refund="${b.id}" type="button" style="border-color:var(--work); color:var(--work)">−退費</button>
+              </div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+  `;
+
   // 排序選單（只有 ≥1 堂課時才顯示）
   const sortBar = sessions.length === 0 ? '' : `
     <div style="display:flex; justify-content:flex-end; align-items:center; gap:6px; margin:6px 4px 10px">
@@ -2110,15 +2155,36 @@ function renderSessions() {
   } else {
     body = sessions.map(sessionCardHtml).join('');
   }
-  main.innerHTML = meta + sortBar + body + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = meta + petPaymentHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
   // 排序選單
   const sortSelect = document.getElementById('sessionSort');
   if (sortSelect) sortSelect.onchange = (e) => {
     setSessionSortPref(e.target.value);
     renderSessions();
   };
-  document.getElementById('editPet').onclick = () => openPetForm(pet);
-  document.getElementById('bookingBtn').onclick = () => go('bookings', { petId: pet.id });
+  // 編輯 / 匯款按鈕（在折疊區內，可能 collapsed 時不存在）
+  const editPetBtn = document.getElementById('editPet');
+  if (editPetBtn) editPetBtn.onclick = () => openPetForm(pet);
+  const bookingBtn = document.getElementById('bookingBtn');
+  if (bookingBtn) bookingBtn.onclick = () => go('bookings', { petId: pet.id });
+  // 寵物資訊卡 toggle
+  const petInfoToggle = document.getElementById('petInfoToggle');
+  if (petInfoToggle) petInfoToggle.onclick = () => {
+    const s = load(KEYS.settings, {});
+    s.petInfoCollapsed = !s.petInfoCollapsed;
+    save(KEYS.settings, s);
+    renderSessions();
+  };
+  // 寵物 payment section binding
+  main.querySelectorAll('[data-open-booking]').forEach(el => {
+    el.onclick = () => go('booking', { petId: pet.id, bookingId: el.dataset.openBooking });
+  });
+  main.querySelectorAll('[data-add-pay-in]').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); openPaymentForm(btn.dataset.addPayIn, null, 'in'); };
+  });
+  main.querySelectorAll('[data-add-pay-refund]').forEach(btn => {
+    btn.onclick = (e) => { e.stopPropagation(); openPaymentForm(btn.dataset.addPayRefund, null, 'refund'); };
+  });
   main.querySelectorAll('.card[data-id]').forEach(el => {
     el.onclick = (e) => {
       // 點到 ⋯ 按鈕、toggle 按鈕時不要進入該堂課
@@ -2623,6 +2689,32 @@ function bookingPaymentSummary(booking) {
   return { total, received, refunded, balance, payments };
 }
 
+/**
+ * 權責發生制 derived metric：
+ * - recognizedRev: 已認列收入（done 課時 × 單堂單價）
+ * - deferredRev: 預收款（淨實收 - 已認列；正數表示客戶已付未上）
+ * - receivable: 應收款（已認列 - 淨實收；正數表示已上完課但客戶沒付齊）
+ * - netReceived: 淨實收（實收 - 退費）
+ *
+ * 概念：
+ * - 收到錢 ≠ 認列收入
+ * - 上完一堂課，那堂的金額才從「預收款」轉成「已認列收入」
+ * - 客戶取消強制結案的部分如果沒退費，理論上 forfeit revenue（但目前 UI 不直接顯示，看 stats 頁的「未兌現呆帳」）
+ */
+function bookingRevenueRecognition(booking) {
+  const summary = bookingPaymentSummary(booking);
+  const sessions = load(KEYS.sessions, []);
+  const bSess = sessions.filter(s => s.sourceBookingId === booking.id);
+  const sessCount = booking.sessionCount || 0;
+  const pricePerSess = sessCount > 0 ? summary.total / sessCount : 0;
+  const doneCount = bSess.filter(s => s.status === 'done').length;
+  const recognizedRev = doneCount * pricePerSess;
+  const netReceived = summary.received - summary.refunded;
+  const deferredRev = Math.max(0, netReceived - recognizedRev);
+  const receivable = Math.max(0, recognizedRev - netReceived);
+  return { recognizedRev, deferredRev, receivable, netReceived, doneCount, pricePerSess };
+}
+
 /** 寫入 / 更新 / 刪除 payment */
 function savePayment(payment) {
   const all = load(KEYS.payments, []);
@@ -3031,6 +3123,7 @@ function renderBooking() {
             💡 請先儲存匯款通知（按下方「儲存」），才能記錄實際收款 / 退費
           </div>`;
         const summary = bookingPaymentSummary(b);
+        const recog = bookingRevenueRecognition(b);
         const balanceLabel = summary.balance > 0 ? '應收餘額' : (summary.balance < 0 ? '已超收' : '已結清');
         const balanceCls = summary.balance > 0 ? 'warn' : (summary.balance < 0 ? 'warn' : 'good');
         const paymentRows = summary.payments.length === 0
@@ -3048,11 +3141,18 @@ function renderBooking() {
         return `
           <div style="margin-top:18px; padding:14px; background:rgba(240,230,214,0.4); border-radius:8px">
             <h3 style="margin:0 0 12px; font-size:15px; color:var(--brown-dark)">💰 收款紀錄</h3>
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:12px">
+            <div style="font-size:11px; color:var(--text-soft); margin-bottom:4px">合約 / 金流</div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:8px">
               <div class="stat-card"><div class="stat-label">應收</div><div class="stat-value">${fmtMoney(summary.total)}</div></div>
               <div class="stat-card good"><div class="stat-label">實收</div><div class="stat-value">${fmtMoney(summary.received)}</div></div>
               <div class="stat-card warn"><div class="stat-label">退費</div><div class="stat-value">${fmtMoney(summary.refunded)}</div></div>
               <div class="stat-card ${balanceCls}"><div class="stat-label">${balanceLabel}</div><div class="stat-value">${fmtMoney(Math.abs(summary.balance))}</div></div>
+            </div>
+            <div style="font-size:11px; color:var(--text-soft); margin-bottom:4px">收入認列（每上完一堂從預收款轉認列）</div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px; margin-bottom:12px">
+              <div class="stat-card good"><div class="stat-label">已認列收入</div><div class="stat-value">${fmtMoney(recog.recognizedRev)}</div><div class="stat-pct">${recog.doneCount}/${b.sessionCount} 堂</div></div>
+              <div class="stat-card"><div class="stat-label">預收款</div><div class="stat-value">${fmtMoney(recog.deferredRev)}</div><div class="stat-pct" style="color:var(--text-soft)">已收未上的</div></div>
+              ${recog.receivable > 0 ? `<div class="stat-card warn"><div class="stat-label">已上未收</div><div class="stat-value">${fmtMoney(recog.receivable)}</div><div class="stat-pct">已上但客戶沒付齊</div></div>` : ''}
             </div>
             <div style="overflow-x:auto">
             <table style="width:100%; border-collapse:collapse; font-size:13px; min-width:520px">
@@ -4699,15 +4799,6 @@ function renderSettings() {
       </p>
     </div>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">業務分析</h3>
-    <div class="card" style="cursor:default">
-      <div class="actions-row">
-        <button class="btn ghost" id="openStats">📊 呆帳統計</button>
-      </div>
-      <p class="card-meta" style="margin-top:10px">
-        💡 看「總收費 / 已兌現 / 未兌現（呆帳）/ 進行中」全貌，按課程類型 + 時段分類，方便做帳跟追客戶。
-      </p>
-    </div>
   `;
 
   function refreshUrlPreview() {
@@ -5046,10 +5137,6 @@ function renderSettings() {
 
   // Data management（CSV / Email 匯入入口已搬到寵物列表 ＋ 按鈕，這裡不再綁定）
 
-  // 業務分析：呆帳統計入口
-  const openStatsBtn = document.getElementById('openStats');
-  if (openStatsBtn) openStatsBtn.onclick = () => go('stats');
-
   // 資料修復：連結舊 booking 到既有 sessions + 補產殼
   const linkOldBtn = document.getElementById('linkOldData');
   if (linkOldBtn) linkOldBtn.onclick = () => {
@@ -5264,6 +5351,7 @@ function renderStats() {
   // 累計
   let totalRev = 0, realizedRev = 0, unrealizedRev = 0, pendingRev = 0, overdueRev = 0;
   let totalReceived = 0, totalRefunded = 0;  // L2: 實際金流（payments）
+  let totalRecognized = 0, totalDeferred = 0, totalReceivable = 0;  // C: 權責發生制
   const closedDetails = [];
   const byType = {};
   const csvRows = [];  // L1-b: CSV 匯出每筆 booking 一行
@@ -5282,6 +5370,11 @@ function renderStats() {
     const summary = bookingPaymentSummary(b);
     totalReceived += summary.received;
     totalRefunded += summary.refunded;
+    // C: 權責發生制 累計
+    const recog = bookingRevenueRecognition(b);
+    totalRecognized += recog.recognizedRev;
+    totalDeferred += recog.deferredRev;
+    totalReceivable += recog.receivable;
 
     const bSess = sessions.filter(s => s.sourceBookingId === b.id);
     let realized = 0, unrealized = 0, pending = 0, overdue = 0;
@@ -5364,7 +5457,7 @@ function renderStats() {
   const header = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap">
       <div>
-        <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📊 呆帳統計</div>
+        <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📊 會計</div>
         <div style="font-size:12px; color:var(--text-soft); margin-top:2px">範圍內 ${bookings.length} 筆匯款通知 · ${closedTotalCount} 堂強制結案</div>
       </div>
       <select id="statsRange" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:white; font-family:inherit; color:var(--text)">
@@ -5397,6 +5490,24 @@ function renderStats() {
       <div class="stat-card ${balance > 0 ? 'warn' : 'good'}">
         <div class="stat-label">${balance > 0 ? '應收餘額' : (balance < 0 ? '已超收' : '已結清')}</div>
         <div class="stat-value">${fmtMoney(Math.abs(balance))}</div>
+      </div>
+    </div>
+    <div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">📒 收入認列（權責發生制）</div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:14px">
+      <div class="stat-card good">
+        <div class="stat-label">已認列收入</div>
+        <div class="stat-value">${fmtMoney(totalRecognized)}</div>
+        <div class="stat-pct">${pct(totalRecognized, totalRev)} 履約率</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">預收款</div>
+        <div class="stat-value">${fmtMoney(totalDeferred)}</div>
+        <div class="stat-pct" style="color:var(--text-soft)">已收未上的</div>
+      </div>
+      <div class="stat-card ${totalReceivable > 0 ? 'warn' : ''}">
+        <div class="stat-label">已上未收</div>
+        <div class="stat-value">${fmtMoney(totalReceivable)}</div>
+        <div class="stat-pct" style="color:var(--text-soft)">已上完但客戶沒付齊</div>
       </div>
     </div>
     <div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">📋 課時履約（sessions）</div>
@@ -5484,10 +5595,9 @@ function renderStats() {
       ${byTypeHtml}
     ` : ''}
     <p style="margin-top:24px; font-size:12px; color:var(--text-soft); line-height:1.7">
-      💡 <b>金流區（合約 / payments）：</b><br>
-      「應收」= 所有 booking 的合約總額（含交通扣折扣後）；「實收 / 退費」= 你在每筆 booking 裡記錄的 payments；「應收餘額」= 應收 − 實收 + 退費<br>
-      💡 <b>課時履約區（sessions 角度）：</b><br>
-      「已兌現」= status=done 的堂數 × 單堂單價；「未兌現」= status=closed（強制結案）的堂數 — 已收錢但無法上完的呆帳；「進行中」含已預約、待安排、待結案<br>
+      💡 <b>金流（合約 / payments）：</b>「應收」= 合約總額；「實收 / 退費」= 你在每筆 booking 記錄的 payments；「應收餘額」= 應收 − 實收 + 退費<br>
+      💡 <b>收入認列（權責發生制）：</b>「已認列」= 已上完課對應的金額（收到沒收到都算收入）；「預收款」= 客戶已付但還沒上的（會計上算負債）；「已上未收」= 已上完但客戶還沒付齊（應收帳款）<br>
+      💡 <b>課時履約：</b>「已兌現」= done 的堂數 × 單堂單價；「未兌現」= closed（強制結案）；「進行中」= 預約中 / 待安排 / 待結案<br>
       💡 範圍切換按 booking 建立時間 (createdAt) 篩選
     </p>
   `;
