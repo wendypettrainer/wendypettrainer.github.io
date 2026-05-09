@@ -2707,8 +2707,25 @@ function renderSession() {
   const items = ensureItemShape(pet.species === 'cat' ? load(KEYS.itemsCat, []) : load(KEYS.itemsDog, []));
   const recordsByName = {};
   (sess.records || []).forEach(r => recordsByName[r.name] = r);
+  // 排序：勾選的在上（按 selectedAt 時間戳），未勾選的在下（按訓練項目原順序）
+  const itemOrderIdx = {};
+  items.forEach((it, i) => { itemOrderIdx[it.name] = i; });
+  const sortedItems = items.slice().sort((a, b) => {
+    const ra = recordsByName[a.name], rb = recordsByName[b.name];
+    const aSel = ra && ra.selected;
+    const bSel = rb && rb.selected;
+    if (aSel && !bSel) return -1;
+    if (!aSel && bSel) return 1;
+    if (aSel && bSel) {
+      const at = ra.selectedAt || 0, bt = rb.selectedAt || 0;
+      if (at && bt && at !== bt) return at - bt;
+      // 都沒 selectedAt 或時間相同 → 原順序
+      return itemOrderIdx[a.name] - itemOrderIdx[b.name];
+    }
+    return itemOrderIdx[a.name] - itemOrderIdx[b.name];
+  });
 
-  const itemsHtml = items.map(it => {
+  const itemsHtml = sortedItems.map(it => {
     const name = it.name;
     const r = recordsByName[name] || { name, selected: false, rating: '', methods: [], petNote: '' };
     const itMethods = it.methods || [];
@@ -2809,8 +2826,12 @@ function renderSession() {
     const name = el.dataset.name;
     el.querySelector('.item-head').onclick = () => {
       const cur = recordsByName[name] || { name, selected: false, rating: '', petNote: '' };
+      const wasSelected = cur.selected;
       cur.selected = !cur.selected;
-      if (!cur.selected) { cur.rating = ''; cur.petNote = ''; }
+      if (cur.selected && !wasSelected) {
+        cur.selectedAt = Date.now();  // 記錄勾選時間（用於排序）
+      }
+      if (!cur.selected) { cur.rating = ''; cur.petNote = ''; cur.selectedAt = null; }
       recordsByName[name] = cur;
       saveRecords();
       renderSession();
@@ -3013,7 +3034,16 @@ function exportPdf(sess, pet) {
     pet.birth,
   ].filter(Boolean).join(' · ');
 
-  const records = (sess.records || []).filter(r => r.selected);
+  // 排序：勾選順序（selectedAt asc），無 selectedAt 則 fallback 訓練項目原順序
+  const itemOrder = items.map(it => it.name);
+  const records = (sess.records || []).filter(r => r.selected).slice().sort((a, b) => {
+    if (a.selectedAt && b.selectedAt) return a.selectedAt - b.selectedAt;
+    if (a.selectedAt && !b.selectedAt) return -1;
+    if (!a.selectedAt && b.selectedAt) return 1;
+    const ai = itemOrder.indexOf(a.name);
+    const bi = itemOrder.indexOf(b.name);
+    return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+  });
   const recordsHtml = records.length === 0
     ? `<p style="color:#999; text-align:center; padding:16px;">（這堂課還沒有勾選項目）</p>`
     : records.map(r => {
@@ -3595,7 +3625,16 @@ async function shareToGist(sess, pet) {
   const items = ensureItemShape(pet.species === 'cat' ? load(KEYS.itemsCat, []) : load(KEYS.itemsDog, []));
   const itemMap = {};
   items.forEach(it => { itemMap[it.name] = it.methods || []; });
-  const enrichedRecords = (sess.records || []).map(r => {
+  // 排序：勾選順序（selectedAt asc），無 selectedAt 則 fallback 訓練項目原順序
+  const itemOrder = items.map(it => it.name);
+  const enrichedRecords = (sess.records || []).slice().sort((a, b) => {
+    if (a.selectedAt && b.selectedAt) return a.selectedAt - b.selectedAt;
+    if (a.selectedAt && !b.selectedAt) return -1;
+    if (!a.selectedAt && b.selectedAt) return 1;
+    const ai = itemOrder.indexOf(a.name);
+    const bi = itemOrder.indexOf(b.name);
+    return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+  }).map(r => {
     const itMethods = itemMap[r.name] || [];
     const checkedNames = r.methods || [];
     const methodDetails = checkedNames.map(mn => {
