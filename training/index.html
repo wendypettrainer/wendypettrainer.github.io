@@ -3318,7 +3318,7 @@ function openBookingMenu(anchorBtn, bookingId) {
     save(KEYS.bookings, load(KEYS.bookings, []).filter(b => b.id !== bookingId));
     const removedPayments = cleanupBookingPayments(bookingId);
     let msg = '已刪除';
-    if (cleanup.removed > 0) msg += ` · 移除 ${cleanup.removed} 顆空殼`;
+    if (cleanup.removed > 0) msg += ` · 移除 ${cleanup.removed} 筆空白紀錄`;
     if (removedPayments > 0) msg += ` · 移除 ${removedPayments} 筆收款紀錄`;
     showNotice(msg);
     render();
@@ -3695,7 +3695,7 @@ function renderBooking() {
         save(KEYS.bookings, load(KEYS.bookings, []).filter(x => x.id !== b.id));
         const removedPayments = cleanupBookingPayments(b.id);
         let msg = '已刪除';
-        if (cleanup.removed > 0) msg += ` · 移除 ${cleanup.removed} 顆空殼`;
+        if (cleanup.removed > 0) msg += ` · 移除 ${cleanup.removed} 筆空白紀錄`;
         if (removedPayments > 0) msg += ` · 移除 ${removedPayments} 筆收款紀錄`;
         showNotice(msg);
         go('bookings', { petId: pet.id });
@@ -3728,7 +3728,7 @@ function renderBooking() {
     const sync = applyBookingShellSync(updated, plan);
     let msg = '已儲存';
     if (sync.spawned > 0) msg += ` · 新增 ${sync.spawned} 堂預約`;
-    if (sync.removed > 0) msg += ` · 移除 ${sync.removed} 顆空殼`;
+    if (sync.removed > 0) msg += ` · 移除 ${sync.removed} 筆空白紀錄`;
     showNotice(msg);
     if (thenPdf) {
       exportBookingPdf(updated, pet);
@@ -5209,13 +5209,13 @@ function renderSettings() {
     <summary>資料修復</summary>
     <div class="card" style="cursor:default">
       <div class="actions-row">
-        <button class="btn ghost" id="linkOldData">🔗 連結舊課程預約 / 補產殼</button>
+        <button class="btn ghost" id="linkOldData">🔗 連結舊課程預約 / 補建紀錄</button>
       </div>
       <p class="card-meta" style="margin-top:10px">
-        • 把舊課程預約跟既有課程紀錄認親（用<b>同寵物 + 同日期</b> match 沒被連結過的紀錄）<br>
-        • 找不到 match 的會補產空白課程殼<br>
-        • 正常情況新建課程預約已自動產殼，這個按鈕只在你舊資料還沒連結時用<br>
-        • 可以重複按、不會重複產生
+        • 把舊的課程預約跟現有的課程紀錄自動配對（規則：<b>同一隻寵物 + 同一個日期</b>）<br>
+        • 配對不到的，會自動補建一筆空白的課程紀錄<br>
+        • 新建的課程預約已經會自動建紀錄，這個按鈕只在處理舊資料時用得到<br>
+        • 重複按不會重複建立
       </p>
     </div>
     </details>
@@ -5564,13 +5564,13 @@ function renderSettings() {
   if (linkOldBtn) linkOldBtn.onclick = () => {
     const result = linkLegacyBookingsToSessions();
     if (result.linked === 0 && result.spawned === 0) {
-      showNotice('沒有要連結 / 補產的項目（舊資料已 OK）');
+      showNotice('沒有要連結 / 補建的項目（舊資料已 OK）');
       return;
     }
-    const msg = `掃描完成：\n• 連結 ${result.linked} 筆既有紀錄到課程預約\n• 補產 ${result.spawned} 顆空殼\n\n繼續？`;
+    const msg = `掃描完成：\n• 連結 ${result.linked} 筆現有紀錄到課程預約\n• 補建 ${result.spawned} 筆空白紀錄\n\n繼續？`;
     if (!confirm(msg)) return;
     save(KEYS.sessions, result.newSessions);
-    showNotice(`已連結 ${result.linked} 筆 · 補產 ${result.spawned} 顆`);
+    showNotice(`已連結 ${result.linked} 筆 · 補建 ${result.spawned} 筆`);
     renderSettings();
   };
 
@@ -6113,7 +6113,7 @@ function renderStats() {
   const closedHtml = filteredClosed.length === 0
     ? (closedDetails.length === 0
         ? `<div class="empty" style="padding:20px; text-align:center; color:var(--text-soft); background:rgba(107,158,110,0.05); border-radius:8px">期間內沒有強制結案紀錄 🎉</div>`
-        : `<div class="empty" style="padding:20px; text-align:center; color:var(--text-soft)">「${escapeHtml(query)}」沒有 match 的呆帳明細</div>`)
+        : `<div class="empty" style="padding:20px; text-align:center; color:var(--text-soft)">「${escapeHtml(query)}」沒有符合的呆帳明細</div>`)
     : filteredClosed.map(d => `
         <div class="card" data-petid="${d.petId}">
           <div class="card-row">
