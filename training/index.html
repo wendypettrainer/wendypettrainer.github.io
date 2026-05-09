@@ -898,7 +898,20 @@ function looksLikeHtml(s) {
 // 確保字串為 sanitized HTML（舊資料遷移 + 新資料 sanitize）
 function ensureColorHtml(s) {
   if (!s) return '';
-  return looksLikeHtml(s) ? sanitizeColorHtml(s) : plainTextToHtml(s);
+  if (looksLikeHtml(s)) return sanitizeColorHtml(s);
+  // 自動修正：偵測雙重 escape 的 HTML（&lt;br&gt;、&amp;lt;br&amp;gt;）→ 解碼後當 HTML
+  if (/&lt;(br|span|div|p)\b|&amp;lt;(br|span|div|p)\b/i.test(s)) {
+    const ta = document.createElement('textarea');
+    ta.innerHTML = s;
+    let decoded = ta.value;
+    // 二次解碼（&amp;lt; → &lt; → <）
+    if (/&lt;(br|span|div|p)\b/i.test(decoded)) {
+      ta.innerHTML = decoded;
+      decoded = ta.value;
+    }
+    if (looksLikeHtml(decoded)) return sanitizeColorHtml(decoded);
+  }
+  return plainTextToHtml(s);
 }
 // 共用：產生顏色 toolbar HTML
 function colorToolbarHtml(idForBind = '') {
@@ -919,6 +932,35 @@ function bindColorToolbar(toolbarEl, editorEl) {
       applyColorToSelection(btn.dataset.color, editorEl);
     };
   });
+}
+// 共用：插入 HTML 到 contenteditable 游標位置（會 sanitize）
+function insertHtmlAtCursor(editorEl, html) {
+  editorEl.focus();
+  const sel = window.getSelection();
+  let range;
+  if (sel.rangeCount === 0 || !editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(editorEl);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    range = sel.getRangeAt(0);
+  }
+  range.deleteContents();
+  const tmp = document.createElement('div');
+  tmp.innerHTML = sanitizeColorHtml(html);
+  const nodes = [...tmp.childNodes];
+  let lastNode = null;
+  nodes.forEach(node => {
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    lastNode = node;
+  });
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editorEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
 // 共用：插入純文字到 contenteditable 游標位置（\n 自動轉 <br>）
 function insertTextAtCursor(editorEl, text) {
@@ -2625,7 +2667,7 @@ function renderFirstConsultSession(sess, pet) {
     };
   });
 
-  // 模板插入按鈕
+  // 模板插入按鈕（content 已是 HTML，用 insertHtmlAtCursor）
   main.querySelectorAll('[data-tpl-idx]').forEach(btn => {
     btn.onclick = () => {
       const i = parseInt(btn.dataset.tplIdx, 10);
@@ -2633,8 +2675,9 @@ function renderFirstConsultSession(sess, pet) {
       if (!tplItem) return;
       const editor = document.getElementById('firstConsultReport');
       const isEmpty = editor.textContent.trim() === '';
-      const text = (isEmpty ? '' : '\n\n') + (tplItem.content || '');
-      insertTextAtCursor(editor, text);
+      const prefix = isEmpty ? '' : '<br><br>';
+      const contentHtml = ensureColorHtml(tplItem.content || '');
+      insertHtmlAtCursor(editor, prefix + contentHtml);
       saveAll();
     };
   });
