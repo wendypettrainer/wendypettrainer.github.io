@@ -230,6 +230,29 @@
   .aging-badge.aging-warn { background: #f9d8a8; color: #a85f33; border: 1px solid #e8b894; }
   .aging-badge.aging-bad  { background: #f5b9a0; color: #8a3a1a; font-weight: 600; border: 1px solid #d88068; }
 
+  /* 寵物列表來源 chips */
+  .source-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 8px 4px 6px;
+  }
+  .source-chip {
+    padding: 4px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: white;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .source-chip.active {
+    background: var(--accent, #8b6f47);
+    color: white;
+    border-color: var(--accent, #8b6f47);
+  }
+
   /* 教室派案 badge */
   .studio-badge {
     display: inline-block;
@@ -799,7 +822,7 @@ const KEYS = {
   sessions: 'petcare.sessions',
   itemsCat: 'petcare.trainingItems.cat',
   itemsDog: 'petcare.trainingItems.dog',
-  bookings: 'petcare.bookings',                  // 預約 / 匯款通知記錄（合約 / 應收）
+  bookings: 'petcare.bookings',                  // 預約 / 課程預約記錄（合約 / 應收）
   bookingTemplate: 'petcare.bookingTemplate',    // 帳戶 + 須知 + 預設值
   payments: 'petcare.payments',                  // 實際金流：收款 / 退費（per booking）
   studioPayments: 'petcare.studioPayments',      // 教室月結款（per studio + month）
@@ -837,7 +860,7 @@ const DEFAULT_CAT_ITEMS = [
   '環境減敏：聲音', '環境減敏：陌生環境',
 ].map(name => ({ name, methods: [] }));
 
-/* ============ 匯款通知預設樣板（首次啟動時種入，之後可在設定頁編輯） ============ */
+/* ============ 課程預約預設樣板（首次啟動時種入，之後可在設定頁編輯） ============ */
 const DEFAULT_BOOKING_TEMPLATE = {
   bankName: '玉山銀行',
   bankCode: '808',
@@ -1137,6 +1160,7 @@ function ensurePetShape(arr) {
       ...p,
       source: (p.source === 'studio') ? 'studio' : 'direct',
       studioName: typeof p.studioName === 'string' ? p.studioName : '',
+      studioAddress: typeof p.studioAddress === 'string' ? p.studioAddress : '',
       studioRates: {
         oneOnOne: Number(incomingRates.oneOnOne) || 0,
         group: Number(incomingRates.group) || 0,
@@ -1266,6 +1290,7 @@ const state = {
   sessionId: null,
   bookingId: null,
   petFilter: '',  // '' | 'dog' | 'cat'
+  petSourceFilter: '',  // '' | 'direct' | 'studio:<name>'
   petQuery: '',
 };
 
@@ -1562,12 +1587,12 @@ function updateHeader() {
     segs.push({ label: '寵物列表', action: 'pets' });
     const p = getPet(state.petId);
     if (p) segs.push({ label: `${speciesEmoji(p.species)} ${p.name}`, action: 'sessions', petId: p.id });
-    segs.push({ label: '📋 匯款通知', current: true });
+    segs.push({ label: '📋 課程預約', current: true });
   } else if (state.view === 'booking') {
     segs.push({ label: '寵物列表', action: 'pets' });
     const p = getPet(state.petId);
     if (p) segs.push({ label: `${speciesEmoji(p.species)} ${p.name}`, action: 'sessions', petId: p.id });
-    segs.push({ label: '📋 匯款通知', action: 'bookings', petId: state.petId });
+    segs.push({ label: '📋 課程預約', action: 'bookings', petId: state.petId });
     segs.push({ label: state.bookingId ? '編輯' : '新增', current: true });
   } else if (state.view === 'settings') {
     segs.push({ label: '寵物列表', action: 'pets' });
@@ -1686,6 +1711,23 @@ function renderPets() {
       <button class="tab ${state.petFilter==='cat'?'active':''}" data-pet-filter="cat">🐱 貓 (${catCount})</button>
     </div>`;
 
+  // 來源 chips（直接 + 各教室）
+  const directCount = allPets.filter(p => p.source !== 'studio').length;
+  const studioPets = allPets.filter(p => p.source === 'studio');
+  const studioNames = [...new Set(studioPets.map(p => p.studioName).filter(Boolean))].sort();
+  const sourceFilter = state.petSourceFilter || '';
+  const sourceChipsArr = [
+    `<button class="source-chip ${sourceFilter===''?'active':''}" data-source-filter="">全部來源</button>`,
+    `<button class="source-chip ${sourceFilter==='direct'?'active':''}" data-source-filter="direct">直接客戶 (${directCount})</button>`,
+  ];
+  studioNames.forEach(n => {
+    const cnt = studioPets.filter(p => p.studioName === n).length;
+    const key = 'studio:' + n;
+    sourceChipsArr.push(`<button class="source-chip ${sourceFilter===key?'active':''}" data-source-filter="${escapeAttr(key)}">🏫 ${escapeHtml(n)} (${cnt})</button>`);
+  });
+  const sourceChips = (allPets.length === 0 || (directCount === allPets.length && studioPets.length === 0)) ? '' : `
+    <div class="source-chips">${sourceChipsArr.join('')}</div>`;
+
   // Search
   const search = showSearch ? `
     <input type="text" class="search-input" id="petSearch"
@@ -1695,6 +1737,11 @@ function renderPets() {
   // Filter + sort
   let pets = allPets.slice();
   if (state.petFilter) pets = pets.filter(p => p.species === state.petFilter);
+  if (sourceFilter === 'direct') pets = pets.filter(p => p.source !== 'studio');
+  else if (sourceFilter && sourceFilter.startsWith('studio:')) {
+    const targetStudio = sourceFilter.slice(7);
+    pets = pets.filter(p => p.source === 'studio' && p.studioName === targetStudio);
+  }
   if (state.petQuery.trim()) pets = pets.filter(p => petMatchesQuery(p, state.petQuery.trim()));
   pets.sort((a, b) => getPetSortKey(b).localeCompare(getPetSortKey(a)));
 
@@ -1751,11 +1798,15 @@ function renderPets() {
     }).join('');
   }
 
-  main.innerHTML = hero + tabs + search + listHtml + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = hero + tabs + sourceChips + search + listHtml + `<button class="fab" id="fab">＋</button>`;
 
   // Tab handler
   main.querySelectorAll('[data-pet-filter]').forEach(t => {
     t.onclick = () => { state.petFilter = t.dataset.petFilter; renderPets(); };
+  });
+  // 來源 chip
+  main.querySelectorAll('[data-source-filter]').forEach(t => {
+    t.onclick = () => { state.petSourceFilter = t.dataset.sourceFilter; renderPets(); };
   });
   // Search handler
   const sInput = document.getElementById('petSearch');
@@ -1806,7 +1857,7 @@ function openPetForm(pet = null) {
     id: '', species: 'dog', name: '', breed: '', birth: '',
     gender: '', neutered: '',
     ownerName: '', ownerContact: '', ownerAddress: '', notes: '',
-    source: 'direct', studioName: '',
+    source: 'direct', studioName: '', studioAddress: '',
     studioRates: { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 },
   };
   // 確保 studioRates 物件結構存在（既有 pet 沒這 field 時）
@@ -1864,7 +1915,7 @@ function openPetForm(pet = null) {
         <input id="f_contact" type="text" value="${escapeAttr(data.ownerContact)}" placeholder="可選">
       </div>
       <div class="field">
-        <label>飼主地址（用於到府上課與匯款通知）</label>
+        <label>飼主地址（用於到府上課與課程預約）</label>
         <input id="f_address" type="text" value="${escapeAttr(data.ownerAddress || '')}" placeholder="例：嘉義縣民雄鄉⋯">
       </div>
       <div class="field">
@@ -1880,6 +1931,10 @@ function openPetForm(pet = null) {
           <input id="f_studioName" type="text" value="${escapeAttr(data.studioName || '')}" placeholder="例：XX 寵物學院">
         </div>
         <div class="field">
+          <label>教室地址</label>
+          <input id="f_studioAddress" type="text" value="${escapeAttr(data.studioAddress || '')}" placeholder="開新預約時自動帶入此地址（覆蓋飼主地址）">
+        </div>
+        <div class="field">
           <label>鐘點費（按課程類型，NT$ / 堂）</label>
           <div class="row2">
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">一對一</div><input id="f_rate_oneOnOne" type="number" min="0" step="1" value="${data.studioRates.oneOnOne || ''}" placeholder="0"></div>
@@ -1889,7 +1944,7 @@ function openPetForm(pet = null) {
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">首堂諮詢</div><input id="f_rate_firstConsult" type="number" min="0" step="1" value="${data.studioRates.firstConsult || ''}" placeholder="0"></div>
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">其他</div><input id="f_rate_other" type="number" min="0" step="1" value="${data.studioRates.other || ''}" placeholder="0"></div>
           </div>
-          <p class="card-meta" style="margin-top:8px; font-size:12px">💡 教室付給你的單堂鐘點費。新建匯款通知時，會依據課程類型自動帶入對應金額。</p>
+          <p class="card-meta" style="margin-top:8px; font-size:12px">💡 教室付給你的單堂鐘點費。新建課程預約時，會依據課程類型自動帶入對應金額。</p>
         </div>
       </div>
       <div class="field">
@@ -1939,6 +1994,7 @@ function openPetForm(pet = null) {
       notes: overlay.querySelector('#f_notes').value.trim(),
       source,
       studioName,
+      studioAddress: overlay.querySelector('#f_studioAddress').value.trim(),
       studioRates: {
         oneOnOne: Number(overlay.querySelector('#f_rate_oneOnOne').value) || 0,
         group: Number(overlay.querySelector('#f_rate_group').value) || 0,
@@ -2113,6 +2169,13 @@ function renderSessions() {
   const sessions = applySessionSort(getPetSessions(pet.id), sortKey);
   const _settings = load(KEYS.settings, {});
   const petInfoCollapsed = _settings.petInfoCollapsed === true;
+  // 永遠可見的 action bar（編輯 + 課程預約）— 從 collapse body 拿出來
+  const petActionBar = `
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin:4px 4px 8px">
+      <button class="small-btn" id="editPet">編輯寵物資料</button>
+      <button class="small-btn" id="bookingBtn">📋 課程預約</button>
+    </div>
+  `;
   const meta = `
     <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
       <div id="petInfoToggle" style="display:flex; align-items:flex-start; justify-content:space-between; cursor:pointer; user-select:none; gap:8px">
@@ -2123,12 +2186,9 @@ function renderSessions() {
       </div>
       <div id="petInfoBody" style="display:${petInfoCollapsed ? 'none' : 'block'}">
         ${pet.ownerAddress ? `<div class="card-meta" style="margin-top:6px">📍 ${escapeHtml(pet.ownerAddress)}</div>` : ''}
+        ${pet.source === 'studio' && pet.studioAddress ? `<div class="card-meta" style="margin-top:6px">🏫 教室地址：${escapeHtml(pet.studioAddress)}</div>` : ''}
         ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
         ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">📝 ${escapeHtml(pet.notes)}</div>` : ''}
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
-          <button class="small-btn" id="editPet">編輯寵物資料</button>
-          <button class="small-btn" id="bookingBtn">📋 匯款通知</button>
-        </div>
       </div>
     </div>
   `;
@@ -2140,7 +2200,7 @@ function renderSessions() {
     <div class="card" style="cursor:default; padding:12px 14px; margin-bottom:10px">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
         <h3 style="margin:0; font-size:15px; color:var(--brown-dark)">${isStudioPet ? '🏫 教室派案合約' : '💰 款項'}</h3>
-        <span style="font-size:11px; color:var(--text-soft)">${petBookings.length} 筆${isStudioPet ? '合約' : '匯款通知'}</span>
+        <span style="font-size:11px; color:var(--text-soft)">${petBookings.length} 筆${isStudioPet ? '合約' : '課程預約'}</span>
       </div>
       ${petBookings.map(b => {
         const ctLab = courseTypeLabel(b);
@@ -2267,7 +2327,7 @@ function renderSessions() {
   } else {
     body = sessions.map(sessionCardHtml).join('');
   }
-  main.innerHTML = meta + petPaymentHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = meta + petActionBar + petPaymentHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
   // 排序選單
   const sortSelect = document.getElementById('sessionSort');
   if (sortSelect) sortSelect.onchange = (e) => {
@@ -2531,7 +2591,7 @@ function openSessionForm(session = null) {
   }
 }
 
-/* ============== BOOKING / 匯款通知 ============== */
+/* ============== BOOKING / 課程預約 ============== */
 function getBooking(id) { return load(KEYS.bookings, []).find(b => b.id === id); }
 function getPetBookings(petId) {
   return load(KEYS.bookings, [])
@@ -2742,7 +2802,7 @@ function cleanupBookingShells(bookingId) {
   if (blockers.length > 0) {
     return {
       ok: false,
-      error: `匯款通知對應的第 ${blockers.map(s => s.sourceIndex + 1).join('、')} 堂已有紀錄或已完成，請先處理那幾堂再刪`,
+      error: `課程預約對應的第 ${blockers.map(s => s.sourceIndex + 1).join('、')} 堂已有紀錄或已完成，請先處理那幾堂再刪`,
     };
   }
   const filtered = all.filter(s => s.sourceBookingId !== bookingId);
@@ -3082,7 +3142,7 @@ function renderBookings() {
   `;
   let body;
   if (bookings.length === 0) {
-    body = `<div class="empty"><h3>還沒有匯款通知</h3><p>點右下角 ＋ 新增第一筆</p></div>`;
+    body = `<div class="empty"><h3>還沒有課程預約</h3><p>點右下角 ＋ 新增第一筆</p></div>`;
   } else {
     body = bookings.map(b => {
       const firstDate = (b.sessions && b.sessions[0] && b.sessions[0].date) || '—';
@@ -3153,7 +3213,7 @@ function openBookingMenu(anchorBtn, bookingId) {
   };
   menu.querySelector('[data-act="delete"]').onclick = () => {
     menu.remove();
-    if (!confirm('刪除這筆匯款通知？')) return;
+    if (!confirm('刪除這筆課程預約？')) return;
     const cleanup = cleanupBookingShells(bookingId);
     if (!cleanup.ok) {
       showNotice(cleanup.error, 'err');
@@ -3184,12 +3244,16 @@ function renderBooking() {
   const isStudioPet = pet.source === 'studio';
   const defaultCourseType = 'oneOnOne';
   const studioRate = (pet.studioRates && pet.studioRates[defaultCourseType]) || 0;
+  // 教室派案：地址優先用 pet.studioAddress；direct：用 pet.ownerAddress 或 default
+  const initialLocation = isStudioPet
+    ? ((pet.studioAddress && pet.studioAddress.trim()) || (pet.ownerAddress && pet.ownerAddress.trim()) || tpl.defaultLocation)
+    : ((pet.ownerAddress && pet.ownerAddress.trim()) || tpl.defaultLocation);
   const b = data ? JSON.parse(JSON.stringify(data)) : {
     id: '',
     petId: pet.id,
     sessionCount: 1,
     sessions: [{ date: '', startTime: '', endTime: '' }],
-    location: (pet.ownerAddress && pet.ownerAddress.trim()) || tpl.defaultLocation,
+    location: initialLocation,
     feePerClass: isStudioPet ? studioRate : tpl.defaultFeePerClass,
     transportPerClass: isStudioPet ? 0 : tpl.defaultTransportPerClass,
     discountType: '',     // '' | 'amount' | 'percent'
@@ -3327,7 +3391,7 @@ function renderBooking() {
         </div>
       </div>
 
-      <div class="card" style="cursor:default">
+      <div class="card" style="cursor:default; display:${b.isStudioBooking ? 'none' : 'block'}">
         <div class="row2">
           <div class="field">
             <label>繳費截止日</label>
@@ -3356,7 +3420,7 @@ function renderBooking() {
           </div>`;
         if (!isEdit) return `
           <div style="margin-top:18px; padding:14px; background:rgba(240,230,214,0.3); border-radius:8px; text-align:center; color:var(--text-soft); font-size:13px">
-            💡 請先儲存匯款通知（按下方「儲存」），才能記錄實際收款 / 退費
+            💡 請先儲存課程預約（按下方「儲存」），才能記錄實際收款 / 退費
           </div>`;
         const summary = bookingPaymentSummary(b);
         const recog = bookingRevenueRecognition(b);
@@ -3526,7 +3590,7 @@ function renderBooking() {
     });
     if (isEdit) {
       document.getElementById('bk_del').onclick = () => {
-        if (!confirm('刪除這筆匯款通知？')) return;
+        if (!confirm('刪除這筆課程預約？')) return;
         const cleanup = cleanupBookingShells(b.id);
         if (!cleanup.ok) {
           showNotice(cleanup.error, 'err');
@@ -4934,11 +4998,11 @@ function renderSettings() {
       </p>
     </div>
 
-    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 匯款通知樣板</h3>
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 課程預約樣板</h3>
     <div class="card" style="cursor:default">
       <p class="card-meta" style="margin-bottom:12px">
-        💡 這裡編輯的內容會出現在每隻寵物的匯款通知 PDF 上。<br>
-        <b>銀行帳戶</b>每張通知都會印；<b>預設地點/費用</b>是新增匯款通知時的預設值，可逐筆覆蓋；<b>報名須知/課前須知</b>是 PDF 的前兩頁，幾乎不會變動。
+        💡 這裡編輯的內容會出現在每隻寵物的課程預約 PDF 上。<br>
+        <b>銀行帳戶</b>每張通知都會印；<b>預設地點/費用</b>是新增課程預約時的預設值，可逐筆覆蓋；<b>報名須知/課前須知</b>是 PDF 的前兩頁，幾乎不會變動。
       </p>
 
       <h4 style="font-size:13px; color:var(--brown-dark); margin:14px 0 8px;">收款帳戶</h4>
@@ -4963,7 +5027,7 @@ function renderSettings() {
         </div>
       </div>
 
-      <h4 style="font-size:13px; color:var(--brown-dark); margin:18px 0 8px;">新增匯款通知時的預設值</h4>
+      <h4 style="font-size:13px; color:var(--brown-dark); margin:18px 0 8px;">新增課程預約時的預設值</h4>
       <div class="field">
         <label>預設上課地點</label>
         <input id="bt_loc" type="text" value="${escapeAttr(bookingTpl.defaultLocation||'')}">
@@ -4990,7 +5054,7 @@ function renderSettings() {
       </div>
 
       <div class="actions-row">
-        <button class="btn" id="bt_save">儲存匯款通知樣板</button>
+        <button class="btn" id="bt_save">儲存課程預約樣板</button>
         <button class="btn ghost" id="bt_reset">重設為預設文字</button>
       </div>
     </div>
@@ -5031,10 +5095,10 @@ function renderSettings() {
     <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">資料修復</h3>
     <div class="card" style="cursor:default">
       <div class="actions-row">
-        <button class="btn ghost" id="linkOldData">🔗 連結舊匯款通知 / 補產殼</button>
+        <button class="btn ghost" id="linkOldData">🔗 連結舊課程預約 / 補產殼</button>
       </div>
       <p class="card-meta" style="margin-top:10px">
-        💡 把舊匯款通知跟既有課程紀錄認親（用<b>同寵物 + 同日期</b> match 沒被連結過的紀錄），找不到 match 的會補產空白課程殼。<br>
+        💡 把舊課程預約跟既有課程紀錄認親（用<b>同寵物 + 同日期</b> match 沒被連結過的紀錄），找不到 match 的會補產空白課程殼。<br>
         正常情況新建匯款已自動產殼，這個按鈕只在你舊資料還沒連結時用。可以重複按、不會重複產生。
       </p>
     </div>
@@ -5068,7 +5132,7 @@ function renderSettings() {
     showNotice('設定已儲存');
   };
 
-  // 匯款通知樣板：儲存
+  // 課程預約樣板：儲存
   document.getElementById('bt_save').onclick = () => {
     save(KEYS.bookingTemplate, {
       bankName: document.getElementById('bt_bankName').value.trim(),
@@ -5081,7 +5145,7 @@ function renderSettings() {
       registrationNotes: document.getElementById('bt_regNotes').value,
       preClassNotes: document.getElementById('bt_preNotes').value,
     });
-    showNotice('匯款通知樣板已儲存');
+    showNotice('課程預約樣板已儲存');
   };
   document.getElementById('bt_reset').onclick = () => {
     if (!confirm('把報名須知 + 課前須知還原成預設文字？\n\n（帳戶與預設費用不會動）')) return;
@@ -5385,7 +5449,7 @@ function renderSettings() {
       showNotice('沒有要連結 / 補產的項目（舊資料已 OK）');
       return;
     }
-    const msg = `掃描完成：\n• 連結 ${result.linked} 筆既有紀錄到匯款通知\n• 補產 ${result.spawned} 顆空殼\n\n繼續？`;
+    const msg = `掃描完成：\n• 連結 ${result.linked} 筆既有紀錄到課程預約\n• 補產 ${result.spawned} 顆空殼\n\n繼續？`;
     if (!confirm(msg)) return;
     save(KEYS.sessions, result.newSessions);
     showNotice(`已連結 ${result.linked} 筆 · 補產 ${result.spawned} 顆`);
@@ -5723,7 +5787,7 @@ function renderStats() {
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap">
       <div>
         <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📊 會計</div>
-        <div style="font-size:12px; color:var(--text-soft); margin-top:2px">範圍內 ${bookings.length} 筆匯款通知 · ${closedTotalCount} 堂強制結案</div>
+        <div style="font-size:12px; color:var(--text-soft); margin-top:2px">範圍內 ${bookings.length} 筆課程預約 · ${closedTotalCount} 堂強制結案</div>
       </div>
       <select id="statsRange" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:white; font-family:inherit; color:var(--text)">
         ${RANGE_OPTS.map(o => `<option value="${o.k}" ${o.k===range?'selected':''}>${o.l}</option>`).join('')}
@@ -6002,7 +6066,7 @@ function renderEmailPreview(overlay, p) {
         建於 ${escapeHtml((existing.createdAt || '').slice(0, 10) || '—')} · ${existing.ownerContact ? '電話：' + escapeHtml(existing.ownerContact) : ''}
       </div>
       <div style="margin-top:8px; color:var(--text)">
-        是同一隻嗎？選「<b>覆蓋舊資料</b>」會用這次解析的內容更新現有那筆（保留原本的課程記錄與匯款通知）；選「<b>新增為另一筆</b>」會建第二筆。
+        是同一隻嗎？選「<b>覆蓋舊資料</b>」會用這次解析的內容更新現有那筆（保留原本的課程記錄與課程預約）；選「<b>新增為另一筆</b>」會建第二筆。
       </div>
     </div>
   ` : '';
