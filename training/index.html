@@ -798,7 +798,18 @@ function emptyTable(cols = 3, rowCount = 2) {
     rows: Array.from({ length: rowCount }, () => Array.from({ length: cols }, () => '')),
   };
 }
-// 訓練方法表格 → HTML（顯示用，escapeHtml 過）
+// 顏色強調 markdown：**紅** ==綠== __藍__
+// 先 escapeHtml，再套色彩標記（避免 XSS）
+function applyColorMarkdown(escapedText) {
+  return escapedText
+    .replace(/\*\*([^*\n]+?)\*\*/g, '<span style="color:#c97a4f; font-weight:600">$1</span>')
+    .replace(/==([^=\n]+?)==/g, '<span style="color:#6b9e6e; font-weight:600">$1</span>')
+    .replace(/__([^_\n]+?)__/g, '<span style="color:#5a7a9e; font-weight:600">$1</span>');
+}
+function escapeHtmlMd(text) {
+  return applyColorMarkdown(escapeHtml(text)).replace(/\n/g, '<br>');
+}
+// 訓練方法表格 → HTML（顯示用，含色彩 markdown）
 function methodTableToHtml(table, opts = {}) {
   const t = normalizeTable(table);
   if (!t) return '';
@@ -809,8 +820,8 @@ function methodTableToHtml(table, opts = {}) {
     ? 'padding:6px 8px; border:1px solid #d8cdb6; vertical-align:top; font-size:12px; line-height:1.5;'
     : 'padding:8px 10px; border:1px solid #d8cdb6; vertical-align:top; line-height:1.55;';
   return `<table style="border-collapse:collapse; width:100%; margin:6px 0; background:white;">
-    <thead><tr>${t.headers.map(h => `<th style="${headerStyle}; text-align:left;">${escapeHtml(h)}</th>`).join('')}</tr></thead>
-    <tbody>${t.rows.map(row => `<tr>${row.map((c, i) => `<td style="${cellStyle}${i===0 ? ' font-weight:600;' : ''}">${escapeHtml(c).replace(/\n/g, '<br>')}</td>`).join('')}</tr>`).join('')}</tbody>
+    <thead><tr>${t.headers.map(h => `<th style="${headerStyle}; text-align:left;">${escapeHtmlMd(h)}</th>`).join('')}</tr></thead>
+    <tbody>${t.rows.map(row => `<tr>${row.map((c, i) => `<td style="${cellStyle}${i===0 ? ' font-weight:600;' : ''}">${escapeHtmlMd(c)}</td>`).join('')}</tr>`).join('')}</tbody>
   </table>`;
 }
 function ensureItemShape(arr) {
@@ -4556,8 +4567,14 @@ function openTableEditor(initialTable, onSave) {
   const overlay = openModal(`
     <div class="modal" style="max-width:900px; width:95vw;">
       <h2>訓練方法表格編輯</h2>
-      <p style="color:var(--text-soft); font-size:12px; margin-bottom:10px">
+      <p style="color:var(--text-soft); font-size:12px; margin-bottom:6px">
         💡 第一行（淺色）是欄標題；其他列每格自由填。第 1 欄會自動加粗（適合放「步驟名稱」「階段」等）。
+      </p>
+      <p style="color:var(--text-soft); font-size:12px; margin-bottom:10px; padding:8px 10px; background:rgba(240,230,214,0.5); border-radius:6px;">
+        🎨 <b>顏色強調</b>（顯示時自動上色）：
+        <code style="background:#fff; padding:1px 4px;">**鼻子**</code> → <span style="color:#c97a4f; font-weight:600">紅</span>
+        <code style="background:#fff; padding:1px 4px;">==全身進入==</code> → <span style="color:#6b9e6e; font-weight:600">綠</span>
+        <code style="background:#fff; padding:1px 4px;">__注意__</code> → <span style="color:#5a7a9e; font-weight:600">藍</span>
       </p>
       <div id="te_grid" style="overflow-x:auto; padding:4px 0;"></div>
       <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
