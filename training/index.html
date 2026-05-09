@@ -579,6 +579,36 @@
   }
   .actions-row .btn { flex: 1; min-width: 120px; }
 
+  /* === 顏色編輯器（contenteditable + toolbar） === */
+  .color-editor {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    min-height: 36px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.55;
+    background: white;
+    outline: none;
+    word-break: break-word;
+  }
+  .color-editor:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(139,111,71,0.15); }
+  .color-editor:empty::before { content: attr(data-placeholder); color: var(--text-soft); }
+  .color-toolbar {
+    display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px;
+  }
+  .color-toolbar button {
+    padding: 4px 10px; font-size: 12px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: white; cursor: pointer;
+    font-family: inherit; line-height: 1.2;
+  }
+  .color-toolbar button:hover { background: var(--header-bg); }
+  .color-toolbar button.tb-clear { color: #666; }
+  .color-toolbar button.tb-red { color: #c97a4f; font-weight: 600; }
+  .color-toolbar button.tb-green { color: #6b9e6e; font-weight: 600; }
+  .color-toolbar button.tb-blue { color: #5a7a9e; font-weight: 600; }
+
   /* === FAS 色帶（首堂諮詢內部觀察） === */
   .fas-bar {
     display: grid;
@@ -798,18 +828,79 @@ function emptyTable(cols = 3, rowCount = 2) {
     rows: Array.from({ length: rowCount }, () => Array.from({ length: cols }, () => '')),
   };
 }
-// 顏色強調 markdown：**紅** ==綠== __藍__
-// 先 escapeHtml，再套色彩標記（避免 XSS）
-function applyColorMarkdown(escapedText) {
-  return escapedText
-    .replace(/\*\*([^*\n]+?)\*\*/g, '<span style="color:#c97a4f; font-weight:600">$1</span>')
-    .replace(/==([^=\n]+?)==/g, '<span style="color:#6b9e6e; font-weight:600">$1</span>')
-    .replace(/__([^_\n]+?)__/g, '<span style="color:#5a7a9e; font-weight:600">$1</span>');
+// 顏色 sanitize：只允許 <br> 跟 <span style="color:..."> 跟 <span style="font-weight:...">
+function sanitizeColorHtml(html) {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  // 直接移除危險元素
+  tmp.querySelectorAll('script, style, iframe, object, embed, link, meta').forEach(el => el.remove());
+  function walk(node) {
+    [...node.childNodes].forEach(child => {
+      if (child.nodeType === 8) { child.remove(); return; }   // comment
+      if (child.nodeType !== 1) return;                        // text
+      const tag = child.tagName.toLowerCase();
+      if (tag === 'br') return;
+      if (tag === 'span') {
+        const color = child.style.color;
+        const fontWeight = child.style.fontWeight;
+        while (child.attributes.length > 0) child.removeAttribute(child.attributes[0].name);
+        if (color) child.style.color = color;
+        if (fontWeight === '600' || fontWeight === 'bold' || fontWeight === '700') child.style.fontWeight = '600';
+        walk(child);
+        return;
+      }
+      // div / p → 取出內容、加 <br>，移除 div/p 標籤
+      walk(child);
+      const parent = child.parentNode;
+      if ((tag === 'div' || tag === 'p') && parent) {
+        if (child.previousSibling) parent.insertBefore(document.createElement('br'), child);
+      }
+      while (child.firstChild) parent.insertBefore(child.firstChild, child);
+      child.remove();
+    });
+  }
+  walk(tmp);
+  return tmp.innerHTML;
 }
-function escapeHtmlMd(text) {
-  return applyColorMarkdown(escapeHtml(text)).replace(/\n/g, '<br>');
+// 套色彩到當前 selection（必須在 editorEl 範圍內）
+function applyColorToSelection(color, editorEl) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) { showNotice('請先選取要上色的文字', 'err'); return; }
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) { showNotice('請先選取要上色的文字', 'err'); return; }
+  if (!editorEl.contains(range.commonAncestorContainer)) { showNotice('請先選取要上色的文字', 'err'); return; }
+  const fragment = range.extractContents();
+  const span = document.createElement('span');
+  if (color) {
+    span.style.color = color;
+    span.style.fontWeight = '600';
+  }
+  span.appendChild(fragment);
+  range.insertNode(span);
+  // 把游標放到 span 後
+  sel.removeAllRanges();
+  const newRange = document.createRange();
+  newRange.selectNodeContents(span);
+  newRange.collapse(false);
+  sel.addRange(newRange);
+  editorEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
-// 訓練方法表格 → HTML（顯示用，含色彩 markdown）
+// 純文字 → HTML（用於舊資料遷移：純文字 step 升級成 HTML）
+function plainTextToHtml(s) {
+  if (!s) return '';
+  return escapeHtml(s).replace(/\n/g, '<br>');
+}
+// 偵測是否已經是 HTML 格式（含 tag）
+function looksLikeHtml(s) {
+  return typeof s === 'string' && /<(br|span|div|p)\b/i.test(s);
+}
+// 確保字串為 sanitized HTML（舊資料遷移 + 新資料 sanitize）
+function ensureColorHtml(s) {
+  if (!s) return '';
+  return looksLikeHtml(s) ? sanitizeColorHtml(s) : plainTextToHtml(s);
+}
+// 訓練方法表格 → HTML（cell 內容已是 sanitized HTML）
 function methodTableToHtml(table, opts = {}) {
   const t = normalizeTable(table);
   if (!t) return '';
@@ -820,8 +911,8 @@ function methodTableToHtml(table, opts = {}) {
     ? 'padding:6px 8px; border:1px solid #d8cdb6; vertical-align:top; font-size:12px; line-height:1.5;'
     : 'padding:8px 10px; border:1px solid #d8cdb6; vertical-align:top; line-height:1.55;';
   return `<table style="border-collapse:collapse; width:100%; margin:6px 0; background:white;">
-    <thead><tr>${t.headers.map(h => `<th style="${headerStyle}; text-align:left;">${escapeHtmlMd(h)}</th>`).join('')}</tr></thead>
-    <tbody>${t.rows.map(row => `<tr>${row.map((c, i) => `<td style="${cellStyle}${i===0 ? ' font-weight:600;' : ''}">${escapeHtmlMd(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+    <thead><tr>${t.headers.map(h => `<th style="${headerStyle}; text-align:left;">${ensureColorHtml(h)}</th>`).join('')}</tr></thead>
+    <tbody>${t.rows.map(row => `<tr>${row.map((c, i) => `<td style="${cellStyle}${i===0 ? ' font-weight:600;' : ''}">${ensureColorHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>
   </table>`;
 }
 function ensureItemShape(arr) {
@@ -832,19 +923,19 @@ function ensureItemShape(arr) {
       return { name: it, methods: [] };
     }
     if (Array.isArray(it.methods)) {
-      // v3+ → 升級為 v4（加 table 欄位）
+      // v3+ → 升級為 v4（加 table 欄位 + steps 統一為 HTML）
       return {
         name: it.name || '',
         methods: it.methods.map(m => ({
           name: (m && m.name) || '',
-          steps: (m && m.steps) || '',
+          steps: (m && m.steps != null) ? ensureColorHtml(m.steps) : '',
           table: (m && m.table) ? normalizeTable(m.table) : null,
         })),
       };
     }
     // v2: had {name, steps}
     if (it.steps && it.steps.trim()) {
-      return { name: it.name || '', methods: [{ name: '基本方法', steps: it.steps, table: null }] };
+      return { name: it.name || '', methods: [{ name: '基本方法', steps: ensureColorHtml(it.steps), table: null }] };
     }
     return { name: it.name || '', methods: [] };
   });
@@ -2534,9 +2625,10 @@ function renderSession() {
       <div class="methods-section">
         <div class="methods-label">🎯 今天用的方法（可複選）</div>
         ${itMethods.map(m => {
-          const stepsTxt = (m.steps || '').trim();
+          const stepsHtml = ensureColorHtml(m.steps);
+          const hasSteps = stepsHtml && stepsHtml.replace(/<[^>]+>/g, '').trim().length > 0;
           const hasTbl = !!normalizeTable(m.table);
-          const hasDetails = stepsTxt || hasTbl;
+          const hasDetails = hasSteps || hasTbl;
           return `
             <div style="margin-bottom:6px">
               <label class="method-check" style="margin-bottom:2px">
@@ -2547,7 +2639,7 @@ function renderSession() {
                 <details style="margin-left:24px; margin-top:2px;">
                   <summary style="cursor:pointer; font-size:11px; color:var(--text-soft); user-select:none;">📖 步驟${hasTbl ? ' / 表格' : ''}</summary>
                   <div style="margin-top:4px; padding:8px 10px; background:rgba(240,230,214,0.4); border-left:2px solid var(--brown-light); border-radius:4px; font-size:12px; line-height:1.6;">
-                    ${stepsTxt ? `<div style="white-space:pre-wrap; margin-bottom:${hasTbl?'6px':'0'}">${escapeHtml(stepsTxt)}</div>` : ''}
+                    ${hasSteps ? `<div style="margin-bottom:${hasTbl?'6px':'0'}">${stepsHtml}</div>` : ''}
                     ${hasTbl ? methodTableToHtml(m.table, {compact:true}) : ''}
                   </div>
                 </details>` : ''}
@@ -2825,12 +2917,13 @@ function exportPdf(sess, pet) {
         const ratingTxt = r.rating === 'good' ? '😊 表現好' : r.rating === 'ok' ? '😐 普通' : r.rating === 'work' ? '💪 需加強' : '已練習';
         const methodsHtml = checkedNames.map(mn => {
           const m = itMethods.find(im => im.name === mn);
-          const stepsTxt = (m && m.steps || '').trim();
+          const stepsHtml = m ? ensureColorHtml(m.steps) : '';
+          const hasSteps = stepsHtml && stepsHtml.replace(/<[^>]+>/g, '').trim().length > 0;
           const tblHtml = m && m.table ? methodTableToHtml(m.table) : '';
           return `
             <div class="item-method">
               <div class="item-label">🎯 方法：${escapeHtml(mn || '（未命名方法）')}</div>
-              ${stepsTxt ? `<div class="item-method-steps">${escapeHtml(stepsTxt)}</div>` : ''}
+              ${hasSteps ? `<div class="item-method-steps">${stepsHtml}</div>` : ''}
               ${tblHtml ? `<div style="margin-top:6px">${tblHtml}</div>` : ''}
             </div>`;
         }).join('');
@@ -3821,15 +3914,22 @@ function renderSettings() {
       const tbl = normalizeTable(m.table);
       const tableInfo = tbl ? `（${tbl.headers.length} 欄 × ${tbl.rows.length} 列）` : '';
       const tableBtnLabel = tbl ? `📊 編輯表格 ${tableInfo}` : '📊 加入表格';
+      const stepsHtml = ensureColorHtml(m.steps);
       return `
         <div class="method-block">
           <div class="method-top">
             <input data-i="${i}" data-j="${j}" data-mfield="name" value="${escapeAttr(m.name)}" placeholder="方法名稱（例：手勢引導 / 響片）">
             <button class="small-btn danger" data-mdel="${i}_${j}">刪</button>
           </div>
-          <textarea data-i="${i}" data-j="${j}" data-mfield="steps"
-            placeholder="（可選）這個方法的步驟，例：1. 食物在鼻子前  2. 慢慢往頭頂移..."
-            rows="2">${escapeHtml(m.steps)}</textarea>
+          <div class="color-toolbar" data-mtb="${i}_${j}">
+            <button type="button" class="tb-clear" data-color="">清色</button>
+            <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
+            <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
+            <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
+          </div>
+          <div class="color-editor" contenteditable="true"
+               data-i="${i}" data-j="${j}" data-mfield="steps"
+               data-placeholder="（可選）步驟，例：1. 食物在鼻子前  2. 慢慢往頭頂移...">${stepsHtml}</div>
           <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
             <button class="small-btn" data-mtable="${i}_${j}">${tableBtnLabel}</button>
             ${tbl ? `<button class="small-btn danger" data-mtdel="${i}_${j}">移除表格</button>` : ''}
@@ -3878,8 +3978,26 @@ function renderSettings() {
     document.querySelectorAll('#itemEditor input[data-mfield]').forEach(inp => {
       inp.onchange = () => updateMethodField(parseInt(inp.dataset.i), parseInt(inp.dataset.j), inp.dataset.mfield, inp.value);
     });
-    document.querySelectorAll('#itemEditor textarea[data-mfield]').forEach(ta => {
-      ta.onchange = () => updateMethodField(parseInt(ta.dataset.i), parseInt(ta.dataset.j), ta.dataset.mfield, ta.value);
+    // Steps contenteditable: 儲存 sanitized HTML on blur
+    document.querySelectorAll('#itemEditor .color-editor[data-mfield="steps"]').forEach(div => {
+      div.onblur = () => {
+        const i = parseInt(div.dataset.i), j = parseInt(div.dataset.j);
+        const cur = ensureItemShape(load(key, []));
+        cur[i].methods[j].steps = sanitizeColorHtml(div.innerHTML);
+        save(key, cur);
+      };
+    });
+    // Toolbar 按鈕：套色到 selection（mousedown.preventDefault 防止失焦）
+    document.querySelectorAll('#itemEditor .color-toolbar[data-mtb]').forEach(tb => {
+      const [i, j] = tb.dataset.mtb.split('_').map(Number);
+      const editor = tb.parentElement.querySelector('.color-editor[data-mfield="steps"]');
+      tb.querySelectorAll('button[data-color]').forEach(btn => {
+        btn.onmousedown = (e) => e.preventDefault();
+        btn.onclick = (e) => {
+          e.preventDefault();
+          applyColorToSelection(btn.dataset.color, editor);
+        };
+      });
     });
     document.querySelectorAll('[data-del]').forEach(btn => {
       btn.onclick = () => {
@@ -4508,6 +4626,18 @@ function openModal(html) {
 // 訓練方法表格編輯器
 function openTableEditor(initialTable, onSave) {
   let t = normalizeTable(initialTable) || emptyTable(3, 3);
+  let activeCell = null;  // 最後 focus 的 cell（toolbar 用）
+
+  // 同步 DOM cell 內容回 t.headers / t.rows（在重 render 前呼叫）
+  function syncFromDom() {
+    overlay.querySelectorAll('[data-tehdr]').forEach(el => {
+      t.headers[parseInt(el.dataset.tehdr)] = sanitizeColorHtml(el.innerHTML);
+    });
+    overlay.querySelectorAll('[data-tecell]').forEach(el => {
+      const [ri, ci] = el.dataset.tecell.split('_').map(Number);
+      t.rows[ri][ci] = sanitizeColorHtml(el.innerHTML);
+    });
+  }
 
   function render() {
     const colWidth = `minmax(80px, 1fr)`;
@@ -4517,8 +4647,8 @@ function openTableEditor(initialTable, onSave) {
         <div></div>
         ${t.headers.map((h, ci) => `
           <div style="position:relative;">
-            <input data-tehdr="${ci}" value="${escapeAttr(h)}" placeholder="欄${ci+1}標題"
-              style="width:100%; padding:6px 8px; background:#f0e6d6; border:1px solid #c9a85a; border-radius:4px; font-weight:600; color:#6b5435; font-size:13px;">
+            <div contenteditable="true" data-tehdr="${ci}" data-placeholder="欄${ci+1}標題"
+              class="color-editor" style="background:#f0e6d6; border:1px solid #c9a85a; border-radius:4px; font-weight:600; color:#6b5435; font-size:13px; padding:6px 8px; min-height:32px;">${ensureColorHtml(h)}</div>
           </div>
         `).join('')}
         <div style="display:flex; align-items:center; justify-content:center;">
@@ -4527,8 +4657,8 @@ function openTableEditor(initialTable, onSave) {
         ${t.rows.map((row, ri) => `
           <div style="display:flex; align-items:center; justify-content:center; color:var(--text-soft); font-size:11px;">${ri+1}</div>
           ${row.map((c, ci) => `
-            <textarea data-tecell="${ri}_${ci}" rows="1" placeholder=""
-              style="width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:4px; resize:vertical; font-family:inherit; font-size:13px;">${escapeHtml(c)}</textarea>
+            <div contenteditable="true" data-tecell="${ri}_${ci}" data-placeholder=""
+              class="color-editor" style="font-size:13px; min-height:32px; padding:6px 8px;">${ensureColorHtml(c)}</div>
           `).join('')}
           <div style="display:flex; align-items:center; justify-content:center;">
             <button class="small-btn danger" data-tedelrow="${ri}" style="padding:2px 6px; font-size:11px;" title="刪這列">×</button>
@@ -4536,28 +4666,22 @@ function openTableEditor(initialTable, onSave) {
         `).join('')}
       </div>
     `;
-    // 即時 binding
-    overlay.querySelectorAll('[data-tehdr]').forEach(inp => {
-      inp.oninput = () => {
-        t.headers[parseInt(inp.dataset.tehdr)] = inp.value;
-      };
-    });
-    overlay.querySelectorAll('[data-tecell]').forEach(ta => {
-      ta.oninput = () => {
-        const [ri, ci] = ta.dataset.tecell.split('_').map(Number);
-        t.rows[ri][ci] = ta.value;
-      };
+    // Track active cell for toolbar
+    overlay.querySelectorAll('.color-editor').forEach(el => {
+      el.onfocus = () => { activeCell = el; };
     });
     overlay.querySelectorAll('[data-tedelrow]').forEach(btn => {
       btn.onclick = () => {
         const ri = parseInt(btn.dataset.tedelrow);
         if (t.rows.length <= 1) { showNotice('至少要保留 1 列', 'err'); return; }
+        syncFromDom();
         t.rows.splice(ri, 1);
         render();
       };
     });
     overlay.querySelector('[data-tedelcol]').onclick = () => {
       if (t.headers.length <= 1) { showNotice('至少要保留 1 欄', 'err'); return; }
+      syncFromDom();
       t.headers.pop();
       t.rows.forEach(r => r.pop());
       render();
@@ -4567,15 +4691,16 @@ function openTableEditor(initialTable, onSave) {
   const overlay = openModal(`
     <div class="modal" style="max-width:900px; width:95vw;">
       <h2>訓練方法表格編輯</h2>
-      <p style="color:var(--text-soft); font-size:12px; margin-bottom:6px">
-        💡 第一行（淺色）是欄標題；其他列每格自由填。第 1 欄會自動加粗（適合放「步驟名稱」「階段」等）。
+      <p style="color:var(--text-soft); font-size:12px; margin-bottom:8px">
+        💡 第一行（淺色）是欄標題；其他列每格自由填。第 1 欄會自動加粗。<br>
+        🎨 <b>上色</b>：點 cell 進入編輯 → 選取要變色的字 → 按下方顏色按鈕。
       </p>
-      <p style="color:var(--text-soft); font-size:12px; margin-bottom:10px; padding:8px 10px; background:rgba(240,230,214,0.5); border-radius:6px;">
-        🎨 <b>顏色強調</b>（顯示時自動上色）：
-        <code style="background:#fff; padding:1px 4px;">**鼻子**</code> → <span style="color:#c97a4f; font-weight:600">紅</span>
-        <code style="background:#fff; padding:1px 4px;">==全身進入==</code> → <span style="color:#6b9e6e; font-weight:600">綠</span>
-        <code style="background:#fff; padding:1px 4px;">__注意__</code> → <span style="color:#5a7a9e; font-weight:600">藍</span>
-      </p>
+      <div class="color-toolbar" id="te_toolbar" style="margin-bottom:10px;">
+        <button type="button" class="tb-clear" data-color="">清色</button>
+        <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
+        <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
+        <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
+      </div>
       <div id="te_grid" style="overflow-x:auto; padding:4px 0;"></div>
       <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
         <button class="small-btn" id="te_addrow">＋ 新增列</button>
@@ -4590,12 +4715,23 @@ function openTableEditor(initialTable, onSave) {
   `);
 
   render();
+  // Bind toolbar
+  overlay.querySelectorAll('#te_toolbar button[data-color]').forEach(btn => {
+    btn.onmousedown = (e) => e.preventDefault();
+    btn.onclick = (e) => {
+      e.preventDefault();
+      if (!activeCell) { showNotice('請先點一個格子再選取文字', 'err'); return; }
+      applyColorToSelection(btn.dataset.color, activeCell);
+    };
+  });
 
   overlay.querySelector('#te_addrow').onclick = () => {
+    syncFromDom();
     t.rows.push(Array.from({length: t.headers.length}, () => ''));
     render();
   };
   overlay.querySelector('#te_addcol').onclick = () => {
+    syncFromDom();
     t.headers.push(`欄${t.headers.length + 1}`);
     t.rows.forEach(r => r.push(''));
     render();
@@ -4607,6 +4743,7 @@ function openTableEditor(initialTable, onSave) {
   };
   overlay.querySelector('#te_cancel').onclick = () => overlay.remove();
   overlay.querySelector('#te_save').onclick = () => {
+    syncFromDom();
     onSave(normalizeTable(t));
     overlay.remove();
   };
