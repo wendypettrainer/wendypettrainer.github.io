@@ -2040,7 +2040,7 @@ function openPetForm(pet = null) {
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">首堂諮詢</div><input id="f_rate_firstConsult" type="number" min="0" step="1" value="${data.studioRates.firstConsult || ''}" placeholder="0"></div>
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">其他</div><input id="f_rate_other" type="number" min="0" step="1" value="${data.studioRates.other || ''}" placeholder="0"></div>
           </div>
-          <p class="card-meta" style="margin-top:8px; font-size:12px">💡 教室付給你的單堂鐘點費。新建課程預約時，會依據課程類型自動帶入對應金額。</p>
+          <p class="card-meta" style="margin-top:8px; font-size:12px">• 教室付給你的單堂鐘點費。新建課程預約時，會依據課程類型自動帶入對應金額。</p>
         </div>
       </div>
       <div class="field">
@@ -2335,7 +2335,7 @@ function renderSessions() {
             </div>
           </div>`;
       }).join('')}
-      ${isStudioPet ? `<p class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(255,217,102,0.15); border-radius:6px; font-size:12px; line-height:1.6">💡 教室付款是月結、跨多隻寵物，請到 <b>📊 會計</b> → 教室派案 區記錄。</p>` : ''}
+      ${isStudioPet ? `<p class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(255,217,102,0.15); border-radius:6px; font-size:12px; line-height:1.6">• 教室付款是月結、跨多隻寵物，請到 <b>📊 會計</b> → 教室派案 區記錄。</p>` : ''}
     </div>
   `;
 
@@ -3516,7 +3516,7 @@ function renderBooking() {
           </div>`;
         if (!isEdit) return `
           <div style="margin-top:18px; padding:14px; background:rgba(240,230,214,0.3); border-radius:8px; text-align:center; color:var(--text-soft); font-size:13px">
-            💡 請先儲存課程預約（按下方「儲存」），才能記錄實際收款 / 退費
+            • 請先儲存課程預約（按下方「儲存」），才能記錄實際收款 / 退費
           </div>`;
         const summary = bookingPaymentSummary(b);
         const recog = bookingRevenueRecognition(b);
@@ -5058,9 +5058,9 @@ function renderSettings() {
         <button class="btn ghost" id="s_pushNow">⬆ 推上雲端</button>
       </div>
       <p class="card-meta" style="margin-top:10px; line-height:1.6">
-        💡 <b>怎麼運作</b>：每次本機改動 3 秒後自動推到你的私人 Gist。其他裝置打開 App 時自動拉取。<br>
-        💡 <b>衝突規則</b>：以時間戳「最後存者為準」。請避免兩台同時編輯。<br>
-        💡 <b>需要</b>：下方 GitHub PAT 已設定（gist 權限）。
+        • <b>怎麼運作</b>：每次本機改動 3 秒後自動推到你的私人 Gist。其他裝置打開 App 時自動拉取。<br>
+        • <b>衝突規則</b>：以時間戳「最後存者為準」。請避免兩台同時編輯。<br>
+        • <b>需要</b>：下方 GitHub PAT 已設定（gist 權限）。
       </p>
     </div>
     </details>
@@ -6220,11 +6220,11 @@ function renderStats() {
     ` : ''}
     ${studioSectionHtml}
     <p style="margin-top:24px; font-size:12px; color:var(--text-soft); line-height:1.7">
-      💡 <b>金流（合約 / payments）：</b>「應收」= 合約總額；「實收 / 退費」= 你在每筆 booking 記錄的 payments；「應收餘額」= 應收 − 實收 + 退費<br>
-      💡 <b>收入認列（權責發生制）：</b>「已認列」= 已上完課對應的金額；「預收款」= 客戶已付但還沒上；「已上未收」= 已上完但客戶還沒付齊<br>
-      💡 <b>課時履約：</b>「已兌現」= done 的堂數 × 單堂單價；「未兌現」= closed（強制結案）；「進行中」= 預約中 / 待安排 / 待結案<br>
-      💡 <b>教室派案：</b>累計應付 = 該教室所有 done 課時 × 鐘點費；累計實付 = 教室付款紀錄總額；月份對帳用<br>
-      💡 範圍切換按 booking 建立時間 / 教室付款收到日期 篩選
+      • <b>金流（合約 / payments）：</b>「應收」= 合約總額；「實收 / 退費」= 你在每筆 booking 記錄的 payments；「應收餘額」= 應收 − 實收 + 退費<br>
+      • <b>收入認列（權責發生制）：</b>「已認列」= 已上完課對應的金額；「預收款」= 客戶已付但還沒上；「已上未收」= 已上完但客戶還沒付齊<br>
+      • <b>課時履約：</b>「已兌現」= done 的堂數 × 單堂單價；「未兌現」= closed（強制結案）；「進行中」= 預約中 / 待安排 / 待結案<br>
+      • <b>教室派案：</b>累計應付 = 該教室所有 done 課時 × 鐘點費；累計實付 = 教室付款紀錄總額；月份對帳用<br>
+      • 範圍切換按 booking 建立時間 / 教室付款收到日期 篩選
     </p>
   `;
 
@@ -6345,7 +6345,7 @@ function renderEmailPreview(overlay, p) {
         ${actionButtons}
       </div>
       <p class="card-meta" style="margin-top:8px">
-        💡 加進去後可以到寵物列表點寵物 → 「編輯寵物資料」進一步調整。
+        • 加進去後可以到寵物列表點寵物 → 「編輯寵物資料」進一步調整。
       </p>
     </div>
   `;
@@ -6743,7 +6743,7 @@ function openTableEditor(initialTable, onSave) {
     <div class="modal" style="max-width:900px; width:95vw;">
       <h2>訓練方法表格編輯</h2>
       <p style="color:var(--text-soft); font-size:12px; margin-bottom:8px">
-        💡 第一行（淺色）是欄標題；其他列每格自由填。第 1 欄會自動加粗。<br>
+        • 第一行（淺色）是欄標題；其他列每格自由填。第 1 欄會自動加粗。<br>
         🎨 <b>上色</b>：點 cell 進入編輯 → 選取要變色的字 → 按下方顏色按鈕。
       </p>
       <div class="color-toolbar" id="te_toolbar" style="margin-bottom:10px;">
