@@ -5549,14 +5549,14 @@ function renderSettings() {
     if (!wrap) return;
     wrap.innerHTML = fcTpls.map((t, i) => `
       <div style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:10px">
-        <div class="row2" style="margin-bottom:6px">
-          <div class="field" style="margin-bottom:0">
+        <div style="display:flex; align-items:flex-end; gap:6px; margin-bottom:6px">
+          <div class="field" style="flex:1; margin-bottom:0">
             <label>標籤名稱（按鈕上的字）</label>
             <input type="text" data-fc-label="${i}" value="${escapeAttr(t.label||'')}" placeholder="例：訓練建議">
           </div>
-          <div class="field" style="margin-bottom:0; display:flex; align-items:flex-end">
-            <button class="btn danger" data-fc-del="${i}" style="height:36px">刪除</button>
-          </div>
+          <button class="small-btn" data-fc-up="${i}" ${i===0?'disabled':''} style="height:36px">↑</button>
+          <button class="small-btn" data-fc-down="${i}" ${i===fcTpls.length-1?'disabled':''} style="height:36px">↓</button>
+          <button class="btn danger" data-fc-del="${i}" style="height:36px">刪除</button>
         </div>
         <div class="field" style="margin-bottom:0">
           <label>插入文字內容</label>
@@ -5583,6 +5583,22 @@ function renderSettings() {
       el.onclick = () => {
         if (!confirm('刪除這個模板？')) return;
         fcTpls.splice(parseInt(el.dataset.fcDel,10), 1);
+        renderFcTplList();
+      };
+    });
+    wrap.querySelectorAll('[data-fc-up]').forEach(el => {
+      el.onclick = () => {
+        const i = parseInt(el.dataset.fcUp,10);
+        if (i === 0) return;
+        [fcTpls[i-1], fcTpls[i]] = [fcTpls[i], fcTpls[i-1]];
+        renderFcTplList();
+      };
+    });
+    wrap.querySelectorAll('[data-fc-down]').forEach(el => {
+      el.onclick = () => {
+        const i = parseInt(el.dataset.fcDown,10);
+        if (i >= fcTpls.length - 1) return;
+        [fcTpls[i+1], fcTpls[i]] = [fcTpls[i], fcTpls[i+1]];
         renderFcTplList();
       };
     });
@@ -5778,6 +5794,7 @@ function renderSettings() {
             <div class="item-edit-top">
               <input data-i="${i}" data-field="name" value="${escapeAttr(it.name)}" placeholder="訓練項目名稱">
               <button class="small-btn" data-up="${i}" ${i===0?'disabled':''}>↑</button>
+              <button class="small-btn" data-down="${i}" ${i===list.length-1?'disabled':''}>↓</button>
               <button class="small-btn danger" data-del="${i}">刪</button>
             </div>
             <div class="methods-wrap">
@@ -5886,6 +5903,16 @@ function renderSettings() {
         if (i === 0) return;
         const cur = ensureItemShape(load(key, []));
         [cur[i-1], cur[i]] = [cur[i], cur[i-1]];
+        save(key, cur);
+        renderItemEditor();
+      };
+    });
+    document.querySelectorAll('[data-down]').forEach(btn => {
+      btn.onclick = () => {
+        const i = parseInt(btn.dataset.down);
+        const cur = ensureItemShape(load(key, []));
+        if (i >= cur.length - 1) return;
+        [cur[i+1], cur[i]] = [cur[i], cur[i+1]];
         save(key, cur);
         renderItemEditor();
       };
