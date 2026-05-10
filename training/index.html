@@ -3121,12 +3121,13 @@ function attachmentPdfHtml(sess) {
       <div style="font-size:11pt; line-height:1.7; color:#2d2620">${ensureColorHtml(m.content)}</div>
     </section>
   `).join('');
+  // 連結 section 不強制換頁（接著前段，省空白）；用 page-break-inside:avoid 避免列表中段斷頁
   const linksHtml = links.length === 0 ? '' : `
-    <section style="page-break-before:always; padding-top:18pt">
-      <h2 style="color:#6b5435; font-size:16pt; margin:0 0 12pt; border-bottom:2pt solid #c9a85a; padding-bottom:6pt">🔗 相關資源連結</h2>
-      <ul style="font-size:11pt; line-height:1.9; color:#2d2620; padding-left:20pt">
+    <section style="margin-top:20pt; page-break-inside:avoid">
+      <h2 style="color:#6b5435; font-size:14pt; margin:0 0 8pt; border-bottom:1.5pt solid #c9a85a; padding-bottom:4pt">🔗 相關資源連結</h2>
+      <ul style="font-size:11pt; line-height:1.5; color:#2d2620; padding-left:20pt; margin:0">
         ${links.map(l => `
-          <li style="margin-bottom:8pt">
+          <li style="margin-bottom:6pt">
             <b>${escapeHtml(l.title || l.url)}</b><br>
             <span style="font-size:9pt; color:#8a7e6f; word-break:break-all">${escapeHtml(l.url)}</span>
           </li>
@@ -4481,7 +4482,7 @@ function exportFirstConsultPdf(sess, pet) {
     margin-bottom: 18pt;
   }
   .report-body {
-    font-size: 12pt; line-height: 1.85;
+    font-size: 12pt; line-height: 1.55;
     white-space: pre-wrap;
     padding: 4pt 0;
   }
