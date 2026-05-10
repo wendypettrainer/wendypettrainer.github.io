@@ -7,52 +7,59 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#f0e6d6">
+<meta name="theme-color" content="#fafaf8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Wendy 訓練">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f0e6d6;
-    --bg-soft: #f7f0e3;
-    --brown: #8b6f47;
-    --brown-dark: #6b5435;
-    --brown-light: #c9b693;
-    --text: #3d2f1f;
-    --text-soft: #6b5435;
-    --good: #6b9e6e;
-    --ok: #c9a85a;
-    --work: #c97a4f;
-    --shadow: 0 2px 8px rgba(139, 111, 71, 0.15);
+    /* 北歐風配色：純白底 + 冷調深灰 + 木色 accent + 莫蘭迪強調色 */
+    --bg: #fafaf8;             /* 主背景：極淺暖白 */
+    --bg-soft: #f3f1ec;        /* 次背景：淺米灰（accent 區用） */
+    --brown: #4a4138;          /* 主文字色（取代原棕色 header bg）：深炭棕 */
+    --brown-dark: #2c2620;     /* 強調色 / 主標題 */
+    --brown-light: #b8ad9a;    /* 輔助色：淡木灰 */
+    --text: #2c2620;           /* 一般文字：深炭灰 */
+    --text-soft: #7a716a;      /* 次文字：中灰 */
+    --good: #7a9a7d;           /* 成功 / done：莫蘭迪綠 */
+    --ok: #c9b573;             /* 中性 / 警示：莫蘭迪黃 */
+    --work: #b8745a;           /* 警告 / pending：莫蘭迪橘 */
+    --border: #e5e3df;         /* 細邊線 */
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --accent: #4a4138;         /* alias：保持既有 var(--accent) 引用不壞 */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
-                 "Microsoft JhengHei", sans-serif;
-    font-size: 16px;
-    line-height: 1.5;
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont,
+                 "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
   .app { max-width: 720px; margin: 0 auto; padding-bottom: 80px; }
   header.top {
-    background: var(--brown);
-    color: var(--bg);
-    padding: 14px 16px;
+    background: #ffffff;
+    color: var(--text);
+    padding: 12px 16px;
     display: flex;
     align-items: center;
     gap: 10px;
     position: sticky;
     top: 0;
     z-index: 10;
-    box-shadow: var(--shadow);
+    border-bottom: 1px solid var(--border);
   }
   header.top h1 {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     flex: 1;
     text-align: center;
   }
@@ -63,7 +70,7 @@
     align-items: center;
     gap: 2px;
     font-size: 13px;
-    color: rgba(255,255,255,0.85);
+    color: var(--text-soft);
     overflow-x: auto;
     overflow-y: hidden;
     white-space: nowrap;
@@ -79,29 +86,29 @@
     border-radius: 4px;
     flex-shrink: 0;
   }
-  .bc-link:hover { background: rgba(255,255,255,0.18); }
+  .bc-link:hover { background: var(--bg-soft); }
   .bc-current {
-    color: white;
+    color: var(--brown-dark);
     font-weight: 600;
     padding: 4px 6px;
     flex-shrink: 0;
   }
   .bc-sep {
-    color: rgba(255,255,255,0.4);
+    color: var(--brown-light);
     flex-shrink: 0;
     padding: 0 1px;
   }
   .icon-btn {
     background: transparent;
     border: none;
-    color: var(--bg);
+    color: var(--text);
     font-size: 18px;
     cursor: pointer;
     padding: 6px 8px;
     border-radius: 6px;
     min-width: 36px;
   }
-  .icon-btn:hover { background: rgba(255,255,255,0.15); }
+  .icon-btn:hover { background: var(--bg-soft); }
   .icon-btn:disabled { opacity: 0.3; cursor: default; }
 
   .sync-dot {
@@ -129,43 +136,45 @@
   }
 
   .card {
-    background: var(--bg-soft);
-    border-radius: 12px;
+    background: #ffffff;
+    border-radius: 8px;
     padding: 14px 16px;
-    margin-bottom: 12px;
-    box-shadow: var(--shadow);
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
     cursor: pointer;
-    transition: transform 0.05s;
+    transition: border-color 0.15s, background 0.15s;
   }
-  .card:hover { transform: translateY(-1px); }
+  .card:hover { border-color: var(--brown-light); }
   .card-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
   }
-  .card-title { font-weight: 600; font-size: 16px; color: var(--brown-dark); }
+  .card-title { font-weight: 600; font-size: 15px; color: var(--brown-dark); letter-spacing: 0.2px; }
   .card-meta { font-size: 13px; color: var(--text-soft); margin-top: 4px; }
   .badge {
-    background: var(--brown);
-    color: var(--bg);
+    background: var(--bg-soft);
+    color: var(--brown-dark);
     padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--border);
   }
 
   .card-menu-btn {
     background: transparent;
     border: none;
-    font-size: 20px;
+    font-size: 18px;
     color: var(--text-soft);
     padding: 4px 12px;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
     line-height: 1;
     flex-shrink: 0;
   }
-  .card-menu-btn:hover { background: rgba(139,111,71,0.12); color: var(--brown-dark); }
+  .card-menu-btn:hover { background: var(--bg-soft); color: var(--text); }
 
   /* Session 狀態 toggle 圓圈（booked/done） */
   .status-toggle {
@@ -335,9 +344,9 @@
     font-family: inherit;
   }
   .source-chip.active {
-    background: var(--accent, #8b6f47);
+    background: var(--brown-dark);
     color: white;
-    border-color: var(--accent, #8b6f47);
+    border-color: var(--brown-dark);
   }
 
   /* 寵物詳情頁的分組資訊區（狗狗基本 / 困擾 / 家長基本） */
@@ -433,43 +442,43 @@
   .card-menu button.danger:hover { background: rgba(201,122,79,0.1); }
 
   .btn {
-    background: var(--brown);
-    color: var(--bg);
-    border: none;
-    padding: 10px 16px;
-    border-radius: 8px;
+    background: var(--brown-dark);
+    color: #ffffff;
+    border: 1px solid var(--brown-dark);
+    padding: 9px 16px;
+    border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    box-shadow: var(--shadow);
+    transition: background 0.15s;
   }
-  .btn:hover { background: var(--brown-dark); }
+  .btn:hover { background: #1a1612; border-color: #1a1612; }
   .btn.ghost {
     background: transparent;
-    color: var(--brown);
-    border: 1px solid var(--brown);
-    box-shadow: none;
+    color: var(--text);
+    border: 1px solid var(--border);
   }
-  .btn.ghost:hover { background: var(--brown); color: var(--bg); }
-  .btn.danger { background: var(--work); }
+  .btn.ghost:hover { background: var(--bg-soft); border-color: var(--brown-light); color: var(--brown-dark); }
+  .btn.danger { background: var(--work); border-color: var(--work); }
+  .btn.danger:hover { background: #9a5e47; border-color: #9a5e47; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .fab {
     position: fixed;
     bottom: 24px;
     right: max(24px, calc(50vw - 360px + 24px));
-    background: var(--brown);
-    color: var(--bg);
+    background: var(--brown-dark);
+    color: #ffffff;
     border: none;
-    width: 56px;
-    height: 56px;
-    border-radius: 28px;
-    font-size: 28px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    font-size: 24px;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(139,111,71,0.35);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     z-index: 5;
   }
-  .fab:hover { background: var(--brown-dark); }
+  .fab:hover { background: #1a1612; }
 
   .empty {
     text-align: center;
@@ -494,19 +503,21 @@
   /* Forms */
   label { display: block; font-size: 13px; color: var(--text-soft); margin-bottom: 6px; }
   input[type=text], input[type=date], input[type=number], input[type=password],
+  input[type=url], input[type=time], input[type=month], input[type=email],
   textarea, select {
     width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--brown-light);
-    border-radius: 8px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     background: white;
     font-family: inherit;
     font-size: 14px;
     color: var(--text);
+    transition: border-color 0.15s;
   }
   input:focus, textarea:focus, select:focus {
-    outline: 2px solid var(--brown);
-    outline-offset: -1px;
+    outline: none;
+    border-color: var(--brown-dark);
   }
   textarea { resize: vertical; min-height: 80px; }
   .field { margin-bottom: 14px; }
@@ -685,29 +696,33 @@
 
   .tabs {
     display: flex;
-    gap: 4px;
+    gap: 0;
     margin-bottom: 14px;
-    background: var(--bg-soft);
-    padding: 4px;
-    border-radius: 8px;
+    background: transparent;
+    padding: 0;
+    border-bottom: 1px solid var(--border);
   }
   .tab {
     flex: 1;
-    padding: 8px;
+    padding: 10px 8px;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-bottom: 2px solid transparent;
     cursor: pointer;
     font-size: 14px;
     color: var(--text-soft);
+    margin-bottom: -1px;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
   }
-  .tab.active { background: var(--brown); color: var(--bg); }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--brown-dark); border-bottom-color: var(--brown-dark); font-weight: 500; }
 
   .search-input {
     width: 100%;
-    padding: 10px 16px;
-    border: 1px solid var(--brown-light);
-    border-radius: 24px;
+    padding: 9px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     background: white;
     font-size: 14px;
     color: var(--text);
@@ -801,15 +816,19 @@
     margin-top: 4px;
   }
   .small-btn {
-    background: transparent;
-    border: 1px solid var(--brown-light);
-    color: var(--brown);
-    padding: 4px 8px;
-    border-radius: 6px;
+    background: white;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 10px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 12px;
+    font-family: inherit;
+    transition: border-color 0.15s, background 0.15s;
   }
+  .small-btn:hover { border-color: var(--brown-light); background: var(--bg-soft); }
   .small-btn.danger { color: var(--work); border-color: var(--work); }
+  .small-btn.danger:hover { background: rgba(184, 116, 90, 0.08); }
 
   .actions-row {
     display: flex;
