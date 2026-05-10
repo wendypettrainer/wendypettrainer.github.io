@@ -1953,7 +1953,7 @@ function bindTomorrowReminderHandlers(root) {
     } else if (btn.dataset.act === 'open-gcal') {
       btn.onclick = (e) => {
         e.stopPropagation();
-        const url = buildGoogleCalUrl(s, pet);
+        const url = buildGoogleCalUrl(gcalOptsFromSession(s, pet));
         if (!url) { showNotice('日期或時間不完整，無法產生行事曆'); return; }
         window.open(url, '_blank');
       };
@@ -3021,53 +3021,159 @@ function fillLineTemplate(session, pet) {
     .replace(/\{courseLabel\}/g, courseLabel);
 }
 
-// 產生 Google Calendar 新增事件 URL（含前一天提醒，用瀏覽器點擊→直接跳網頁版）
-// 注意：Google Calendar URL 不支援 VALARM；提醒要靠使用者帳號預設或手動設。
-// 我們在 details 內附「⏰ 上課前一天記得傳 LINE 提醒給家長」當保險。
-function buildGoogleCalUrl(session, pet) {
-  if (!session || !session.date) return '';
-  const { start, end } = getSessionTimeRange(session);
-  // 把 YYYY-MM-DD + HH:MM 拼成 Google 要求的 YYYYMMDDTHHMMSS 格式（local time）
-  function pad(n) { return String(n).padStart(2, '0'); }
-  function toGcalLocal(dateStr, timeStr, fallbackHour) {
-    const d = new Date(dateStr + 'T00:00:00');
-    if (isNaN(d.getTime())) return '';
-    let h = fallbackHour, m = 0;
-    if (timeStr && /^\d{1,2}:\d{2}$/.test(timeStr)) {
-      const [hh, mm] = timeStr.split(':').map(x => parseInt(x, 10));
-      h = hh; m = mm;
-    }
-    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+// 把 (YYYY-MM-DD, HH:MM) 拼成 Google/.ics 用的 local time YYYYMMDDTHHMMSS
+function toGcalLocalString(dateStr, timeStr, fallbackHour) {
+  if (!dateStr) return '';
+  const pad = n => String(n).padStart(2, '0');
+  const [y, m, d] = dateStr.split('-').map(x => parseInt(x, 10));
+  if (!y || !m || !d) return '';
+  let h = (typeof fallbackHour === 'number') ? fallbackHour : 14, mi = 0;
+  if (timeStr && /^\d{1,2}:\d{2}$/.test(timeStr)) {
+    const [hh, mm] = timeStr.split(':').map(x => parseInt(x, 10));
+    h = hh; mi = mm;
   }
-  const startLocal = toGcalLocal(session.date, start, 14);
-  const endLocal = end
-    ? toGcalLocal(session.date, end, 15)
-    : (() => {
-        // 沒填結束 → 起始 + 1 小時
-        const startMatch = startLocal.match(/^(\d{8}T\d{2})(\d{2})(\d{2})$/);
-        if (!startMatch) return '';
-        const hr = parseInt(startMatch[1].slice(-2), 10);
-        const newHr = (hr + 1) % 24;
-        return startMatch[1].slice(0, -2) + pad(newHr) + startMatch[2] + startMatch[3];
-      })();
-  if (!startLocal || !endLocal) return '';
+  return `${y}${pad(m)}${pad(d)}T${pad(h)}${pad(mi)}00`;
+}
+
+// 產生 Google Calendar 新增事件 URL
+// opts: { date, startTime, endTime, title, location, description }
+// 注意：Google Calendar URL 不支援 VALARM；想要前一天提醒請改用 .ics 路線。
+function buildGoogleCalUrl(opts) {
+  if (!opts || !opts.date) return '';
+  const startLocal = toGcalLocalString(opts.date, opts.startTime, 14);
+  if (!startLocal) return '';
+  let endLocal = opts.endTime ? toGcalLocalString(opts.date, opts.endTime, 15) : '';
+  if (!endLocal) {
+    // 沒填結束 → 起始 + 1 小時
+    const m = startLocal.match(/^(\d{8}T)(\d{2})(\d{2})(\d{2})$/);
+    if (m) {
+      const pad = n => String(n).padStart(2, '0');
+      const newH = (parseInt(m[2], 10) + 1) % 24;
+      endLocal = m[1] + pad(newH) + m[3] + m[4];
+    }
+  }
+  if (!endLocal) return '';
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: opts.title || '訓練課',
+    dates: `${startLocal}/${endLocal}`,
+    details: opts.description || '',
+    location: opts.location || '',
+  });
+  return 'https://calendar.google.com/calendar/render?' + params.toString();
+}
+
+// 從 session entity + pet 組成 GCal opts（首頁明日課程用）
+function gcalOptsFromSession(session, pet) {
+  const { start, end } = getSessionTimeRange(session);
   const courseLabel = courseTypeLabel(session) || '訓練課';
   const seq = parseInt(session.sessionSeq, 10);
   const seqStr = seq ? ` 第${seq}堂` : '';
   const title = `${(pet && pet.name) || '寵物'} ${courseLabel}${seqStr}`;
-  const details = [
+  const description = [
     '⏰ 上課前一天記得傳 LINE 提醒給家長',
     `飼主：${(pet && pet.ownerName) || '—'}`,
     pet && pet.ownerPhone ? `電話：${pet.ownerPhone}` : '',
   ].filter(Boolean).join('\n');
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: title,
-    dates: `${startLocal}/${endLocal}`,
-    details,
+  return {
+    date: session.date,
+    startTime: start,
+    endTime: end,
+    title,
     location: session.location || '',
+    description,
+  };
+}
+
+// 從 booking + idx 組成 GCal opts（booking 編輯頁用，不依賴 session 已 spawn）
+function gcalOptsFromBooking(booking, idx, pet) {
+  if (!booking || !booking.sessions) return null;
+  const bs = booking.sessions[idx] || {};
+  if (!bs.date) return null;
+  const courseLabel = courseTypeLabel(booking) || '訓練課';
+  const seqStr = ` 第${idx + 1}堂`;
+  const title = `${(pet && pet.name) || '寵物'} ${courseLabel}${seqStr}`;
+  const description = [
+    '⏰ 上課前一天記得傳 LINE 提醒給家長',
+    `飼主：${(pet && pet.ownerName) || '—'}`,
+    pet && pet.ownerPhone ? `電話：${pet.ownerPhone}` : '',
+  ].filter(Boolean).join('\n');
+  return {
+    date: bs.date,
+    startTime: bs.startTime,
+    endTime: bs.endTime,
+    title,
+    location: booking.location || '',
+    description,
+  };
+}
+
+// 產生 .ics 內容字串（多事件 + 每事件含前 24h VALARM）
+// sessionsForIcs: [{date, startTime, endTime, title, description, location}]
+function buildIcsFile(events) {
+  const now = new Date();
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fmtUtc(d) {
+    return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+  }
+  function escIcs(s) {
+    return String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+  }
+  const dtstamp = fmtUtc(now);
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Wendy 訓練課程//PetCare//ZH-TW',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+  events.forEach((ev, i) => {
+    const dtstart = toGcalLocalString(ev.date, ev.startTime, 14);
+    let dtend = ev.endTime ? toGcalLocalString(ev.date, ev.endTime, 15) : '';
+    if (!dtend) {
+      // 沒填結束 → start + 1 小時
+      const m = dtstart.match(/^(\d{8}T)(\d{2})(\d{2})(\d{2})$/);
+      if (m) {
+        const newH = (parseInt(m[2], 10) + 1) % 24;
+        dtend = m[1] + pad(newH) + m[3] + m[4];
+      }
+    }
+    if (!dtstart || !dtend) return;
+    const uid = `${ev.uid || (Date.now() + '-' + i)}@wendy-petcare`;
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:' + uid);
+    lines.push('DTSTAMP:' + dtstamp);
+    lines.push('DTSTART:' + dtstart);
+    lines.push('DTEND:' + dtend);
+    lines.push('SUMMARY:' + escIcs(ev.title));
+    if (ev.description) lines.push('DESCRIPTION:' + escIcs(ev.description));
+    if (ev.location) lines.push('LOCATION:' + escIcs(ev.location));
+    // 前 24 小時提醒
+    lines.push('BEGIN:VALARM');
+    lines.push('TRIGGER:-P1D');
+    lines.push('ACTION:DISPLAY');
+    lines.push('DESCRIPTION:' + escIcs('明天有課，記得傳 LINE 提醒給家長：' + ev.title));
+    lines.push('END:VALARM');
+    lines.push('END:VEVENT');
   });
-  return 'https://calendar.google.com/calendar/render?' + params.toString();
+  lines.push('END:VCALENDAR');
+  // RFC 5545 用 CRLF
+  return lines.join('\r\n');
+}
+
+// 觸發瀏覽器下載 .ics 檔
+function downloadIcsFile(filename, content) {
+  const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
 }
 
 // 把字串複製到剪貼簿，回傳 Promise<boolean>
@@ -3976,14 +4082,20 @@ function renderBooking() {
 
   function rerender() { renderInner(); }
   function renderInner() {
-    const sessRows = b.sessions.map((s, i) => `
-      <div class="session-row" style="display:grid; grid-template-columns: 60px 1fr 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px;">
+    const sessRows = b.sessions.map((s, i) => {
+      const hasDate = !!(s.date || '').trim();
+      return `
+      <div class="session-row" style="display:grid; grid-template-columns: 56px 1fr 1fr 1fr 36px; gap:6px; align-items:center; margin-bottom:8px;">
         <div style="color:var(--text-soft); font-size:14px;">第 ${i+1} 堂</div>
         <input type="date" data-i="${i}" data-f="date" value="${escapeAttr(s.date||'')}">
         <input type="time" data-i="${i}" data-f="startTime" value="${escapeAttr(s.startTime||'')}">
         <input type="time" data-i="${i}" data-f="endTime" value="${escapeAttr(s.endTime||'')}">
-      </div>
-    `).join('');
+        <button type="button" class="gcal-row-btn" data-gcal-i="${i}"
+                title="${hasDate ? '加入 Google 行事曆' : '請先填日期'}"
+                ${hasDate ? '' : 'disabled'}
+                style="padding:6px; background:transparent; border:1px solid var(--border); border-radius:6px; cursor:${hasDate ? 'pointer' : 'not-allowed'}; opacity:${hasDate ? '1' : '0.4'}; font-size:14px;">📅</button>
+      </div>`;
+    }).join('');
 
     const total = bookingTotal(b);
 
@@ -4028,8 +4140,16 @@ function renderBooking() {
         </div>
 
         <div class="field">
-          <label>每堂日期 / 時間 <span style="font-weight:normal; color:var(--text-soft); font-size:12px">（第 1 堂必填，後續可空白、上完前一堂再回來補）</span></label>
+          <label style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span>每堂日期 / 時間</span>
+            <span style="font-weight:normal; color:var(--text-soft); font-size:12px">（第 1 堂必填，後續可空白、上完前一堂再回來補）</span>
+            <button type="button" class="btn ghost btn-sm" id="bk_downloadIcs" style="margin-left:auto;" title="下載 .ics 檔，匯入 Google / Apple 行事曆會一次加入全部課程，並含前一天提醒">📥 全部加入行事曆</button>
+          </label>
           <div id="bk_sessions">${sessRows}</div>
+          <p class="card-meta" style="font-size:12px; margin-top:6px; color:var(--text-soft)">
+            • 行 📅 按鈕：跳到 Google Calendar 網頁版，預填好事件，按存檔即可<br>
+            • 上方📥按鈕：下載 .ics 檔，匯入時會把所有課程一次加進行事曆，並自動設定<b>前一天提醒</b>
+          </p>
         </div>
 
         <div class="field">
@@ -4206,8 +4326,45 @@ function renderBooking() {
       inp.onchange = () => {
         const i = parseInt(inp.dataset.i, 10);
         b.sessions[i][inp.dataset.f] = inp.value;
+        // 重繪以更新 📅 按鈕的 enabled 狀態（日期填了才能點）
+        rerender();
       };
     });
+    // 每堂的 📅 行事曆按鈕（單筆跳 Google Cal）
+    main.querySelectorAll('.gcal-row-btn[data-gcal-i]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        const i = parseInt(btn.dataset.gcalI, 10);
+        const opts = gcalOptsFromBooking(b, i, pet);
+        if (!opts) { showNotice('日期未填，無法加入行事曆', 'err'); return; }
+        const url = buildGoogleCalUrl(opts);
+        if (!url) { showNotice('日期或時間格式錯誤', 'err'); return; }
+        window.open(url, '_blank');
+      };
+    });
+    // 批次下載 .ics
+    const icsBtn = document.getElementById('bk_downloadIcs');
+    if (icsBtn) {
+      icsBtn.onclick = (e) => {
+        e.preventDefault();
+        const events = b.sessions
+          .map((s, i) => {
+            if (!s.date) return null;
+            const opts = gcalOptsFromBooking(b, i, pet);
+            return opts ? { ...opts, uid: `${b.id || 'new'}-${i}` } : null;
+          })
+          .filter(Boolean);
+        if (events.length === 0) { showNotice('還沒有任何已填日期的課程', 'err'); return; }
+        // 加 description 第一行，方便家長行事曆辨識
+        events.forEach(ev => {
+          ev.description = `🐾 ${pet.name || ''}\n${ev.description || ''}`;
+        });
+        const ics = buildIcsFile(events);
+        const fname = `行事曆_${pet.name || '寵物'}_${todayStr()}.ics`;
+        downloadIcsFile(fname, ics);
+        showNotice(`✓ 已下載 ${events.length} 堂課的行事曆檔，匯入後會自動設定前一天提醒`);
+      };
+    }
     document.getElementById('bk_location').onchange = (e) => { b.location = e.target.value.trim(); };
     document.getElementById('bk_fee').oninput = (e) => {
       b.feePerClass = parseInt(e.target.value, 10) || 0;
