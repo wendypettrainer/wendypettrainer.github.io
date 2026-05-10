@@ -6134,15 +6134,10 @@ function renderCalendar() {
   }
   while (cells.length % 7 !== 0) cells.push(null);
 
-  // 上下月
-  const prevMonth = (() => {
-    const d = new Date(year, month - 2, 1);
-    return d.toISOString().slice(0, 7);
-  })();
-  const nextMonth = (() => {
-    const d = new Date(year, month, 1);
-    return d.toISOString().slice(0, 7);
-  })();
+  // 上下月（直接算字串，避免 toISOString 的 UTC 時區 bug）
+  const ymStr = (y, m) => `${y}-${String(m).padStart(2,'0')}`;
+  const prevMonth = month === 1 ? ymStr(year - 1, 12) : ymStr(year, month - 1);
+  const nextMonth = month === 12 ? ymStr(year + 1, 1) : ymStr(year, month + 1);
 
   // 該月統計
   let totalCount = 0, doneCount = 0, closedCount = 0, bookedFutureCount = 0, pendingCount = 0;
