@@ -340,6 +340,30 @@
     border-color: var(--accent, #8b6f47);
   }
 
+  /* 寵物詳情頁的分組資訊區（狗狗基本 / 困擾 / 家長基本） */
+  .info-group {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(240,230,214,0.4);
+    border-radius: 6px;
+  }
+  .info-group h4 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    color: var(--brown-dark);
+    font-weight: 600;
+  }
+  .info-group .info-row {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 4px;
+    line-height: 1.6;
+  }
+  .info-group.concerns {
+    background: rgba(201,122,79,0.12);
+    border-left: 3px solid var(--work);
+  }
+
   /* 教室派案 badge */
   .studio-badge {
     display: inline-block;
@@ -2283,19 +2307,61 @@ function renderSessions() {
       <button class="small-btn" id="bookingBtn">📋 課程預約</button>
     </div>
   `;
+  // 把 notes 內 「【Q】A」 拆成 Q&A pairs，按 keyword 分到「狗狗基本」/「家長基本」
+  const categorized = (() => {
+    const dog = [], owner = [];
+    if (!pet.notes) return { dog, owner };
+    const lines = pet.notes.split(/\n+/).map(l => l.trim()).filter(Boolean);
+    const ownerKeyword = /(稱呼|稱謂|聯繫|聯絡|line|email|電子郵件|家庭|家長|姓名|地址|電話|手機|住址|職業|住所|社群)/i;
+    for (const line of lines) {
+      const m = line.match(/^【([^】]+)】(.*)$/);
+      if (m) {
+        const q = m[1], a = (m[2] || '').trim();
+        if (ownerKeyword.test(q)) owner.push({ q, a });
+        else dog.push({ q, a });
+      } else {
+        dog.push({ q: '', a: line });
+      }
+    }
+    return { dog, owner };
+  })();
+  const renderQA = arr => arr.map(p => p.q
+    ? `<div class="info-row"><b>${escapeHtml(p.q)}</b>：${escapeHtml(p.a)}</div>`
+    : `<div class="info-row">${escapeHtml(p.a)}</div>`).join('');
+
   const meta = `
     <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
       <div id="petInfoToggle" style="display:flex; align-items:flex-start; justify-content:space-between; cursor:pointer; user-select:none; gap:8px">
-        <div class="card-meta" style="margin:0; flex:1; min-width:0">
-          ${pet.source === 'studio' ? `<span class="studio-badge" style="margin-left:0; margin-right:6px">🏫 ${escapeHtml(pet.studioName || '教室派案')}</span>` : ''}${escapeHtml(petTagline(pet))} · 飼主 ${escapeHtml(pet.ownerName || '—')}${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
+        <div style="flex:1; min-width:0">
+          ${pet.source === 'studio' ? `<div style="margin-bottom:4px"><span class="studio-badge" style="margin-left:0">🏫 ${escapeHtml(pet.studioName || '教室派案')}</span></div>` : ''}
+          <div class="card-meta" style="margin:0">${escapeHtml(petTagline(pet))}</div>
         </div>
-        <span style="color:var(--text-soft); font-size:12px; flex-shrink:0">${petInfoCollapsed ? '▶ 展開' : '▼ 收起'}</span>
+        <span style="color:var(--text-soft); font-size:12px; flex-shrink:0; padding-top:2px">${petInfoCollapsed ? '▶ 展開' : '▼ 收起'}</span>
       </div>
       <div id="petInfoBody" style="display:${petInfoCollapsed ? 'none' : 'block'}">
-        ${pet.ownerAddress ? `<div class="card-meta" style="margin-top:6px">📍 ${escapeHtml(pet.ownerAddress)}</div>` : ''}
-        ${pet.source === 'studio' && pet.studioAddress ? `<div class="card-meta" style="margin-top:6px">🏫 教室地址：${escapeHtml(pet.studioAddress)}</div>` : ''}
-        ${pet.concerns ? `<div class="card-meta" style="margin-top:8px; padding:8px 10px; background:rgba(201,122,79,0.12); border-left:3px solid var(--work); border-radius:4px; white-space:pre-wrap">⚠️ ${escapeHtml(pet.concerns)}</div>` : ''}
-        ${pet.notes ? `<div class="card-meta" style="margin-top:6px; white-space:pre-wrap">${escapeHtml(pet.notes)}</div>` : ''}
+
+        ${categorized.dog.length > 0 ? `
+          <div class="info-group">
+            <h4>📋 狗狗基本資料</h4>
+            ${renderQA(categorized.dog)}
+          </div>
+        ` : ''}
+
+        ${pet.concerns ? `
+          <div class="info-group concerns">
+            <h4>⚠️ 目前困擾行為</h4>
+            <div class="info-row" style="white-space:pre-wrap">${escapeHtml(pet.concerns)}</div>
+          </div>
+        ` : ''}
+
+        <div class="info-group">
+          <h4>👤 家長基本資料</h4>
+          ${pet.ownerName ? `<div class="info-row"><b>飼主</b>：${escapeHtml(pet.ownerName)}</div>` : ''}
+          ${pet.ownerContact ? `<div class="info-row"><b>聯絡</b>：${escapeHtml(pet.ownerContact)}</div>` : ''}
+          ${pet.ownerAddress ? `<div class="info-row"><b>📍 地址</b>：${escapeHtml(pet.ownerAddress)}</div>` : ''}
+          ${pet.source === 'studio' && pet.studioAddress ? `<div class="info-row"><b>🏫 教室地址</b>：${escapeHtml(pet.studioAddress)}</div>` : ''}
+          ${renderQA(categorized.owner)}
+        </div>
       </div>
     </div>
   `;
@@ -4440,10 +4506,22 @@ function exportFirstConsultPdf(sess, pet) {
   const logoSrc = LOGO_DATA || (window.location.protocol.startsWith('http')
     ? window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'logo.png'
     : '');
-  // 把「只有 br 的空白 div / p」加 class，讓 CSS 壓縮高度（不依賴 :has() selector）
-  const reportHtml = ensureColorHtml(sess.firstConsultReport)
-    .replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, '<div class="empty-line"></div>')
-    .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '<p class="empty-line"></p>');
+  // 用 DOM 掃描所有 block-level 空白行（cover 各種來源 paste 的奇怪 HTML），加 .empty-line class
+  // 不依賴特定字串 pattern（之前 regex 只 match <div><br></div>，paste 來的可能是 <div></div> / <div>&nbsp;</div> / 多 br 等）
+  const reportHtml = (() => {
+    const raw = ensureColorHtml(sess.firstConsultReport);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = raw;
+    tmp.querySelectorAll('div, p').forEach(el => {
+      // 把所有空白字元（含 nbsp  、zero-width 等）拿掉看是不是真的空
+      const t = (el.textContent || '').replace(/[\s ​]/g, '');
+      if (t === '') {
+        el.className = 'empty-line';
+        el.innerHTML = '';
+      }
+    });
+    return tmp.innerHTML;
+  })();
   const hasReportContent = reportHtml && reportHtml.replace(/<[^>]+>/g, '').trim().length > 0;
   const titleStr = `${pet.name}_首堂諮詢報告`;
   const dateStr = fmtDate(sess.date);
