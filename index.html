@@ -7,54 +7,65 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#f0e6d6">
+<meta name="theme-color" content="#f7f3ed">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Wendy">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f0e6d6;
-    --bg-soft: #f7f0e3;
-    --brown: #8b6f47;
-    --brown-dark: #6b5435;
-    --brown-light: #c9b693;
-    --text: #3d2f1f;
-    --text-soft: #6b5435;
+    --bg: #f7f3ed;
+    --bg-soft: #ede5d6;
+    --brown: #4a4138;
+    --brown-dark: #2c2620;
+    --brown-light: #b8ad9a;
+    --text: #2c2620;
+    --text-soft: #7a716a;
+    --border: #e0dcd4;
+    --accent-warm: #c08a5e;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
                  "Microsoft JhengHei", sans-serif;
+    font-size: 16px;
     line-height: 1.6;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
   .page {
     max-width: 720px;
     margin: 0 auto;
-    padding: 40px 20px 60px;
+    padding: 60px 24px 80px;
   }
   header.brand {
     text-align: center;
-    margin-bottom: 48px;
+    margin-bottom: 56px;
   }
   header.brand img {
-    max-width: 360px;
-    width: 80%;
+    max-width: 320px;
+    width: 75%;
     height: auto;
   }
   header.brand h1 {
     color: var(--brown-dark);
-    font-size: 22px;
-    margin-top: 8px;
+    font-size: 24px;
+    font-weight: 600;
+    margin-top: 12px;
+    letter-spacing: 0.5px;
   }
   .tagline {
     color: var(--text-soft);
-    font-size: 14px;
-    margin-top: 8px;
-    letter-spacing: 1px;
+    font-size: 13px;
+    margin-top: 12px;
+    letter-spacing: 2px;
+    font-weight: 400;
+    text-transform: uppercase;
   }
   .tools {
     display: grid;
@@ -66,40 +77,41 @@
   }
   .tool-card {
     display: block;
-    background: var(--bg-soft);
+    background: #ffffff;
     color: var(--text);
     text-decoration: none;
-    border-radius: 14px;
-    padding: 24px 20px;
-    box-shadow: 0 2px 8px rgba(139,111,71,0.15);
-    border: 2px solid transparent;
-    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    border-radius: 8px;
+    padding: 28px 22px;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s, transform 0.2s;
   }
   .tool-card:hover {
-    transform: translateY(-2px);
-    border-color: var(--brown);
-    box-shadow: 0 6px 16px rgba(139,111,71,0.25);
+    border-color: var(--accent-warm);
+    transform: translateY(-1px);
   }
   .tool-icon {
-    font-size: 36px;
-    margin-bottom: 8px;
+    font-size: 32px;
+    margin-bottom: 12px;
+    color: var(--accent-warm);
   }
   .tool-title {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--brown-dark);
     margin-bottom: 6px;
+    letter-spacing: 0.3px;
   }
   .tool-desc {
     font-size: 13px;
     color: var(--text-soft);
-    line-height: 1.5;
+    line-height: 1.6;
   }
   .footer {
     text-align: center;
-    margin-top: 48px;
+    margin-top: 56px;
     font-size: 12px;
     color: var(--text-soft);
+    letter-spacing: 0.5px;
   }
 </style>
 </head>
