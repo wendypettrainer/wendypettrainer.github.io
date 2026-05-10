@@ -346,7 +346,10 @@
     padding: 10px 12px;
     background: rgba(240,230,214,0.4);
     border-radius: 6px;
+    border-left: 3px solid transparent;  /* 預留位置讓所有 group 寬度一致 */
+    box-sizing: border-box;
   }
+  .info-group:first-child { margin-top: 0; }
   .info-group h4 {
     margin: 0 0 6px;
     font-size: 13px;
@@ -361,7 +364,7 @@
   }
   .info-group.concerns {
     background: rgba(201,122,79,0.12);
-    border-left: 3px solid var(--work);
+    border-left-color: var(--work);  /* 紅左邊條保留作為警示視覺 */
   }
 
   /* 教室派案 badge */
@@ -2340,17 +2343,17 @@ function renderSessions() {
       </div>
       <div id="petInfoBody" style="display:${petInfoCollapsed ? 'none' : 'block'}">
 
-        ${categorized.dog.length > 0 ? `
-          <div class="info-group">
-            <h4>📋 狗狗基本資料</h4>
-            ${renderQA(categorized.dog)}
-          </div>
-        ` : ''}
-
         ${pet.concerns ? `
           <div class="info-group concerns">
             <h4>⚠️ 目前困擾行為</h4>
             <div class="info-row" style="white-space:pre-wrap">${escapeHtml(pet.concerns)}</div>
+          </div>
+        ` : ''}
+
+        ${categorized.dog.length > 0 ? `
+          <div class="info-group">
+            <h4>📋 狗狗基本資料</h4>
+            ${renderQA(categorized.dog)}
           </div>
         ` : ''}
 
@@ -6276,7 +6279,13 @@ function renderCalendar() {
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap">
       <div>
         <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📅 ${year} 年 ${month} 月</div>
-        <div style="font-size:12px; color:var(--text-soft); margin-top:2px">本月共 ${totalCount} 堂 · 已完成 ${doneCount} · 預約 ${bookedFutureCount} · 待結案 ${pendingCount} · 已結案 ${closedCount}</div>
+        <div style="font-size:12px; color:var(--text-soft); margin-top:4px; line-height:1.8">
+          本月共 ${totalCount} 堂
+          <span class="legend-chip booked">已預約 ${bookedFutureCount}</span>
+          <span class="legend-chip pending">待結案 ${pendingCount}</span>
+          <span class="legend-chip done">已完成 ${doneCount}</span>
+          <span class="legend-chip closed">已結案 ${closedCount}</span>
+        </div>
       </div>
       <div style="display:flex; gap:6px">
         <button class="small-btn" id="calPrev" type="button">◀</button>
