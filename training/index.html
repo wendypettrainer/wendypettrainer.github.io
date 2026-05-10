@@ -502,6 +502,41 @@
     height: auto;
   }
 
+  /* 明日課程提醒 */
+  .tomorrow-reminder {
+    background: rgba(192,138,94,0.08);
+    border: 1px solid rgba(192,138,94,0.35);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+  .tomorrow-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--brown-dark);
+  }
+  .tomorrow-icon { font-size: 16px; }
+  .tomorrow-title { font-weight: 600; font-size: 15px; }
+  .tomorrow-date { color: var(--text-soft); font-size: 12px; margin-left: auto; }
+  .tomorrow-list { display: flex; flex-direction: column; gap: 8px; }
+  .tomorrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #ffffff;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .tomorrow-info { flex: 1; min-width: 0; }
+  .tomorrow-name { font-weight: 600; font-size: 14px; color: var(--brown-dark); }
+  .tomorrow-meta { font-size: 12px; color: var(--text-soft); margin-top: 2px; }
+  .tomorrow-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .btn-sm { padding: 6px 10px !important; font-size: 12px !important; }
+
   /* Forms */
   label { display: block; font-size: 13px; color: var(--text-soft); margin-bottom: 6px; }
   input[type=text], input[type=date], input[type=number], input[type=password],
@@ -963,6 +998,7 @@ const KEYS = {
   payments: 'petcare.payments',                  // 實際金流：收款 / 退費（per booking）
   studioPayments: 'petcare.studioPayments',      // 教室月結款（per studio + month）
   materials: 'petcare.materials',                // 教材庫（給家長 PDF 附錄用）
+  lineTemplate: 'petcare.lineTemplate',           // LINE 上課提醒訊息模板
   settings: 'petcare.settings',
   version: 'petcare.version',
   lastModified: 'petcare.lastModified',  // 雲端同步用
@@ -979,7 +1015,19 @@ const SYNCABLE_KEYS = new Set([
   'petcare.payments',
   'petcare.studioPayments',
   'petcare.materials',
+  'petcare.lineTemplate',
 ]);
+
+// LINE 上課提醒訊息預設模板。可用變數：{petName} {date} {time} {seq} {courseLabel}
+const DEFAULT_LINE_TEMPLATE = `提醒您明天有預約課程唷૮ ˆﻌˆ ა
+▍狗狗：{petName}
+▍時間：{time}
+▍課程：{courseLabel}第 {seq} 堂
+▌課前準備：
+1. 事先幫狗狗穿好項圈or胸背並繫上牽繩
+2. 準備目前主食正餐1~2餐的用量/日常喜歡吃的食物獎勵2-3種
+3. 喜歡的玩具2～3種
+▶ 上課時間若與正餐用飯時間相近，當餐請保留至教室進行操作使用，或者先吃一半另一半上課時練習用。`;
 
 const DEFAULT_DOG_ITEMS = [
   '坐下 Sit', '趴下 Down', '等等 Stay', '過來 Come', '跟隨散步 Heel',
@@ -1832,6 +1880,87 @@ document.getElementById('calendarBtn').onclick = () => {
   go('calendar');
 };
 
+/* ============== 明日課程提醒區塊（首頁用） ============== */
+function getTomorrowDateStr() {
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildTomorrowReminderHtml() {
+  const tomorrow = getTomorrowDateStr();
+  const sessions = load(KEYS.sessions, [])
+    .filter(s => s.status === 'booked' && s.date === tomorrow)
+    .sort((a, b) => {
+      const ta = getSessionTimeRange(a).start || '99:99';
+      const tb = getSessionTimeRange(b).start || '99:99';
+      return ta.localeCompare(tb);
+    });
+  if (sessions.length === 0) return '';
+
+  const pets = load(KEYS.pets, []);
+  const rows = sessions.map(s => {
+    const pet = pets.find(p => p.id === s.petId) || {};
+    const { start, end } = getSessionTimeRange(s);
+    const timeLabel = (start && end) ? `${start}-${end}` : (start || '時間待確認');
+    const seq = parseInt(s.sessionSeq, 10);
+    const seqStr = seq ? `第 ${seq} 堂` : '';
+    const courseLabel = courseTypeLabel(s) || '';
+    const meta = [timeLabel, courseLabel, seqStr].filter(Boolean).join(' · ');
+    return `
+      <div class="tomorrow-row" data-session-id="${s.id}">
+        <div class="tomorrow-info">
+          <div class="tomorrow-name">${speciesEmoji(pet.species)} ${escapeHtml(pet.name || '—')}</div>
+          <div class="tomorrow-meta">${escapeHtml(meta)}</div>
+        </div>
+        <div class="tomorrow-actions">
+          <button class="btn ghost btn-sm" data-act="copy-line" data-sid="${s.id}" title="複製 LINE 提醒訊息">📋 LINE</button>
+          <button class="btn ghost btn-sm" data-act="open-gcal" data-sid="${s.id}" title="加入 Google 行事曆">📅 行事曆</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="tomorrow-reminder">
+      <div class="tomorrow-header">
+        <span class="tomorrow-icon">⏰</span>
+        <span class="tomorrow-title">明日 ${sessions.length} 堂課</span>
+        <span class="tomorrow-date">${fmtDate(tomorrow)}</span>
+      </div>
+      <div class="tomorrow-list">${rows}</div>
+    </div>`;
+}
+
+function bindTomorrowReminderHandlers(root) {
+  const sessions = load(KEYS.sessions, []);
+  const pets = load(KEYS.pets, []);
+  root.querySelectorAll('.tomorrow-row [data-act]').forEach(btn => {
+    const sid = btn.dataset.sid;
+    const s = sessions.find(x => x.id === sid);
+    if (!s) return;
+    const pet = pets.find(p => p.id === s.petId) || {};
+    if (btn.dataset.act === 'copy-line') {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const msg = fillLineTemplate(s, pet);
+        copyToClipboard(msg).then(ok => {
+          showNotice(ok ? '✓ 已複製 LINE 訊息，可貼到聊天室' : '複製失敗，請手動複製');
+        });
+      };
+    } else if (btn.dataset.act === 'open-gcal') {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const url = buildGoogleCalUrl(s, pet);
+        if (!url) { showNotice('日期或時間不完整，無法產生行事曆'); return; }
+        window.open(url, '_blank');
+      };
+    }
+  });
+}
+
 /* ============== VIEW: PETS ============== */
 function renderPets() {
   const main = document.getElementById('main');
@@ -1972,7 +2101,13 @@ function renderPets() {
     }).join('');
   }
 
-  main.innerHTML = hero + tabs + sourceChips + breedChips + search + listHtml + `<button class="fab" id="fab">＋</button>`;
+  // 明日課程提醒區塊
+  const tomorrowHtml = buildTomorrowReminderHtml();
+
+  main.innerHTML = hero + tomorrowHtml + tabs + sourceChips + breedChips + search + listHtml + `<button class="fab" id="fab">＋</button>`;
+
+  // 明日提醒按鈕
+  bindTomorrowReminderHandlers(main);
 
   // Tab handler
   main.querySelectorAll('[data-pet-filter]').forEach(t => {
@@ -2852,6 +2987,108 @@ function sessionSeqLabel(s) {
   if (seq && total) return `第 ${seq} 堂 / 共 ${total} 堂`;
   if (seq) return `第 ${seq} 堂`;
   return '';
+}
+
+/* ============== LINE 訊息 + Google Calendar helpers ============== */
+// 從 booking.sessions[sourceIndex] 反查時間（session shell 沒存 startTime/endTime）
+function getSessionTimeRange(session) {
+  if (!session || !session.sourceBookingId) return { start: '', end: '' };
+  const bookings = load(KEYS.bookings, []);
+  const b = bookings.find(x => x.id === session.sourceBookingId);
+  if (!b || !Array.isArray(b.sessions)) return { start: '', end: '' };
+  const bs = b.sessions[session.sourceIndex] || {};
+  return { start: bs.startTime || '', end: bs.endTime || '' };
+}
+
+// 取得 LINE 模板（無就用預設）
+function getLineTemplate() {
+  const stored = load(KEYS.lineTemplate, '');
+  return (typeof stored === 'string' && stored.trim()) ? stored : DEFAULT_LINE_TEMPLATE;
+}
+
+// 把 session 套進 LINE 模板，回傳填好的訊息字串
+function fillLineTemplate(session, pet) {
+  const tpl = getLineTemplate();
+  const { start, end } = getSessionTimeRange(session);
+  const timeStr = (start && end) ? `${start}-${end}` : (start || '時間待確認');
+  const seq = parseInt(session.sessionSeq, 10) || '___';
+  const courseLabel = courseTypeLabel(session) || '訓練課程';
+  return tpl
+    .replace(/\{petName\}/g, (pet && pet.name) || '')
+    .replace(/\{date\}/g, fmtDate(session.date))
+    .replace(/\{time\}/g, timeStr)
+    .replace(/\{seq\}/g, seq)
+    .replace(/\{courseLabel\}/g, courseLabel);
+}
+
+// 產生 Google Calendar 新增事件 URL（含前一天提醒，用瀏覽器點擊→直接跳網頁版）
+// 注意：Google Calendar URL 不支援 VALARM；提醒要靠使用者帳號預設或手動設。
+// 我們在 details 內附「⏰ 上課前一天記得傳 LINE 提醒給家長」當保險。
+function buildGoogleCalUrl(session, pet) {
+  if (!session || !session.date) return '';
+  const { start, end } = getSessionTimeRange(session);
+  // 把 YYYY-MM-DD + HH:MM 拼成 Google 要求的 YYYYMMDDTHHMMSS 格式（local time）
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function toGcalLocal(dateStr, timeStr, fallbackHour) {
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return '';
+    let h = fallbackHour, m = 0;
+    if (timeStr && /^\d{1,2}:\d{2}$/.test(timeStr)) {
+      const [hh, mm] = timeStr.split(':').map(x => parseInt(x, 10));
+      h = hh; m = mm;
+    }
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+  }
+  const startLocal = toGcalLocal(session.date, start, 14);
+  const endLocal = end
+    ? toGcalLocal(session.date, end, 15)
+    : (() => {
+        // 沒填結束 → 起始 + 1 小時
+        const startMatch = startLocal.match(/^(\d{8}T\d{2})(\d{2})(\d{2})$/);
+        if (!startMatch) return '';
+        const hr = parseInt(startMatch[1].slice(-2), 10);
+        const newHr = (hr + 1) % 24;
+        return startMatch[1].slice(0, -2) + pad(newHr) + startMatch[2] + startMatch[3];
+      })();
+  if (!startLocal || !endLocal) return '';
+  const courseLabel = courseTypeLabel(session) || '訓練課';
+  const seq = parseInt(session.sessionSeq, 10);
+  const seqStr = seq ? ` 第${seq}堂` : '';
+  const title = `${(pet && pet.name) || '寵物'} ${courseLabel}${seqStr}`;
+  const details = [
+    '⏰ 上課前一天記得傳 LINE 提醒給家長',
+    `飼主：${(pet && pet.ownerName) || '—'}`,
+    pet && pet.ownerPhone ? `電話：${pet.ownerPhone}` : '',
+  ].filter(Boolean).join('\n');
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${startLocal}/${endLocal}`,
+    details,
+    location: session.location || '',
+  });
+  return 'https://calendar.google.com/calendar/render?' + params.toString();
+}
+
+// 把字串複製到剪貼簿，回傳 Promise<boolean>
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+  }
+  // fallback
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Promise.resolve(ok);
+  } catch (e) {
+    return Promise.resolve(false);
+  }
 }
 function bookingSubtotal(booking) {
   const n = booking.sessionCount || 0;
@@ -5586,6 +5823,24 @@ function renderSettings() {
     </div>
     </details>
 
+    <details class="settings-section">
+    <summary>LINE 上課提醒訊息模板</summary>
+    <div class="card" style="cursor:default">
+      <p class="card-meta" style="margin-bottom:10px">
+        • 首頁「明日課程」區塊的「📋 LINE」按鈕會用這份模板產生訊息，自動填入下面的變數。<br>
+        • 可用變數：<code>{petName}</code> 狗狗名 / <code>{date}</code> 上課日期 / <code>{time}</code> 上課時間 / <code>{seq}</code> 第幾堂 / <code>{courseLabel}</code> 課程類型<br>
+        • 變數會在按下複製時即時替換成實際資料；修改後請按「儲存模板」。
+      </p>
+      <textarea id="lineTpl" rows="12" style="width:100%; font-family:'Inter','Noto Sans TC',monospace; font-size:13px; line-height:1.6">${escapeHtml(getLineTemplate())}</textarea>
+      <div class="actions-row" style="margin-top:12px">
+        <button class="btn" id="lineTpl_save">儲存模板</button>
+        <button class="btn ghost" id="lineTpl_reset">重設為預設</button>
+        <button class="btn ghost" id="lineTpl_preview">預覽（用第一筆明日課程）</button>
+      </div>
+      <div id="lineTpl_previewOut" style="display:none; margin-top:12px; padding:12px; background:rgba(0,0,0,0.04); border-radius:6px; white-space:pre-wrap; font-size:13px; line-height:1.7"></div>
+    </div>
+    </details>
+
 
     <details class="settings-section">
     <summary>訓練項目清單</summary>
@@ -5850,6 +6105,59 @@ function renderSettings() {
     save(KEYS.materials, cleaned);
     showNotice(`已儲存 ${cleaned.length} 份教材`);
   };
+
+  // LINE 訊息模板
+  const lineTplSave = document.getElementById('lineTpl_save');
+  const lineTplReset = document.getElementById('lineTpl_reset');
+  const lineTplPreview = document.getElementById('lineTpl_preview');
+  const lineTplArea = document.getElementById('lineTpl');
+  const lineTplPreviewOut = document.getElementById('lineTpl_previewOut');
+  if (lineTplSave) {
+    lineTplSave.onclick = () => {
+      const v = (lineTplArea.value || '').trim();
+      save(KEYS.lineTemplate, v);
+      showNotice('LINE 訊息模板已儲存');
+    };
+  }
+  if (lineTplReset) {
+    lineTplReset.onclick = () => {
+      if (!confirm('確定要重設為預設模板？目前的編輯會遺失。')) return;
+      lineTplArea.value = DEFAULT_LINE_TEMPLATE;
+      save(KEYS.lineTemplate, '');  // 空字串 → getLineTemplate 會 fallback 到預設
+      showNotice('已重設為預設模板');
+    };
+  }
+  if (lineTplPreview) {
+    lineTplPreview.onclick = () => {
+      // 暫存編輯中的內容讓 fillLineTemplate 能用
+      const original = load(KEYS.lineTemplate, '');
+      save(KEYS.lineTemplate, lineTplArea.value || '');
+      try {
+        const tomorrow = getTomorrowDateStr();
+        const allSessions = load(KEYS.sessions, []);
+        const pets = load(KEYS.pets, []);
+        const s = allSessions.find(x => x.status === 'booked' && x.date === tomorrow);
+        if (!s) {
+          // 沒有明日 → 隨便挑一筆 booked 預覽
+          const anyBooked = allSessions.find(x => x.status === 'booked' && x.date);
+          if (!anyBooked) {
+            lineTplPreviewOut.style.display = 'block';
+            lineTplPreviewOut.textContent = '（沒有任何已預約的課程，無法預覽。請先建立預約。）';
+            return;
+          }
+          const pet = pets.find(p => p.id === anyBooked.petId) || {};
+          lineTplPreviewOut.style.display = 'block';
+          lineTplPreviewOut.textContent = '【預覽範例（沒有明日課程，用 ' + fmtDate(anyBooked.date) + ' 那筆）】\n\n' + fillLineTemplate(anyBooked, pet);
+        } else {
+          const pet = pets.find(p => p.id === s.petId) || {};
+          lineTplPreviewOut.style.display = 'block';
+          lineTplPreviewOut.textContent = fillLineTemplate(s, pet);
+        }
+      } finally {
+        save(KEYS.lineTemplate, original);
+      }
+    };
+  }
 
 
   // 同步：開關
