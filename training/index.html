@@ -1436,6 +1436,7 @@ const state = {
   bookingId: null,
   petFilter: '',  // '' | 'dog' | 'cat'
   petSourceFilter: '',  // '' | 'direct' | 'studio:<name>'
+  petBreedFilter: '',   // '' | breed name
   petQuery: '',
 };
 
@@ -1883,6 +1884,23 @@ function renderPets() {
   const sourceChips = (allPets.length === 0 || (directCount === allPets.length && studioPets.length === 0)) ? '' : `
     <div class="source-chips">${sourceChipsArr.join('')}</div>`;
 
+  // 品種 chips（動態列出有寵物的品種）
+  const breedFilter = state.petBreedFilter || '';
+  const breedCounts = {};
+  allPets.forEach(p => {
+    const b = (p.breed || '').trim();
+    if (b) breedCounts[b] = (breedCounts[b] || 0) + 1;
+  });
+  const breedNames = Object.keys(breedCounts).sort((a, b) => breedCounts[b] - breedCounts[a]);  // 多的在前
+  const breedChipsArr = [
+    `<button class="source-chip ${breedFilter===''?'active':''}" data-breed-filter="">全部品種</button>`,
+  ];
+  breedNames.forEach(name => {
+    breedChipsArr.push(`<button class="source-chip ${breedFilter===name?'active':''}" data-breed-filter="${escapeAttr(name)}">${escapeHtml(name)} (${breedCounts[name]})</button>`);
+  });
+  const breedChips = breedNames.length === 0 ? '' : `
+    <div class="source-chips">${breedChipsArr.join('')}</div>`;
+
   // Search
   const search = showSearch ? `
     <input type="text" class="search-input" id="petSearch"
@@ -1897,6 +1915,7 @@ function renderPets() {
     const targetStudio = sourceFilter.slice(7);
     pets = pets.filter(p => p.source === 'studio' && p.studioName === targetStudio);
   }
+  if (breedFilter) pets = pets.filter(p => (p.breed || '').trim() === breedFilter);
   if (state.petQuery.trim()) pets = pets.filter(p => petMatchesQuery(p, state.petQuery.trim()));
   pets.sort((a, b) => getPetSortKey(b).localeCompare(getPetSortKey(a)));
 
@@ -1953,7 +1972,7 @@ function renderPets() {
     }).join('');
   }
 
-  main.innerHTML = hero + tabs + sourceChips + search + listHtml + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = hero + tabs + sourceChips + breedChips + search + listHtml + `<button class="fab" id="fab">＋</button>`;
 
   // Tab handler
   main.querySelectorAll('[data-pet-filter]').forEach(t => {
@@ -1962,6 +1981,10 @@ function renderPets() {
   // 來源 chip
   main.querySelectorAll('[data-source-filter]').forEach(t => {
     t.onclick = () => { state.petSourceFilter = t.dataset.sourceFilter; renderPets(); };
+  });
+  // 品種 chip
+  main.querySelectorAll('[data-breed-filter]').forEach(t => {
+    t.onclick = () => { state.petBreedFilter = t.dataset.breedFilter; renderPets(); };
   });
   // Search handler
   const sInput = document.getElementById('petSearch');
