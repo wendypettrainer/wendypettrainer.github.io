@@ -4440,7 +4440,10 @@ function exportFirstConsultPdf(sess, pet) {
   const logoSrc = LOGO_DATA || (window.location.protocol.startsWith('http')
     ? window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'logo.png'
     : '');
-  const reportHtml = ensureColorHtml(sess.firstConsultReport);
+  // 把「只有 br 的空白 div / p」加 class，讓 CSS 壓縮高度（不依賴 :has() selector）
+  const reportHtml = ensureColorHtml(sess.firstConsultReport)
+    .replace(/<div>\s*<br\s*\/?>\s*<\/div>/gi, '<div class="empty-line"></div>')
+    .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, '<p class="empty-line"></p>');
   const hasReportContent = reportHtml && reportHtml.replace(/<[^>]+>/g, '').trim().length > 0;
   const titleStr = `${pet.name}_首堂諮詢報告`;
   const dateStr = fmtDate(sess.date);
@@ -4485,6 +4488,18 @@ function exportFirstConsultPdf(sess, pet) {
     font-size: 12pt; line-height: 1.55;
     white-space: pre-wrap;
     padding: 4pt 0;
+  }
+  /* colorEditor 產生的空白行（<div><br></div>）壓縮高度，避免段落間空白過大 */
+  .report-body div:empty,
+  .report-body p:empty,
+  .report-body .empty-line,
+  .report-body div:has(> br:only-child),
+  .report-body p:has(> br:only-child) {
+    line-height: 0.6;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    height: 8pt;
   }
   .signoff {
     margin-top: 28pt; padding-top: 12pt;
