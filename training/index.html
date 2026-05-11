@@ -1053,15 +1053,16 @@ const SYNCABLE_KEYS = new Set([
 ]);
 
 // LINE 上課提醒訊息預設模板。可用變數：{petName} {date} {time} {seq} {courseLabel}
-const DEFAULT_LINE_TEMPLATE = `提醒您明天有預約課程唷૮ ˆﻌˆ ა
+const DEFAULT_LINE_TEMPLATE = `{petName}家長您好
+提醒您明天有預約課程唷૮ ˆﻌˆ ა
 ▍狗狗：{petName}
 ▍時間：{time}
 ▍課程：{courseLabel}第 {seq} 堂
 ▌課前準備：
-1. 事先幫狗狗穿好項圈or胸背並繫上牽繩
-2. 準備目前主食正餐1~2餐的用量/日常喜歡吃的食物獎勵2-3種
-3. 喜歡的玩具2～3種
-▶ 上課時間若與正餐用飯時間相近，當餐請保留至教室進行操作使用，或者先吃一半另一半上課時練習用。`;
+❶事先幫狗狗穿好項圈or胸背並繫上牽繩
+❷準備目前主食正餐1~2餐的用量/日常喜歡吃的食物獎勵2-3種
+❸喜歡的玩具2～3種
+▶ 上課時間若與正餐用飯時間相近，當餐請保留至課堂進行操作使用，或者先吃一半另一半上課時練習用。`;
 
 const DEFAULT_DOG_ITEMS = [
   '坐下 Sit', '趴下 Down', '等等 Stay', '過來 Come', '跟隨散步 Heel',
