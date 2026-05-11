@@ -2494,7 +2494,8 @@ function renderSessions() {
     const dog = [], owner = [];
     if (!pet.notes) return { dog, owner };
     const lines = pet.notes.split(/\n+/).map(l => l.trim()).filter(Boolean);
-    const ownerKeyword = /(稱呼|稱謂|聯繫|聯絡|line|email|電子郵件|家庭|家長|姓名|地址|電話|手機|住址|職業|住所|社群)/i;
+    // 家長相關 keyword：基本資料 + Google Form metadata + 飼主承諾類問題
+    const ownerKeyword = /(稱呼|稱謂|聯繫|聯絡|line|email|電子郵件|電子信箱|信箱|家庭|家長|姓名|地址|電話|手機|住址|職業|住所|社群|時間戳記|使用者名稱|使用者|練習成效|課後影片|關於練習|關於課後)/i;
     for (const line of lines) {
       const m = line.match(/^【([^】]+)】(.*)$/);
       if (m) {
@@ -2503,6 +2504,17 @@ function renderSessions() {
         else dog.push({ q, a });
       } else {
         dog.push({ q: '', a: line });
+      }
+    }
+    // Dedup：「使用者名稱」與「電子信箱」value 相同時，移除「使用者名稱」（兩者皆為 email 但同帳號）
+    const emailPair = owner.find(p => /電子信箱|電子郵件/i.test(p.q));
+    if (emailPair) {
+      for (let i = owner.length - 1; i >= 0; i--) {
+        const o = owner[i];
+        if (o === emailPair) continue;
+        if (/使用者名稱?$/.test(o.q) && o.a && o.a === emailPair.a) {
+          owner.splice(i, 1);
+        }
       }
     }
     return { dog, owner };
