@@ -991,7 +991,7 @@
 <body>
 <div class="app">
   <header class="top">
-    <a class="brand-logo" id="brandLogo" title="回首頁"><img src="logo.png" alt="Wendy" onerror="this.style.display='none'"></a>
+    <a class="brand-logo" id="brandLogo" title="回品牌首頁"><img src="logo.png" alt="Wendy" onerror="this.style.display='none'"></a>
     <button class="icon-btn" id="backBtn" title="返回上一層">‹</button>
     <nav class="breadcrumb" id="breadcrumb"></nav>
     <span class="sync-dot" id="syncDot" title="同步狀態（點開設定查看）"></span>
@@ -1800,7 +1800,8 @@ function updateHeader() {
   back.style.visibility = isHome ? 'hidden' : 'visible';
 
   // 組麵包屑：每段 { label, action?, petId?, current? }
-  const segs = [{ label: '🏠', action: 'brand' }];
+  // 🏠 已移除，回品牌首頁改用左上角 LOGO
+  const segs = [];
   if (state.view === 'pets') {
     segs.push({ label: '寵物列表', current: true });
   } else if (state.view === 'sessions') {
@@ -1901,7 +1902,15 @@ document.getElementById('backBtn').onclick = () => {
   else if (state.view === 'stats') go(state._returnView || 'pets');
   else if (state.view === 'calendar') go(state._returnView || 'pets');
 };
-document.getElementById('brandLogo').onclick = () => go('pets');
+document.getElementById('brandLogo').onclick = () => {
+  // 回品牌首頁（最頂層）。本機模式無上層，退回 App 內首頁。
+  if (window.location.protocol === 'file:') {
+    go('pets');
+    showNotice('本機模式：實際部署後此按鈕會跳到品牌首頁');
+  } else {
+    window.location.href = '../';
+  }
+};
 document.getElementById('settingsBtn').onclick = () => {
   state._returnView = state.view;
   go('settings');
