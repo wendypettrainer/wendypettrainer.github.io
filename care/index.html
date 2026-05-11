@@ -3,28 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f0e6d6">
+<meta name="theme-color" content="#ede5d6">
 <title>泰迪照護每日紀錄</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#faf6f0; --card:#ffffff; --header-bg:#f0e6d6;
-    --accent:#8b6f47; --accent-soft:#b89674;
-    --text:#2d2620; --muted:#8a7e6f; --border:#e0d4c0;
+    /* 北歐風配色（對齊訓練 app） */
+    --bg:#f7f3ed; --card:#ffffff; --header-bg:#ede5d6;
+    --accent:#c08a5e; --accent-soft:#b8ad9a;
+    --text:#2c2620; --muted:#7a716a; --border:#e0dcd4;
     --input-bg:#fafafa; --warn:#fff8e1; --warn-bd:#f0d878;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
-    background:var(--bg); color:var(--text); font-size:16px; line-height:1.5;
+    font-family:'Inter','Noto Sans TC',-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:var(--bg); color:var(--text); font-size:16px; line-height:1.6;
     -webkit-font-smoothing:antialiased;
   }
   .container{max-width:720px; margin:0 auto; padding:16px;}
 
-  /* Top nav (麵包屑 + 同步狀態 + 設定) */
+  /* Top nav (麵包屑 + 同步狀態 + 設定) — 對齊訓練 app 北歐風 */
   .top-nav {
-    background: var(--accent);
-    color: var(--header-bg);
+    background: #ffffff;
+    color: var(--text);
     padding: 12px 16px;
     display: flex;
     align-items: center;
@@ -32,7 +36,7 @@
     position: sticky;
     top: 0;
     z-index: 10;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    border-bottom: 1px solid var(--border);
   }
   .top-nav .breadcrumb {
     flex: 1;
@@ -40,7 +44,7 @@
     align-items: center;
     gap: 2px;
     font-size: 13px;
-    color: rgba(255,255,255,0.85);
+    color: var(--muted);
     overflow-x: auto;
     white-space: nowrap;
     scrollbar-width: none;
@@ -54,15 +58,15 @@
     border-radius: 4px;
     flex-shrink: 0;
   }
-  .top-nav .bc-link:hover { background: rgba(255,255,255,0.18); }
+  .top-nav .bc-link:hover { background: var(--header-bg); }
   .top-nav .bc-current {
-    color: white;
+    color: var(--text);
     font-weight: 600;
     padding: 4px 6px;
     flex-shrink: 0;
   }
   .top-nav .bc-sep {
-    color: rgba(255,255,255,0.4);
+    color: var(--accent-soft);
     padding: 0 1px;
     flex-shrink: 0;
   }
@@ -84,14 +88,14 @@
   .top-nav .icon-btn {
     background: transparent;
     border: none;
-    color: var(--header-bg);
+    color: var(--text);
     font-size: 16px;
     cursor: pointer;
     padding: 6px 10px;
     border-radius: 6px;
     flex-shrink: 0;
   }
-  .top-nav .icon-btn:hover { background: rgba(255,255,255,0.15); }
+  .top-nav .icon-btn:hover { background: var(--header-bg); }
   .header{
     background:var(--header-bg); border-radius:12px; padding:16px 20px;
     display:flex; align-items:center; justify-content:space-between;
