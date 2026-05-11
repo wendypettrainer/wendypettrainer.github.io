@@ -753,7 +753,25 @@
     background: transparent;
     padding: 0;
     border-bottom: 1px solid var(--border);
+    align-items: center;
   }
+  .tab-action {
+    margin-left: auto;
+    padding: 6px 14px;
+    background: var(--accent-warm);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+    flex-shrink: 0;
+    margin-bottom: 4px;
+  }
+  .tab-action:hover { background: var(--brown-dark); }
+  .tab-action:active { transform: translateY(1px); }
   .tab {
     flex: 1;
     padding: 10px 8px;
@@ -1987,11 +2005,11 @@ function renderPets() {
     main.innerHTML = `
       <div class="empty">
         <h3>還沒有寵物資料</h3>
-        <p>點右下角 ＋ 新增第一隻</p>
+        <p>點下方按鈕新增第一隻</p>
+        <button class="tab-action" id="addPetBtn" type="button" style="margin-top:16px; padding:8px 18px; font-size:14px;">+ 新增寵物</button>
       </div>
-      <button class="fab" id="fab">＋</button>
     `;
-    document.getElementById('fab').onclick = () => openAddPetChooser();
+    document.getElementById('addPetBtn').onclick = () => openAddPetChooser();
     return;
   }
 
@@ -2000,12 +2018,13 @@ function renderPets() {
   const catCount = allPets.filter(p => p.species === 'cat').length;
   const showSearch = allPets.length > 0;
 
-  // Tabs
+  // Tabs + 新增按鈕
   const tabs = `
     <div class="tabs">
       <button class="tab ${state.petFilter===''?'active':''}" data-pet-filter="">全部 (${allPets.length})</button>
       <button class="tab ${state.petFilter==='dog'?'active':''}" data-pet-filter="dog">🐶 狗 (${dogCount})</button>
       <button class="tab ${state.petFilter==='cat'?'active':''}" data-pet-filter="cat">🐱 貓 (${catCount})</button>
+      <button class="tab-action" id="addPetBtn" type="button">+ 新增寵物</button>
     </div>`;
 
   // 來源 chips（直接 + 各教室）
@@ -2116,7 +2135,7 @@ function renderPets() {
   // 明日課程提醒區塊
   const tomorrowHtml = buildTomorrowReminderHtml();
 
-  main.innerHTML = tomorrowHtml + tabs + sourceChips + breedChips + search + listHtml + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = tomorrowHtml + tabs + sourceChips + breedChips + search + listHtml;
 
   // 明日提醒按鈕
   bindTomorrowReminderHandlers(main);
@@ -2151,7 +2170,8 @@ function renderPets() {
   main.querySelectorAll('.card[data-id]').forEach(el => {
     el.onclick = () => go('sessions', { petId: el.dataset.id });
   });
-  document.getElementById('fab').onclick = () => openAddPetChooser();
+  const addBtn = document.getElementById('addPetBtn');
+  if (addBtn) addBtn.onclick = () => openAddPetChooser();
 }
 
 // 「+ 新增寵物」三選一入口（手動 / Email / CSV）

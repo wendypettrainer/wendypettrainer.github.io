@@ -187,27 +187,29 @@
     flex:0 0 auto; padding:6px 10px; font-size:13px; font-weight:600;
     background:var(--header-bg); color:var(--accent); border-radius:6px;
   }
-  /* FAB（右下角 + 按鈕，跟訓練 app 一致） */
-  .fab {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: white;
-    border: none;
-    font-size: 24px;
-    line-height: 1;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.18);
-    z-index: 100;
-    font-family: inherit;
-    transition: transform 0.15s, box-shadow 0.15s;
+  /* List 上方 toolbar（新增寵物按鈕） */
+  .list-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
   }
-  .fab:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.22); }
-  .fab:active { transform: scale(0.96); }
+  .list-toolbar .add-btn {
+    padding: 6px 14px;
+    background: var(--accent);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .list-toolbar .add-btn:hover { background: #8b4d22; }
+  .list-toolbar .add-btn:active { transform: translateY(1px); }
   .brand{
     text-align:right; font-weight:800; font-size:20px; color:var(--accent);
     line-height:1.1;
@@ -625,8 +627,10 @@
 
 <!-- 第二層：寵物列表 view (預設) -->
 <div class="container" id="petListView">
+  <div class="list-toolbar">
+    <button type="button" class="add-btn" onclick="quickAddPet()">+ 新增寵物</button>
+  </div>
   <div class="pet-list" id="petList"></div>
-  <button type="button" class="fab" id="addPetFab" onclick="quickAddPet()" title="新增寵物">＋</button>
 </div>
 
 <!-- 第三層：寵物詳情 / 日記 view -->
