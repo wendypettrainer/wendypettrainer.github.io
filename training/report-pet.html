@@ -257,16 +257,19 @@
   }
   .first-consult-report {
     font-size: 14px;
-    line-height: 1.8;
+    line-height: 1.85;
   }
-  .first-consult-report p { margin: 6px 0; }
-  .first-consult-report br + br { display: none; }
-  .first-consult-report b, .first-consult-report strong { color: var(--brown-dark); }
-  .first-consult-report ul, .first-consult-report ol { margin: 8px 0 8px 20px; }
-  .first-consult-report li { margin: 3px 0; }
+  /* contenteditable 包行用 <div>，要顯示為 block */
+  .first-consult-report div { display: block; }
+  .first-consult-report p { margin: 8px 0; }
+  .first-consult-report b, .first-consult-report strong { color: var(--brown-dark); font-weight: 600; }
+  .first-consult-report ul, .first-consult-report ol { margin: 8px 0 8px 22px; }
+  .first-consult-report li { margin: 4px 0; }
+  /* 段落視覺呼吸：每個 block 元素之間有間距 */
+  .first-consult-report > div + div { margin-top: 4px; }
   .first-consult-report table {
     border-collapse: collapse;
-    margin: 8px 0;
+    margin: 10px 0;
     width: 100%;
     font-size: 13px;
   }
@@ -276,6 +279,11 @@
     text-align: left;
   }
   .first-consult-report th { background: var(--bg-soft); font-weight: 600; }
+  /* 空行（只有 <br> 的 div）也保留高度 */
+  .first-consult-report div:empty,
+  .first-consult-report div:has(> br:only-child) {
+    height: 0.8em;
+  }
   details { margin-bottom: 8px; }
   summary {
     cursor: pointer;
@@ -331,6 +339,22 @@ function courseTypeLabel(s) {
     default: return '';
   }
 }
+// 美化首堂諮詢報告：在【段落標題】、列點符號前自動換行
+function formatFirstConsultHtml(html) {
+  if (!html) return '';
+  return html
+    // 【XX】類段落標題前自動空一行
+    .replace(/(【)/g, '<br><br>$1')
+    // ▶ / ❶❷❸❹❺❻❼❽❾ / • 列點前換行
+    .replace(/([❶❷❸❹❺❻❼❽❾])/g, '<br>$1')
+    .replace(/(▶\s)/g, '<br>$1')
+    .replace(/([^>\s])(\s?•\s)/g, '$1<br>$2')
+    // 清開頭多餘的 <br>
+    .replace(/^(\s*<br>\s*)+/, '')
+    // 連續 <br> 最多 2 個
+    .replace(/(<br>\s*){3,}/g, '<br><br>');
+}
+
 function getGistId() {
   const hash = window.location.hash.slice(1);
   const params = new URLSearchParams(hash);
@@ -498,7 +522,8 @@ function renderReport(data) {
     const fc = data.firstConsult;
     const fcRecords = renderRecords(fc.records);
     // firstConsultReport 是 sanitize 過的 HTML（color editor 內容）
-    const fcReportHtml = (fc.firstConsultReport || '').trim();
+    // 美化：在【段落】、列點符號前自動加換行（內容沒手動換行也能讀）
+    const fcReportHtml = formatFirstConsultHtml((fc.firstConsultReport || '').trim());
     const fcHomework = (fc.homework || '').trim();
     html += `
       <div class="section">
