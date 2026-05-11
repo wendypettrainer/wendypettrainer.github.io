@@ -2506,18 +2506,26 @@ function renderSessions() {
         dog.push({ q: '', a: line });
       }
     }
-    // Dedup：「使用者名稱」與「電子信箱」value 相同時，移除「使用者名稱」（兩者皆為 email 但同帳號）
+    // Dedup：notes 內的 Q 與 pet 結構化欄位 value 相同時，移除 notes 那筆（避免畫面重複）
+    // 規則：Q 字面含特定關鍵字 + value 等於對應的 pet 欄位 → 隱藏
+    const dedupRules = [
+      { kwRegex: /地址|住址|住所/, val: (pet.ownerAddress || '').trim() },
+      { kwRegex: /姓名|稱呼|稱謂|飼主名/, val: (pet.ownerName || '').trim() },
+      { kwRegex: /電話|手機|聯繫|聯絡(?!.*影片)/i, val: (pet.ownerContact || '').trim() },
+    ];
+    // 額外：「使用者名稱」value 與「電子信箱」相同（Google 帳號 = 聯絡 email）→ 隱藏使用者名稱
     const emailPair = owner.find(p => /電子信箱|電子郵件/i.test(p.q));
-    if (emailPair) {
-      for (let i = owner.length - 1; i >= 0; i--) {
-        const o = owner[i];
-        if (o === emailPair) continue;
-        if (/使用者名稱?$/.test(o.q) && o.a && o.a === emailPair.a) {
-          owner.splice(i, 1);
-        }
-      }
+    const dedupOwner = [];
+    for (const o of owner) {
+      const av = (o.a || '').trim();
+      // 1. 跟 pet 結構化欄位重複
+      const matchPet = dedupRules.some(r => r.val && r.kwRegex.test(o.q) && av === r.val);
+      if (matchPet) continue;
+      // 2. 「使用者名稱」value = 「電子信箱」value
+      if (emailPair && o !== emailPair && /使用者名稱?$/.test(o.q) && av && av === emailPair.a) continue;
+      dedupOwner.push(o);
     }
-    return { dog, owner };
+    return { dog, owner: dedupOwner };
   })();
   const renderQA = arr => arr.map(p => p.q
     ? `<div class="info-row"><b>${escapeHtml(p.q)}</b>：${escapeHtml(p.a)}</div>`
