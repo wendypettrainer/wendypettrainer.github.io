@@ -29,14 +29,32 @@
   .top-nav {
     background: #ffffff;
     color: var(--text);
-    padding: 12px 16px;
+    padding: 10px 16px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     position: sticky;
     top: 0;
     z-index: 10;
     border-bottom: 1px solid var(--border);
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .top-nav .brand-logo {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 6px;
+    transition: background 0.15s;
+    text-decoration: none;
+  }
+  .top-nav .brand-logo:hover { background: var(--header-bg); }
+  .top-nav .brand-logo img {
+    height: 28px;
+    width: auto;
+    display: block;
   }
   .top-nav .breadcrumb {
     flex: 1;
@@ -169,21 +187,27 @@
     flex:0 0 auto; padding:6px 10px; font-size:13px; font-weight:600;
     background:var(--header-bg); color:var(--accent); border-radius:6px;
   }
-  .list-add-pet-btn{
-    display:block; width:100%; padding:12px;
-    background:var(--accent); color:white;
-    border:none; border-radius:10px;
-    font-size:15px; font-weight:600; cursor:pointer;
-    margin-bottom:14px;
-    font-family:inherit;
+  /* FAB（右下角 + 按鈕，跟訓練 app 一致） */
+  .fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+    z-index: 100;
+    font-family: inherit;
+    transition: transform 0.15s, box-shadow 0.15s;
   }
-  .list-add-pet-btn:active{ transform:scale(.99); }
-  .pet-list-brand{
-    background:var(--header-bg); border-radius:12px; padding:16px 20px;
-    margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px;
-  }
-  .pet-list-brand h2{ margin:0; font-size:20px; font-weight:800; color:var(--accent); letter-spacing:1px; }
-  .pet-list-brand .sub{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .fab:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.22); }
+  .fab:active { transform: scale(0.96); }
   .brand{
     text-align:right; font-weight:800; font-size:20px; color:var(--accent);
     line-height:1.1;
@@ -588,6 +612,7 @@
 </head>
 <body>
 <header class="top-nav" id="topNav">
+  <a class="brand-logo" id="brandLogoNav" title="回品牌首頁"><img src="logo.png" alt="Wendy" onerror="this.style.display='none'"></a>
   <nav class="breadcrumb" id="breadcrumb">
     <a class="bc-link" id="bcBrand" title="回品牌首頁">🏠</a>
     <span class="bc-sep">/</span>
@@ -600,19 +625,8 @@
 
 <!-- 第二層：寵物列表 view (預設) -->
 <div class="container" id="petListView">
-  <div class="pet-list-brand">
-    <div>
-      <h2>照護日記</h2>
-      <div class="sub">選擇要紀錄的寵物</div>
-    </div>
-    <div class="brand">
-      <img src="logo.png" alt="Wendy" class="logo-img"
-           onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-      <div class="logo" style="display:none;">🐶🐱</div>
-    </div>
-  </div>
-  <button type="button" class="list-add-pet-btn" onclick="quickAddPet()">+ 新增寵物</button>
   <div class="pet-list" id="petList"></div>
+  <button type="button" class="fab" id="addPetFab" onclick="quickAddPet()" title="新增寵物">＋</button>
 </div>
 
 <!-- 第三層：寵物詳情 / 日記 view -->
@@ -2499,16 +2513,17 @@ window.addEventListener('DOMContentLoaded', ()=>{
   updateHistoryHint();
 
   // Top-nav wiring
+  const goBrand = () => {
+    if (window.location.protocol === 'file:') {
+      toast('本機模式：實際部署後此按鈕會跳到品牌首頁');
+    } else {
+      window.location.href = '../';
+    }
+  };
   const bcBrand = document.getElementById('bcBrand');
-  if (bcBrand) {
-    bcBrand.onclick = () => {
-      if (window.location.protocol === 'file:') {
-        toast('本機模式：實際部署後此按鈕會跳到品牌首頁');
-      } else {
-        window.location.href = '../';
-      }
-    };
-  }
+  if (bcBrand) bcBrand.onclick = goBrand;
+  const brandLogoNav = document.getElementById('brandLogoNav');
+  if (brandLogoNav) brandLogoNav.onclick = goBrand;
   const bcList = document.getElementById('bcList');
   if (bcList) bcList.onclick = () => gotoList();
 
