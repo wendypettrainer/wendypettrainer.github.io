@@ -187,16 +187,38 @@
     flex:0 0 auto; padding:6px 10px; font-size:13px; font-weight:600;
     background:var(--header-bg); color:var(--accent); border-radius:6px;
   }
-  /* List 上方 toolbar（新增寵物按鈕） */
-  .list-toolbar {
+  /* Tabs（物種分類）— 對齊訓練 app */
+  .tabs {
     display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    margin-bottom: 12px;
-    padding-bottom: 10px;
+    gap: 0;
+    margin-bottom: 14px;
+    background: transparent;
+    padding: 0;
     border-bottom: 1px solid var(--border);
+    align-items: center;
   }
-  .list-toolbar .add-btn {
+  .tab {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+  .tab-action {
+    margin-left: auto;
     padding: 6px 14px;
     background: var(--accent);
     color: #ffffff;
@@ -207,9 +229,48 @@
     cursor: pointer;
     font-family: inherit;
     transition: background 0.15s;
+    flex-shrink: 0;
+    margin-bottom: 4px;
   }
-  .list-toolbar .add-btn:hover { background: #8b4d22; }
-  .list-toolbar .add-btn:active { transform: translateY(1px); }
+  .tab-action:hover { background: #8b4d22; }
+  .tab-action:active { transform: translateY(1px); }
+  /* 品種 chips */
+  .source-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .source-chip {
+    padding: 5px 12px;
+    background: #ffffff;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .source-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .source-chip.active {
+    background: var(--text);
+    color: #ffffff;
+    border-color: var(--text);
+  }
+  /* 搜尋框 */
+  .search-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #ffffff;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  .search-input:focus { outline: none; border-color: var(--accent); }
   .brand{
     text-align:right; font-weight:800; font-size:20px; color:var(--accent);
     line-height:1.1;
@@ -625,9 +686,7 @@
 
 <!-- 第二層：寵物列表 view (預設) -->
 <div class="container" id="petListView">
-  <div class="list-toolbar">
-    <button type="button" class="add-btn" onclick="quickAddPet()">+ 新增寵物</button>
-  </div>
+  <div id="petListFilters"></div>
   <div class="pet-list" id="petList"></div>
 </div>
 
@@ -2037,21 +2096,108 @@ function gotoDiary(petId){
   }
   applyView('diary');
 }
+// Filter state (module-level)
+let _petListSpeciesFilter = '';   // '' / '貓' / '狗' / '其他'
+let _petListBreedFilter = '';
+let _petListQuery = '';
+
 function renderPetListView(){
   const data = ensureData();
   const list = $('petList');
+  const filters = $('petListFilters');
   if(!list) return;
-  if(!data.pets || data.pets.length === 0){
+
+  const allPets = data.pets || [];
+
+  // 0 寵物時：顯示空 state + 一顆置中新增按鈕（也保留 filters 區為空）
+  if(allPets.length === 0){
+    if(filters) filters.innerHTML = `
+      <div style="display:flex; justify-content:flex-end; margin-bottom:14px;">
+        <button type="button" class="tab-action" onclick="quickAddPet()">+ 新增寵物</button>
+      </div>`;
     list.innerHTML = '<div class="pet-list-empty">尚未新增寵物<br><br>點上方「+ 新增寵物」開始</div>';
     return;
   }
-  list.innerHTML = data.pets.map(p => {
+
+  // 計算各物種數量
+  const dogCount = allPets.filter(p => p.species === '狗').length;
+  const catCount = allPets.filter(p => p.species === '貓').length;
+  const otherCount = allPets.filter(p => p.species && p.species !== '狗' && p.species !== '貓').length;
+  const sp = _petListSpeciesFilter;
+
+  // 品種 chips（動態列出有寵物的品種）
+  const breedCounts = {};
+  allPets.forEach(p => {
+    const b = (p.breed || '').trim();
+    if(b) breedCounts[b] = (breedCounts[b] || 0) + 1;
+  });
+  const breedNames = Object.keys(breedCounts).sort((a, b) => breedCounts[b] - breedCounts[a]);
+  const breedFilter = _petListBreedFilter;
+  const breedChipsHtml = breedNames.length === 0 ? '' : `
+    <div class="source-chips">
+      <button class="source-chip ${breedFilter==='' ? 'active' : ''}" data-breed-filter="">全部品種</button>
+      ${breedNames.map(n =>
+        `<button class="source-chip ${breedFilter===n ? 'active' : ''}" data-breed-filter="${escapeHtml(n)}">${escapeHtml(n)} (${breedCounts[n]})</button>`
+      ).join('')}
+    </div>`;
+
+  // 渲染 filters: tabs + 新增按鈕 + breed chips + search
+  if(filters) filters.innerHTML = `
+    <div class="tabs">
+      <button class="tab ${sp==='' ? 'active' : ''}" data-species-filter="">全部 (${allPets.length})</button>
+      ${dogCount > 0 ? `<button class="tab ${sp==='狗' ? 'active' : ''}" data-species-filter="狗">🐶 狗 (${dogCount})</button>` : ''}
+      ${catCount > 0 ? `<button class="tab ${sp==='貓' ? 'active' : ''}" data-species-filter="貓">🐱 貓 (${catCount})</button>` : ''}
+      ${otherCount > 0 ? `<button class="tab ${sp==='其他' ? 'active' : ''}" data-species-filter="其他">🐾 其他 (${otherCount})</button>` : ''}
+      <button type="button" class="tab-action" onclick="quickAddPet()">+ 新增寵物</button>
+    </div>
+    ${breedChipsHtml}
+    <input type="text" class="search-input" id="careSearch" placeholder="🔍 搜尋名字、品種或飼主" value="${escapeHtml(_petListQuery)}">
+  `;
+
+  // 綁定 filter 互動
+  filters.querySelectorAll('[data-species-filter]').forEach(t => {
+    t.onclick = () => { _petListSpeciesFilter = t.dataset.speciesFilter; renderPetListView(); };
+  });
+  filters.querySelectorAll('[data-breed-filter]').forEach(t => {
+    t.onclick = () => { _petListBreedFilter = t.dataset.breedFilter; renderPetListView(); };
+  });
+  const searchEl = $('careSearch');
+  if(searchEl){
+    searchEl.oninput = (e) => {
+      _petListQuery = e.target.value;
+      const cursor = e.target.selectionStart;
+      renderPetListView();
+      const ne = $('careSearch');
+      if(ne){ ne.focus(); ne.setSelectionRange(cursor, cursor); }
+    };
+  }
+
+  // Filter pets
+  const q = _petListQuery.trim().toLowerCase();
+  let pets = allPets.slice();
+  if(sp === '其他') pets = pets.filter(p => p.species && p.species !== '狗' && p.species !== '貓');
+  else if(sp) pets = pets.filter(p => p.species === sp);
+  if(breedFilter) pets = pets.filter(p => (p.breed || '').trim() === breedFilter);
+  if(q){
+    pets = pets.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.breed || '').toLowerCase().includes(q) ||
+      (p.owner || '').toLowerCase().includes(q)
+    );
+  }
+
+  if(pets.length === 0){
+    list.innerHTML = '<div class="pet-list-empty">沒有符合條件的寵物<br><br>試試其他關鍵字或切換物種</div>';
+    return;
+  }
+
+  list.innerHTML = pets.map(p => {
     const latest = petLatestDiaryDate(p.id);
     const count = petDiaryCount(p.id);
     const recentLabel = latest ? `最近紀錄：${latest}` : '尚未紀錄';
-    // 一行 meta：物種 + 飼主 + 性別 + 絕育（有什麼放什麼）
     const metaParts = [];
     if(p.species) metaParts.push(p.species);
+    if(p.breed) metaParts.push(escapeHtml(p.breed));
     if(p.owner) metaParts.push(`飼主：${escapeHtml(p.owner)}`);
     const g = genderLabel(p);
     if(g) metaParts.push(g);
@@ -2134,6 +2280,9 @@ function showPetForm(petId){
         <label class="chip"><input type="radio" name="petFormNeutered" value="yes" ${editing?.neutered==='yes'?'checked':''}> 已絕育</label>
         <label class="chip"><input type="radio" name="petFormNeutered" value="no" ${editing?.neutered==='no'?'checked':''}> 未絕育</label>
         <label class="chip"><input type="radio" name="petFormNeutered" value="unknown" ${editing?.neutered==='unknown'?'checked':''}> 未知</label>
+      </div></div>
+      <div class="row"><div class="lbl">品種</div><div class="field">
+        <input type="text" id="petFormBreed" value="${editing?escapeHtml(editing.breed||''):''}" placeholder="例：柴犬、米克斯">
       </div></div>
       <div class="row"><div class="lbl">飼主</div><div class="field">
         <input type="text" id="petFormOwner" value="${editing?escapeHtml(editing.owner||''):''}" placeholder="選填">
@@ -2239,15 +2388,16 @@ function savePetForm(editingId){
   const gender = genderRadio ? genderRadio.value : '';
   const neuteredRadio = document.querySelector('input[name="petFormNeutered"]:checked');
   const neutered = neuteredRadio ? neuteredRadio.value : '';
+  const breed = ($('petFormBreed') ? $('petFormBreed').value.trim() : '');
   const owner = $('petFormOwner').value.trim();
   const notes = $('petFormNotes').value.trim();
   const data = ensureData();
   if(editingId){
     const p = data.pets.find(x=>x.id===editingId);
-    if(p){ p.name = name; p.species = species; p.gender = gender; p.neutered = neutered; p.owner = owner; p.notes = notes; }
+    if(p){ p.name = name; p.species = species; p.breed = breed; p.gender = gender; p.neutered = neutered; p.owner = owner; p.notes = notes; }
   } else {
     const id = genId();
-    data.pets.push({ id, name, species, gender, neutered, owner, notes });
+    data.pets.push({ id, name, species, breed, gender, neutered, owner, notes });
     data.current_pet_id = id;  // 新增後切過去
   }
   saveData(data);
