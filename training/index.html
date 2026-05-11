@@ -2836,8 +2836,10 @@ function renderSessions() {
     const result = await pushParentReport(curPet);
     pushBtn.disabled = false;
     if (result) {
-      // 重新 render 顯示 URL
+      // 重新 render 顯示 URL，同時保持「家長頁設定」展開
       renderSessions();
+      const detEl = document.querySelector('[data-pet-report]');
+      if (detEl) detEl.setAttribute('open', '');
     }
   };
   const copyParentBtn = document.getElementById('copyParentUrlBtn');
@@ -6012,7 +6014,9 @@ function buildParentReportPayload(pet) {
         sessionSeq: s.sessionSeq || '',
         sessionTotal: s.sessionTotal || '',
         homework: s.homework || '',
-        // trainerNotes 是內部筆記，不給家長
+        // 首堂諮詢專用：sanitize 過的 HTML，給家長看的報告內容
+        firstConsultReport: s.firstConsultReport || '',
+        // trainerNotes / fasNotes 是內部筆記，不給家長
         // records 補 methodDetails（含方法 + steps）
         records: (s.records || []).filter(r => r.selected !== false).map(r => {
           const itMethods = itemMap[r.name] || [];

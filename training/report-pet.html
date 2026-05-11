@@ -255,6 +255,27 @@
     font-size: 14px;
     line-height: 1.7;
   }
+  .first-consult-report {
+    font-size: 14px;
+    line-height: 1.8;
+  }
+  .first-consult-report p { margin: 6px 0; }
+  .first-consult-report br + br { display: none; }
+  .first-consult-report b, .first-consult-report strong { color: var(--brown-dark); }
+  .first-consult-report ul, .first-consult-report ol { margin: 8px 0 8px 20px; }
+  .first-consult-report li { margin: 3px 0; }
+  .first-consult-report table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    width: 100%;
+    font-size: 13px;
+  }
+  .first-consult-report th, .first-consult-report td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .first-consult-report th { background: var(--bg-soft); font-weight: 600; }
   details { margin-bottom: 8px; }
   summary {
     cursor: pointer;
@@ -476,11 +497,21 @@ function renderReport(data) {
   if (cfg.firstConsult !== false && data.firstConsult) {
     const fc = data.firstConsult;
     const fcRecords = renderRecords(fc.records);
+    // firstConsultReport 是 sanitize 過的 HTML（color editor 內容）
+    const fcReportHtml = (fc.firstConsultReport || '').trim();
+    const fcHomework = (fc.homework || '').trim();
     html += `
       <div class="section">
         <h2>🎯 首堂諮詢報告 · ${escapeHtml(fmtDate(fc.date))}</h2>
-        ${fc.homework ? `<div class="first-consult-content">${escapeHtml(fc.homework)}</div>` : ''}
-        ${fcRecords ? `<div style="margin-top:14px">${fcRecords}</div>` : ''}
+        ${fcReportHtml ? `<div class="first-consult-report">${fcReportHtml}</div>` : ''}
+        ${fcHomework ? `
+          <div class="homework" style="margin-top:14px">
+            <span class="homework-label">📝 飼主作業</span>
+            ${escapeHtml(fcHomework)}
+          </div>` : ''}
+        ${fcRecords ? `
+          <h3 style="margin:14px 0 8px; font-size:14px; color:var(--brown-dark);">🎯 訓練項目</h3>
+          ${fcRecords}` : ''}
         ${renderMaterials(fc)}
       </div>`;
   }
