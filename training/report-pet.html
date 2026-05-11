@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>寵物訓練報告 · Wendy 溫蒂．貓與狗訓練日常</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f3ed;
+    --bg-soft: #ede5d6;
+    --card: #ffffff;
+    --brown: #4a4138;
+    --brown-dark: #2c2620;
+    --brown-light: #b8ad9a;
+    --text: #2c2620;
+    --text-soft: #7a716a;
+    --border: #e0dcd4;
+    --accent: #c08a5e;
+    --accent-dark: #8b4d22;
+    --good: #6b9e6e;
+    --ok: #c9a85a;
+    --work: #c97a4f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 16px 60px;
+  }
+  header.brand {
+    text-align: center;
+    padding: 32px 16px 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  header.brand img {
+    max-width: 200px;
+    width: 60%;
+    height: auto;
+  }
+  header.brand h1 {
+    color: var(--brown-dark);
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 12px;
+    letter-spacing: 0.5px;
+  }
+  header.brand .sub {
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-top: 8px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .pet-hero {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+  .pet-hero .name {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--brown-dark);
+    margin-bottom: 4px;
+  }
+  .pet-hero .meta {
+    font-size: 13px;
+    color: var(--text-soft);
+  }
+  .section {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+  }
+  .section h2 {
+    color: var(--brown-dark);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.3px;
+  }
+  .qa-row {
+    font-size: 14px;
+    line-height: 1.7;
+    padding: 4px 0;
+  }
+  .qa-row b { color: var(--brown-dark); margin-right: 6px; }
+  .concerns-box {
+    background: rgba(192,138,94,0.08);
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .session-card {
+    background: var(--bg-soft);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+  }
+  .session-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: var(--text-soft);
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .session-head .date {
+    font-weight: 600;
+    color: var(--brown-dark);
+    font-size: 14px;
+  }
+  .session-head .seq {
+    background: var(--accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .item {
+    background: #ffffff;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+  }
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .item-name { font-weight: 500; flex: 1; font-size: 14px; }
+  .rating {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .rating.good { background: var(--good); color: white; }
+  .rating.ok { background: var(--ok); color: white; }
+  .rating.work { background: var(--work); color: white; }
+  .item-method {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+    font-size: 13px;
+  }
+  .item-method-name { font-weight: 500; color: var(--brown-dark); }
+  .item-method-steps {
+    color: var(--text-soft);
+    margin-top: 4px;
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .item-petnote {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(192,138,94,0.08);
+    border-radius: 4px;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+  .homework {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(107,158,110,0.08);
+    border-left: 3px solid var(--good);
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .homework-label {
+    font-weight: 600;
+    color: var(--brown-dark);
+    font-size: 12px;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .material-link {
+    display: inline-block;
+    padding: 6px 12px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--accent-dark);
+    text-decoration: none;
+    font-size: 13px;
+    margin: 4px 6px 4px 0;
+  }
+  .material-link:hover { background: var(--accent); color: white; }
+  .material-card {
+    padding: 10px 12px;
+    background: #ffffff;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+  }
+  .material-title { font-weight: 600; color: var(--brown-dark); margin-bottom: 4px; }
+  .material-content { font-size: 13px; color: var(--text-soft); line-height: 1.6; }
+  .err {
+    background: var(--card);
+    border: 1px solid var(--work);
+    color: var(--work);
+    padding: 20px;
+    border-radius: 8px;
+    margin: 40px 0;
+    text-align: center;
+  }
+  .loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-soft);
+  }
+  .footer {
+    text-align: center;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-soft);
+    letter-spacing: 1px;
+  }
+  .first-consult-content {
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  details { margin-bottom: 8px; }
+  summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    background: var(--bg-soft);
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 13px;
+    list-style: none;
+    color: var(--brown-dark);
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '▶ '; font-size: 10px; transition: transform 0.15s; display: inline-block; }
+  details[open] summary::before { content: '▼ '; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="brand">
+    <img src="logo.png" alt="Wendy"
+         onerror="this.outerHTML='<h1>Wendy 溫蒂．貓與狗訓練日常</h1>'">
+    <div class="sub">Pet Training Report</div>
+  </header>
+  <div id="content" class="loading">載入中⋯</div>
+</div>
+
+<script>
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[ch]);
+}
+function fmtDate(s) {
+  if (!s) return '';
+  return s.replace(/-/g, '/');
+}
+function ratingLabel(r) {
+  if (r === 'good') return { cls: 'good', txt: '良好' };
+  if (r === 'ok')   return { cls: 'ok',   txt: '尚可' };
+  if (r === 'work') return { cls: 'work', txt: '需要練習' };
+  return { cls: '', txt: '' };
+}
+function courseTypeLabel(s) {
+  switch (s && s.courseType) {
+    case 'firstConsult': return '首堂諮詢';
+    case 'group':
+      if (s.groupSubType === 'puppy') return '幼犬班';
+      if (s.groupSubType === 'youth') return '青少年犬班';
+      if (s.groupSubType === 'other') return (s.groupSubTypeOther || '').trim() || '團體班';
+      return '團體班';
+    case 'other': return (s.courseTypeOther || '').trim() || '其他課程';
+    case 'oneOnOne': return '一對一';
+    default: return '';
+  }
+}
+function getGistId() {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  return params.get('gist') || '';
+}
+
+async function loadReport() {
+  const id = getGistId();
+  const el = document.getElementById('content');
+  if (!id) {
+    el.innerHTML = `<div class="err">⚠️ 連結缺少 gist 參數</div>`;
+    return;
+  }
+  try {
+    const r = await fetch(`https://api.github.com/gists/${id}`);
+    if (!r.ok) throw new Error(`找不到報告 (${r.status})`);
+    const gist = await r.json();
+    const file = gist.files['pet-report.json'];
+    if (!file) throw new Error('報告格式錯誤');
+    let content = file.content;
+    if (file.truncated && file.raw_url) {
+      const rr = await fetch(file.raw_url);
+      content = await rr.text();
+    }
+    const data = JSON.parse(content);
+    renderReport(data);
+  } catch (e) {
+    el.innerHTML = `<div class="err">⚠️ 載入失敗<br><small>${escapeHtml(e.message)}</small></div>`;
+  }
+}
+
+function renderRecords(records) {
+  if (!records || records.length === 0) return '';
+  return records.map(r => {
+    const lab = ratingLabel(r.rating);
+    const petNote = (r.petNote || '').trim();
+    const methodDetails = Array.isArray(r.methodDetails) ? r.methodDetails : [];
+    const methodsHtml = methodDetails.map(md => `
+      <div class="item-method">
+        <div class="item-method-name">🎯 ${escapeHtml(md.name || '（未命名方法）')}</div>
+        ${md.steps ? `<div class="item-method-steps">${escapeHtml(md.steps)}</div>` : ''}
+      </div>`).join('');
+    const noteHtml = petNote
+      ? `<div class="item-petnote">💭 ${escapeHtml(petNote)}</div>`
+      : '';
+    return `
+      <div class="item">
+        <div class="item-row">
+          <span class="item-name">${escapeHtml(r.name)}</span>
+          ${lab.txt ? `<span class="rating ${lab.cls}">${lab.txt}</span>` : ''}
+        </div>
+        ${methodsHtml}
+        ${noteHtml}
+      </div>`;
+  }).join('');
+}
+
+function renderMaterials(s) {
+  const mats = s.attachedMaterials || [];
+  const links = s.externalLinks || [];
+  if (mats.length === 0 && links.length === 0) return '';
+  const matsHtml = mats.map(m => {
+    if (m.url && !m.content) {
+      return `<a class="material-link" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">▶ ${escapeHtml(m.title)}</a>`;
+    }
+    return `
+      <div class="material-card">
+        <div class="material-title">${escapeHtml(m.title)}</div>
+        ${m.url ? `<a class="material-link" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">▶ 觀看</a>` : ''}
+        ${m.content ? `<div class="material-content">${m.content}</div>` : ''}
+      </div>`;
+  }).join('');
+  const linksHtml = links.map(l =>
+    `<a class="material-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.title || l.url)}</a>`
+  ).join('');
+  return `
+    <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--border)">
+      <div style="font-size:12px; font-weight:600; color:var(--brown-dark); margin-bottom:6px">📎 相關教材 / 連結</div>
+      ${matsHtml}
+      ${linksHtml}
+    </div>`;
+}
+
+function renderSession(s) {
+  const ctLab = courseTypeLabel(s) || '訓練課';
+  const seq = parseInt(s.sessionSeq, 10);
+  const total = parseInt(s.sessionTotal, 10);
+  const seqStr = (seq && total) ? `第 ${seq} / ${total} 堂` : (seq ? `第 ${seq} 堂` : '');
+  return `
+    <div class="session-card">
+      <div class="session-head">
+        <span class="date">📅 ${escapeHtml(fmtDate(s.date))}</span>
+        <span>${escapeHtml(ctLab)}</span>
+        ${seqStr ? `<span class="seq">${escapeHtml(seqStr)}</span>` : ''}
+        ${s.location ? `<span>📍 ${escapeHtml(s.location)}</span>` : ''}
+      </div>
+      ${renderRecords(s.records)}
+      ${s.homework ? `
+        <div class="homework">
+          <span class="homework-label">📝 本週飼主作業</span>
+          ${escapeHtml(s.homework)}
+        </div>` : ''}
+      ${renderMaterials(s)}
+    </div>`;
+}
+
+function renderBasic(notes) {
+  if (!notes) return '';
+  const lines = notes.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  return lines.map(line => {
+    const m = line.match(/^【([^】]+)】(.*)$/);
+    if (m) {
+      return `<div class="qa-row"><b>${escapeHtml(m[1])}：</b>${escapeHtml(m[2].trim())}</div>`;
+    }
+    return `<div class="qa-row">${escapeHtml(line)}</div>`;
+  }).join('');
+}
+
+function renderReport(data) {
+  const el = document.getElementById('content');
+  el.classList.remove('loading');
+  const pet = data.pet || {};
+  const cfg = (data.config && data.config.sections) || {};
+
+  const genderTxt = pet.gender === 'male' ? '♂' : pet.gender === 'female' ? '♀' : '';
+  const neuteredTxt = pet.neutered === 'yes' ? '已絕育' : pet.neutered === 'no' ? '未絕育' : '';
+  const metaParts = [
+    pet.breed || (pet.species === 'cat' ? '貓' : '狗'),
+    genderTxt,
+    neuteredTxt,
+    pet.birth,
+  ].filter(Boolean).join(' · ');
+
+  document.title = `${pet.name || '寵物'} · 訓練報告`;
+
+  let html = `
+    <div class="pet-hero">
+      <div class="name">${pet.species === 'cat' ? '🐱' : '🐶'} ${escapeHtml(pet.name || '')}</div>
+      <div class="meta">
+        ${escapeHtml(metaParts)}
+        ${pet.ownerName ? ' · 飼主：' + escapeHtml(pet.ownerName) : ''}
+      </div>
+    </div>`;
+
+  // 基本資料
+  if (cfg.basic !== false && data.basic && data.basic.notes) {
+    html += `
+      <div class="section">
+        <h2>📋 基本資料</h2>
+        ${renderBasic(data.basic.notes)}
+      </div>`;
+  }
+
+  // 困擾行為
+  if (cfg.concerns !== false && data.concerns) {
+    html += `
+      <div class="section">
+        <h2>⚠️ 目前困擾行為</h2>
+        <div class="concerns-box">${escapeHtml(data.concerns)}</div>
+      </div>`;
+  }
+
+  // 首堂諮詢
+  if (cfg.firstConsult !== false && data.firstConsult) {
+    const fc = data.firstConsult;
+    const fcRecords = renderRecords(fc.records);
+    html += `
+      <div class="section">
+        <h2>🎯 首堂諮詢報告 · ${escapeHtml(fmtDate(fc.date))}</h2>
+        ${fc.homework ? `<div class="first-consult-content">${escapeHtml(fc.homework)}</div>` : ''}
+        ${fcRecords ? `<div style="margin-top:14px">${fcRecords}</div>` : ''}
+        ${renderMaterials(fc)}
+      </div>`;
+  }
+
+  // 每堂訓練紀錄
+  if (cfg.sessions !== false && Array.isArray(data.sessions) && data.sessions.length > 0) {
+    const doneSessions = data.sessions.filter(s => s.status === 'done');
+    if (doneSessions.length > 0) {
+      html += `
+        <div class="section">
+          <h2>📒 訓練紀錄（共 ${doneSessions.length} 堂）</h2>
+          ${doneSessions.map(renderSession).join('')}
+        </div>`;
+    }
+  }
+
+  html += `
+    <div class="footer">
+      Wendy 溫蒂．貓與狗訓練日常<br>
+      <span style="font-size:10px">更新時間：${escapeHtml(fmtDate((data.generated || '').slice(0, 10)))}</span>
+    </div>`;
+
+  el.innerHTML = html;
+}
+
+loadReport();
+</script>
+</body>
+</html>

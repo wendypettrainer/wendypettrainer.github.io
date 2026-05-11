@@ -1377,6 +1377,8 @@ function ensurePetShape(arr) {
   return arr.map(p => {
     if (!p || typeof p !== 'object') return p;
     const incomingRates = p.studioRates || {};
+    const incomingCfg = (p.parentReportConfig && typeof p.parentReportConfig === 'object') ? p.parentReportConfig : {};
+    const incomingSections = (incomingCfg.sections && typeof incomingCfg.sections === 'object') ? incomingCfg.sections : {};
     return {
       ...p,
       source: (p.source === 'studio') ? 'studio' : 'direct',
@@ -1388,6 +1390,17 @@ function ensurePetShape(arr) {
         firstConsult: Number(incomingRates.firstConsult) || 0,
         other: Number(incomingRates.other) || 0,
       },
+      // 家長報告：每隻寵物獨立設定，預設全開
+      parentReportConfig: {
+        sections: {
+          basic: incomingSections.basic !== false,
+          concerns: incomingSections.concerns !== false,
+          firstConsult: incomingSections.firstConsult !== false,
+          sessions: incomingSections.sessions !== false,
+          materials: incomingSections.materials !== false,
+        },
+      },
+      parentReportGistId: typeof p.parentReportGistId === 'string' ? p.parentReportGistId : '',
     };
   });
 }
@@ -2744,7 +2757,43 @@ function renderSessions() {
   } else {
     body = sessions.map(sessionCardHtml).join('');
   }
-  main.innerHTML = petActionBar + meta + petPaymentHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
+  // 家長報告 section
+  const cfg = (pet.parentReportConfig && pet.parentReportConfig.sections) || {};
+  const settings = load(KEYS.settings, {});
+  const parentReportUrl = pet.parentReportGistId
+    ? buildParentReportUrl(settings, pet.parentReportGistId)
+    : '';
+  const parentReportHtml = `
+    <details class="card" style="cursor:default; padding:0; margin-bottom:10px" data-pet-report>
+      <summary style="padding:12px 14px; font-size:14px; font-weight:600; color:var(--brown-dark); list-style:none; cursor:pointer;">
+        🔗 家長頁設定 ${pet.parentReportGistId ? '<span style="font-size:12px; color:var(--good); font-weight:400">· 已啟用</span>' : '<span style="font-size:12px; color:var(--text-soft); font-weight:400">· 尚未產生</span>'}
+      </summary>
+      <div style="padding:0 14px 14px">
+        <p class="card-meta" style="margin-bottom:10px; font-size:12px;">
+          • 把這隻狗狗的紀錄合成一個專屬網址給家長<br>
+          • 勾選下方要顯示的內容，按「📤 同步給家長」後，網址永久不變，家長重新整理就會看到最新版
+        </p>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" data-cfg-section="basic" ${cfg.basic !== false ? 'checked' : ''}> 寵物基本資料</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" data-cfg-section="concerns" ${cfg.concerns !== false ? 'checked' : ''}> 目前困擾行為</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" data-cfg-section="firstConsult" ${cfg.firstConsult !== false ? 'checked' : ''}> 首堂諮詢報告</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" data-cfg-section="sessions" ${cfg.sessions !== false ? 'checked' : ''}> 每堂訓練紀錄（含作業）</label>
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" data-cfg-section="materials" ${cfg.materials !== false ? 'checked' : ''}> 教材 / YouTube 連結</label>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn" id="pushParentReportBtn" type="button" style="padding:8px 14px;">📤 同步給家長</button>
+          ${parentReportUrl ? `<button class="btn ghost" id="copyParentUrlBtn" type="button" style="padding:8px 14px;">📋 複製家長網址</button>` : ''}
+        </div>
+        ${parentReportUrl ? `
+          <div style="margin-top:10px; padding:8px 10px; background:rgba(0,0,0,0.04); border-radius:6px; font-size:11px; word-break:break-all; color:var(--text-soft);">
+            ${escapeHtml(parentReportUrl)}
+          </div>
+        ` : ''}
+      </div>
+    </details>
+  `;
+
+  main.innerHTML = petActionBar + meta + petPaymentHtml + parentReportHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
   // 排序選單
   const sortSelect = document.getElementById('sessionSort');
   if (sortSelect) sortSelect.onchange = (e) => {
@@ -2764,6 +2813,40 @@ function renderSessions() {
     save(KEYS.settings, s);
     renderSessions();
   };
+  // 家長報告 section binding
+  main.querySelectorAll('[data-cfg-section]').forEach(cb => {
+    cb.onchange = () => {
+      const pets = load(KEYS.pets, []);
+      const idx = pets.findIndex(p => p.id === pet.id);
+      if (idx < 0) return;
+      const key = cb.dataset.cfgSection;
+      if (!pets[idx].parentReportConfig) pets[idx].parentReportConfig = { sections: {} };
+      if (!pets[idx].parentReportConfig.sections) pets[idx].parentReportConfig.sections = {};
+      pets[idx].parentReportConfig.sections[key] = cb.checked;
+      save(KEYS.pets, pets);
+    };
+  });
+  const pushBtn = document.getElementById('pushParentReportBtn');
+  if (pushBtn) pushBtn.onclick = async () => {
+    // 重新讀 pet（剛改過 config 可能還沒在記憶中的 pet 變數）
+    const pets = load(KEYS.pets, []);
+    const curPet = pets.find(p => p.id === pet.id);
+    if (!curPet) return;
+    pushBtn.disabled = true;
+    const result = await pushParentReport(curPet);
+    pushBtn.disabled = false;
+    if (result) {
+      // 重新 render 顯示 URL
+      renderSessions();
+    }
+  };
+  const copyParentBtn = document.getElementById('copyParentUrlBtn');
+  if (copyParentBtn) copyParentBtn.onclick = () => {
+    copyToClipboard(parentReportUrl).then(ok => {
+      showNotice(ok ? '✓ 家長網址已複製' : '複製失敗');
+    });
+  };
+
   // 寵物 payment section binding
   main.querySelectorAll('[data-open-booking]').forEach(el => {
     el.onclick = () => go('booking', { petId: pet.id, bookingId: el.dataset.openBooking });
@@ -3325,13 +3408,49 @@ function planBookingShellSync(booking) {
 }
 
 /**
- * 套用 plan：實際把殼新增 / 刪除進 KEYS.sessions。回傳 {spawned, removed}。
+ * 套用 plan：實際把殼新增 / 刪除進 KEYS.sessions。回傳 {spawned, removed, updated}。
+ * 額外：把所有現有殼的 courseType / groupSubType / location / sessionTotal 等同步成 booking 最新值。
  */
 function applyBookingShellSync(booking, plan) {
   let arr = load(KEYS.sessions, []);
   if (plan.toRemove.length > 0) {
     arr = arr.filter(s => !plan.toRemove.includes(s.id));
   }
+  // 同步現有殼的 courseType / 相關欄位（修 booking 改類型後 session 沒跟著改的問題）
+  let updated = 0;
+  arr = arr.map(s => {
+    if (s.sourceBookingId !== booking.id) return s;
+    const bs = (booking.sessions && booking.sessions[s.sourceIndex]) || {};
+    const newCourseType = booking.courseType || '';
+    const newGroupSubType = booking.groupSubType || '';
+    const newGroupSubTypeOther = booking.groupSubTypeOther || '';
+    const newCourseTypeOther = booking.courseTypeOther || '';
+    const newLocation = booking.location || '';
+    const newTotal = String(booking.sessionCount || 0);
+    const newDate = bs.date || '';
+    // 偵測是否真的有差異（避免不必要更新與 lastModified 抖動）
+    const changed = (
+      s.courseType !== newCourseType ||
+      s.groupSubType !== newGroupSubType ||
+      s.groupSubTypeOther !== newGroupSubTypeOther ||
+      s.courseTypeOther !== newCourseTypeOther ||
+      s.location !== newLocation ||
+      s.sessionTotal !== newTotal ||
+      s.date !== newDate
+    );
+    if (!changed) return s;
+    updated++;
+    return {
+      ...s,
+      courseType: newCourseType,
+      groupSubType: newGroupSubType,
+      groupSubTypeOther: newGroupSubTypeOther,
+      courseTypeOther: newCourseTypeOther,
+      location: newLocation,
+      sessionTotal: newTotal,
+      date: newDate,
+    };
+  });
   for (const i of plan.toAdd) {
     const bs = (booking.sessions && booking.sessions[i]) || {};
     arr.push({
@@ -3357,7 +3476,7 @@ function applyBookingShellSync(booking, plan) {
     });
   }
   save(KEYS.sessions, arr);
-  return { spawned: plan.toAdd.length, removed: plan.toRemove.length };
+  return { spawned: plan.toAdd.length, removed: plan.toRemove.length, updated };
 }
 
 /**
@@ -5828,6 +5947,159 @@ async function shareToGist(sess, pet) {
     showShareModal(reportUrl, gist.html_url);
   } catch (e) {
     showNotice('上傳失敗：' + e.message, 'err');
+  }
+}
+
+/* ============== 家長報告 (per-pet 總覽) ============== */
+
+// 用 buildReportUrl 但檔名改 report-pet.html
+function buildParentReportUrl(settings, gistId) {
+  return buildReportUrl(settings, gistId).replace('/report.html#', '/report-pet.html#');
+}
+
+// 組家長報告 payload。依 pet.parentReportConfig.sections 決定包含哪些 section。
+function buildParentReportPayload(pet) {
+  const cfg = (pet.parentReportConfig && pet.parentReportConfig.sections) || {};
+  const payload = {
+    schema: 'wendy-pet-report-v1',
+    generated: new Date().toISOString(),
+    pet: {
+      name: pet.name,
+      species: pet.species,
+      breed: pet.breed || '',
+      gender: pet.gender || '',
+      neutered: pet.neutered || '',
+      birth: pet.birth || '',
+      ownerName: pet.ownerName || '',
+      ownerContact: pet.ownerContact || '',
+    },
+    config: { sections: cfg },
+  };
+  // 基本資料（notes 整段）
+  if (cfg.basic !== false) {
+    payload.basic = { notes: pet.notes || '' };
+  }
+  // 困擾行為
+  if (cfg.concerns !== false) {
+    payload.concerns = pet.concerns || '';
+  }
+  // 首堂諮詢 + 每堂訓練紀錄 + 教材附件
+  const wantFirstConsult = cfg.firstConsult !== false;
+  const wantSessions = cfg.sessions !== false;
+  const wantMaterials = cfg.materials !== false;
+  const allMaterials = load(KEYS.materials, []);
+  const materialMap = {};
+  allMaterials.forEach(m => { materialMap[m.id] = m; });
+  if (wantFirstConsult || wantSessions) {
+    const petSessions = load(KEYS.sessions, [])
+      .filter(s => s.petId === pet.id)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    // 訓練項目庫（給 records 補 method.steps）
+    const items = ensureItemShape(pet.species === 'cat' ? load(KEYS.itemsCat, []) : load(KEYS.itemsDog, []));
+    const itemMap = {};
+    items.forEach(it => { itemMap[it.name] = it.methods || []; });
+    const enrichSession = (s) => {
+      const enriched = {
+        id: s.id,
+        date: s.date,
+        location: s.location || '',
+        duration: s.duration || 0,
+        status: s.status || 'done',
+        courseType: s.courseType || '',
+        groupSubType: s.groupSubType || '',
+        groupSubTypeOther: s.groupSubTypeOther || '',
+        courseTypeOther: s.courseTypeOther || '',
+        sessionSeq: s.sessionSeq || '',
+        sessionTotal: s.sessionTotal || '',
+        homework: s.homework || '',
+        // trainerNotes 是內部筆記，不給家長
+        // records 補 methodDetails（含方法 + steps）
+        records: (s.records || []).filter(r => r.selected !== false).map(r => {
+          const itMethods = itemMap[r.name] || [];
+          const checkedNames = r.methods || [];
+          const methodDetails = checkedNames.map(mn => {
+            const m = itMethods.find(im => im.name === mn);
+            return { name: mn, steps: (m && m.steps) || '' };
+          });
+          return { ...r, methodDetails };
+        }),
+      };
+      // 教材附件
+      if (wantMaterials) {
+        enriched.attachedMaterials = (s.attachedMaterialIds || [])
+          .map(id => materialMap[id])
+          .filter(Boolean)
+          .map(m => ({ id: m.id, title: m.title, url: m.url || '', content: m.content || '' }));
+        enriched.externalLinks = (s.externalLinks || []).filter(l => l && (l.title || l.url));
+      }
+      return enriched;
+    };
+    if (wantFirstConsult) {
+      const fc = petSessions.find(s => s.courseType === 'firstConsult');
+      if (fc) payload.firstConsult = enrichSession(fc);
+    }
+    if (wantSessions) {
+      // 一般 sessions（不含 firstConsult，避免重複；首堂在 firstConsult section）
+      payload.sessions = petSessions
+        .filter(s => s.courseType !== 'firstConsult')
+        .map(enrichSession);
+    }
+  }
+  return payload;
+}
+
+// 推送家長報告到 gist（create or update）
+async function pushParentReport(pet) {
+  const settings = load(KEYS.settings, {});
+  if (!settings.githubPat) {
+    showNotice('請先到設定填入 GitHub PAT', 'err');
+    return null;
+  }
+  const payload = buildParentReportPayload(pet);
+  const body = {
+    description: `Wendy Parent Report - ${pet.name}`,
+    public: false,
+    files: { 'pet-report.json': { content: JSON.stringify(payload, null, 2) } },
+  };
+  showNotice('同步中⋯');
+  try {
+    let resp;
+    if (pet.parentReportGistId) {
+      resp = await fetch(`https://api.github.com/gists/${pet.parentReportGistId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${settings.githubPat}`,
+          'Accept': 'application/vnd.github+json',
+        },
+        body: JSON.stringify(body),
+      });
+    } else {
+      resp = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.githubPat}`,
+          'Accept': 'application/vnd.github+json',
+        },
+        body: JSON.stringify(body),
+      });
+    }
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`GitHub ${resp.status}: ${err.slice(0,200)}`);
+    }
+    const gist = await resp.json();
+    // 寫回 pet.parentReportGistId
+    const pets = load(KEYS.pets, []);
+    const idx = pets.findIndex(p => p.id === pet.id);
+    if (idx >= 0) {
+      pets[idx].parentReportGistId = gist.id;
+      save(KEYS.pets, pets);
+    }
+    showNotice('✓ 已同步到家長頁');
+    return { gistId: gist.id, gistUrl: gist.html_url, reportUrl: buildParentReportUrl(settings, gist.id) };
+  } catch (e) {
+    showNotice('同步失敗：' + e.message, 'err');
+    return null;
   }
 }
 
