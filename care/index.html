@@ -1008,7 +1008,7 @@ function exportTeddyBackup(){
   const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   a.href = url;
   a.download = `teddy-care-backup-${today}.json`;
   document.body.appendChild(a);
@@ -1257,7 +1257,7 @@ function renderDateHistory(){
   if(!el) return;
   const records = getRecords();
   const dates = Object.keys(records).sort().reverse();
-  const today = new Date().toISOString().slice(0,10);
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   const currentDate = $('date').value;
   // 快取：避免每次按鍵都重繪（會打斷 chips 的水平捲動位置）
   const key = JSON.stringify([dates, currentDate, today]);
@@ -2025,7 +2025,7 @@ function exportPetCsv(){
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0,10);
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   // 檔名：寵物名_照護紀錄_匯出日期.csv
   a.href = url;
   a.download = `${pet.name}_照護紀錄_${today}.csv`;
@@ -2623,7 +2623,7 @@ body{background:var(--bg);}
   const blob = new Blob([html], {type:'text/html'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0,10);
+  const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   a.href = url;
   a.download = `${petName}_照護紀錄_${today}.html`;
   document.body.appendChild(a);

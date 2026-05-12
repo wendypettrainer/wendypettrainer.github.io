@@ -1731,8 +1731,12 @@ function fmtDate(s) {
   return `${y}/${m}/${d}`;
 }
 function todayStr() {
+  // 用本地時區，避免 toISOString 在凌晨時段（GMT+8 凌晨 ≈ UTC 前一天下午）少算一天
   const d = new Date();
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 function speciesLabel(s) { return s === 'cat' ? '貓' : '狗'; }
 function speciesEmoji(s) { return s === 'cat' ? '🐱' : '🐶'; }
@@ -7240,7 +7244,11 @@ function renderStats() {
     else if (range === '3m') d.setMonth(d.getMonth() - 3);
     else if (range === '6m') d.setMonth(d.getMonth() - 6);
     else if (range === '1y') d.setFullYear(d.getFullYear() - 1);
-    cutoff = d.toISOString().slice(0, 10);
+    // 用本地時區避免 UTC 偏移
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    cutoff = `${y}-${m}-${day}`;
   }
 
   const allBookings = load(KEYS.bookings, []);
