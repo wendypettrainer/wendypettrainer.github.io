@@ -5157,7 +5157,16 @@ function exportFirstConsultPdf(sess, pet) {
 <meta charset="UTF-8">
 <title>${escapeHtml(titleStr)}</title>
 <style>
-  @page { size: A4; margin: 16mm 14mm; }
+  @page {
+    size: A4;
+    margin: 16mm 14mm 20mm;
+    @bottom-right {
+      content: counter(page) ' / ' counter(pages);
+      font-size: 9pt;
+      color: #8b6f47;
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
+    }
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
@@ -5336,7 +5345,16 @@ function exportPdf(sess, pet) {
 <meta charset="UTF-8">
 <title>${escapeHtml(pet.name)}_${sess.date}</title>
 <style>
-  @page { size: A4; margin: 16mm 14mm; }
+  @page {
+    size: A4;
+    margin: 16mm 14mm 20mm;
+    @bottom-right {
+      content: counter(page) ' / ' counter(pages);
+      font-size: 9pt;
+      color: #8b6f47;
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
+    }
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
@@ -5391,18 +5409,6 @@ function exportPdf(sess, pet) {
     padding: 10pt 12pt;
     margin-bottom: 8pt;
     page-break-inside: avoid;
-  }
-  /* 非最後一個 item 後面加「繼續下頁」提示，讓家長知道下面還有內容 */
-  .item:not(:last-of-type)::after {
-    content: '— 繼續下頁 ↓ —';
-    display: block;
-    text-align: center;
-    margin-top: 10pt;
-    padding-top: 8pt;
-    border-top: 1px dashed #c9b693;
-    font-size: 9pt;
-    color: #b8ad9a;
-    letter-spacing: 3px;
   }
   .item-row {
     display: flex; justify-content: space-between;
@@ -5587,7 +5593,16 @@ function exportBookingPdf(booking, pet) {
 <meta charset="UTF-8">
 <title>${escapeHtml(titleStr)}</title>
 <style>
-  @page { size: A4; margin: 16mm 14mm; }
+  @page {
+    size: A4;
+    margin: 16mm 14mm 20mm;
+    @bottom-right {
+      content: counter(page) ' / ' counter(pages);
+      font-size: 9pt;
+      color: #8b6f47;
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
+    }
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
