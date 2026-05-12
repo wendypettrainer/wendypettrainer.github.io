@@ -281,7 +281,7 @@ function renderReport(data) {
        <div class="homework">${escapeHtml(session.homework)}</div>`
     : '';
 
-  const genderTxt = pet.gender === 'male' ? '♂' : pet.gender === 'female' ? '♀' : '';
+  const genderTxt = pet.gender === 'male' ? '公' : pet.gender === 'female' ? '母' : '';
   const neuteredTxt = pet.neutered === 'yes' ? '已絕育' : pet.neutered === 'no' ? '未絕育' : '';
   const metaParts = [
     pet.breed || (pet.species==='cat'?'貓':'狗'),

@@ -2050,8 +2050,8 @@ function quickAddPet(){
 // === 寵物欄位顯示工具 ===
 function genderLabel(p){
   if(!p || !p.gender) return '';
-  if(p.gender === 'female') return '♀ 母';
-  if(p.gender === 'male') return '♂ 公';
+  if(p.gender === 'female') return '母';
+  if(p.gender === 'male') return '公';
   return '';
 }
 function neuteredLabel(p){
@@ -2282,8 +2282,8 @@ function showPetForm(petId){
         <label class="chip"><input type="radio" name="petFormSpecies" value="其他" ${editing?.species==='其他'?'checked':''}> 🐾 其他</label>
       </div></div>
       <div class="row"><div class="lbl">性別</div><div class="field chips">
-        <label class="chip"><input type="radio" name="petFormGender" value="female" ${editing?.gender==='female'?'checked':''}> ♀ 母</label>
-        <label class="chip"><input type="radio" name="petFormGender" value="male" ${editing?.gender==='male'?'checked':''}> ♂ 公</label>
+        <label class="chip"><input type="radio" name="petFormGender" value="female" ${editing?.gender==='female'?'checked':''}> 母</label>
+        <label class="chip"><input type="radio" name="petFormGender" value="male" ${editing?.gender==='male'?'checked':''}> 公</label>
         <label class="chip"><input type="radio" name="petFormGender" value="unknown" ${editing?.gender==='unknown'?'checked':''}> 未知</label>
       </div></div>
       <div class="row"><div class="lbl">絕育</div><div class="field chips">

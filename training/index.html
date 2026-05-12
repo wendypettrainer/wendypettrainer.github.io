@@ -1736,7 +1736,7 @@ function todayStr() {
 }
 function speciesLabel(s) { return s === 'cat' ? '貓' : '狗'; }
 function speciesEmoji(s) { return s === 'cat' ? '🐱' : '🐶'; }
-function genderLabel(g) { return g === 'male' ? '♂' : g === 'female' ? '♀' : ''; }
+function genderLabel(g) { return g === 'male' ? '公' : g === 'female' ? '母' : ''; }
 function neuteredLabel(n) { return n === 'yes' ? '已絕育' : n === 'no' ? '未絕育' : ''; }
 function petTagline(p) {
   // 一行短描述：品種 · ♂ · 已絕育 · 4 個月齡
@@ -2255,8 +2255,8 @@ function openPetForm(pet = null) {
           <label>性別</label>
           <select id="f_gender">
             <option value="" ${!data.gender?'selected':''}>未填</option>
-            <option value="male" ${data.gender==='male'?'selected':''}>♂ 公</option>
-            <option value="female" ${data.gender==='female'?'selected':''}>♀ 母</option>
+            <option value="male" ${data.gender==='male'?'selected':''}>公</option>
+            <option value="female" ${data.gender==='female'?'selected':''}>母</option>
           </select>
         </div>
         <div class="field">
@@ -2696,7 +2696,7 @@ function renderSessions() {
     // 標題：有 date 顯示日期；date 空（已被 status badge 「待安排」表達，標題只顯示堂數）
     let titleHtml;
     if (s.date) {
-      titleHtml = `${fmtDate(s.date)} ${isToday && !isDone && !isClosed ? '<span class="badge" style="background:var(--good)">今天</span>' : ''}`;
+      titleHtml = `${fmtDate(s.date)} ${isToday && !isDone && !isClosed ? '<span class="badge" style="background:#5a7d5f; color:#ffffff; border-color:#5a7d5f">今天</span>' : ''}`;
     } else {
       const seq = (s.sessionSeq || '?').toString();
       titleHtml = `<span style="color:var(--text-soft); font-weight:500">第 ${escapeHtml(seq)} 堂</span>`;
@@ -5273,7 +5273,7 @@ function exportPdf(sess, pet) {
   items.forEach(it => { itemMap[it.name] = it.methods || []; });
 
   const speciesEmoji = pet.species === 'cat' ? '🐱' : '🐶';
-  const genderTxt = pet.gender === 'male' ? '♂' : pet.gender === 'female' ? '♀' : '';
+  const genderTxt = pet.gender === 'male' ? '公' : pet.gender === 'female' ? '母' : '';
   const neuteredTxt = pet.neutered === 'yes' ? '已絕育' : pet.neutered === 'no' ? '未絕育' : '';
   const metaParts = [
     pet.breed,
@@ -5391,6 +5391,18 @@ function exportPdf(sess, pet) {
     padding: 10pt 12pt;
     margin-bottom: 8pt;
     page-break-inside: avoid;
+  }
+  /* 非最後一個 item 後面加「繼續下頁」提示，讓家長知道下面還有內容 */
+  .item:not(:last-of-type)::after {
+    content: '— 繼續下頁 ↓ —';
+    display: block;
+    text-align: center;
+    margin-top: 10pt;
+    padding-top: 8pt;
+    border-top: 1px dashed #c9b693;
+    font-size: 9pt;
+    color: #b8ad9a;
+    letter-spacing: 3px;
   }
   .item-row {
     display: flex; justify-content: space-between;
@@ -7626,7 +7638,7 @@ function renderStats() {
 
 function renderEmailPreview(overlay, p) {
   const speciesLabel = p.species === 'cat' ? '🐱 貓' : '🐶 狗';
-  const genderLabel = p.gender === 'male' ? '♂ 公' : p.gender === 'female' ? '♀ 母' : '—';
+  const genderLabel = p.gender === 'male' ? '公' : p.gender === 'female' ? '母' : '—';
   const neuteredLabel = p.neutered === 'yes' ? '已絕育' : p.neutered === 'no' ? '未絕育' : '—';
   const existing = findExistingPet(p);
   const warningHtml = existing ? `
