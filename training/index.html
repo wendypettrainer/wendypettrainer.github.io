@@ -5312,10 +5312,7 @@ function exportPdf(sess, pet) {
             </div>`;
         }).join('');
         const noteHtml = (r.petNote && r.petNote.trim())
-          ? `<div class="item-petnote">
-               <div class="item-label">💭 針對 ${escapeHtml(pet.name)} 的調整</div>
-               ${escapeHtml(r.petNote)}
-             </div>`
+          ? `<div class="item-petnote"><div class="item-label">💭 針對 ${escapeHtml(pet.name)} 的調整</div><div class="item-petnote-body">${escapeHtml(r.petNote).replace(/\n/g, '<br>')}</div></div>`
           : '';
         return `
           <div class="item">
@@ -5423,13 +5420,17 @@ function exportPdf(sess, pet) {
     white-space: pre-wrap;
   }
   .item-petnote {
-    background: rgba(201, 182, 147, 0.3);
+    background: rgba(192, 138, 94, 0.12);
+    border-left: 3px solid #c08a5e;
     padding: 8pt 10pt;
     border-radius: 6pt;
     margin-top: 6pt;
-    color: #6b5435;
-    white-space: pre-wrap;
+    color: #4a4138;
     font-size: 11pt;
+  }
+  .item-petnote-body {
+    color: #4a4138;
+    margin-top: 2pt;
   }
   .item-label {
     font-size: 9pt; color: #8b6f47;
