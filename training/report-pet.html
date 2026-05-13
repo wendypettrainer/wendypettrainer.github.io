@@ -121,6 +121,24 @@
     margin-bottom: 10px;
     border: 1px solid var(--border);
   }
+  .session-card.is-booked {
+    background: #ffffff;
+    border-style: dashed;
+    opacity: 0.85;
+  }
+  .booked-badge {
+    background: #c08a5e;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+  }
+  .booked-hint {
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-top: 6px;
+    font-style: italic;
+  }
   .session-head {
     display: flex;
     align-items: center;
@@ -443,21 +461,28 @@ function renderSession(s) {
   const seq = parseInt(s.sessionSeq, 10);
   const total = parseInt(s.sessionTotal, 10);
   const seqStr = (seq && total) ? `第 ${seq} / ${total} 堂` : (seq ? `第 ${seq} 堂` : '');
+  const isBooked = s.status === 'booked';
+  const dateLabel = s.date ? fmtDate(s.date) : '待安排';
   return `
-    <div class="session-card">
+    <div class="session-card${isBooked ? ' is-booked' : ''}">
       <div class="session-head">
-        <span class="date">📅 ${escapeHtml(fmtDate(s.date))}</span>
+        <span class="date">📅 ${escapeHtml(dateLabel)}</span>
         <span>${escapeHtml(ctLab)}</span>
         ${seqStr ? `<span class="seq">${escapeHtml(seqStr)}</span>` : ''}
         ${s.location ? `<span>📍 ${escapeHtml(s.location)}</span>` : ''}
+        ${isBooked ? `<span class="booked-badge">⏳ 預約中</span>` : ''}
       </div>
-      ${renderRecords(s.records)}
-      ${s.homework ? `
-        <div class="homework">
-          <span class="homework-label">📝 本週飼主作業</span>
-          ${escapeHtml(s.homework)}
-        </div>` : ''}
-      ${renderMaterials(s)}
+      ${isBooked ? `
+        <div class="booked-hint">尚未上課，課後內容會更新到這裡。</div>
+      ` : `
+        ${renderRecords(s.records)}
+        ${s.homework ? `
+          <div class="homework">
+            <span class="homework-label">📝 本週飼主作業</span>
+            ${escapeHtml(s.homework)}
+          </div>` : ''}
+        ${renderMaterials(s)}
+      `}
     </div>`;
 }
 
@@ -541,14 +566,19 @@ function renderReport(data) {
       </div>`;
   }
 
-  // 每堂訓練紀錄
+  // 每堂訓練紀錄（含已完成與預約中，排除強制結案）
   if (cfg.sessions !== false && Array.isArray(data.sessions) && data.sessions.length > 0) {
-    const doneSessions = data.sessions.filter(s => s.status === 'done');
-    if (doneSessions.length > 0) {
+    const visibleSessions = data.sessions.filter(s => s.status === 'done' || s.status === 'booked');
+    if (visibleSessions.length > 0) {
+      const doneCount = visibleSessions.filter(s => s.status === 'done').length;
+      const bookedCount = visibleSessions.filter(s => s.status === 'booked').length;
+      const counterStr = doneCount && bookedCount
+        ? `已完成 ${doneCount} 堂・預約中 ${bookedCount} 堂`
+        : doneCount ? `共 ${doneCount} 堂` : `預約中 ${bookedCount} 堂`;
       html += `
         <div class="section">
-          <h2>📒 訓練紀錄（共 ${doneSessions.length} 堂）</h2>
-          ${doneSessions.map(renderSession).join('')}
+          <h2>📒 訓練紀錄（${counterStr}）</h2>
+          ${visibleSessions.map(renderSession).join('')}
         </div>`;
     }
   }

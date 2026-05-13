@@ -1738,6 +1738,32 @@ function todayStr() {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+// 清理 URL 的 tracking 參數（YouTube ?si= / Google ?usp= / utm_* / fbclid / gclid 等）
+// 連結仍可點，只是更乾淨、節省儲存空間、便於閱讀
+function cleanUrl(url) {
+  if (!url || typeof url !== 'string') return url;
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  try {
+    const u = new URL(trimmed);
+    const removeKeys = [
+      'si', 'feature', 'pp',              // YouTube
+      'usp', 'authuser', 'sourceapp',     // Google Drive / Docs
+      'fbclid', 'gclid', 'ref', 'ref_',   // 通用 tracking
+      'igshid', 'mc_eid', 'mc_cid',       // Instagram / Mailchimp
+    ];
+    removeKeys.forEach(k => u.searchParams.delete(k));
+    // utm_*
+    const toDel = [];
+    u.searchParams.forEach((_, k) => { if (k.toLowerCase().startsWith('utm_')) toDel.push(k); });
+    toDel.forEach(k => u.searchParams.delete(k));
+    let result = u.toString();
+    return result.replace(/\?$/, '');  // 清掉空的 ?
+  } catch (e) {
+    return trimmed;  // 不是合法 URL，原樣回（讓 user 自行修正）
+  }
+}
+
 function speciesLabel(s) { return s === 'cat' ? '貓' : '狗'; }
 function speciesEmoji(s) { return s === 'cat' ? '🐱' : '🐶'; }
 function genderLabel(g) { return g === 'male' ? '公' : g === 'female' ? '母' : ''; }
@@ -3870,7 +3896,7 @@ function openAttachmentForm(sess, onSaved) {
       if (cb.checked) newAttached.push(cb.dataset.matAttach);
     });
     const cleanLinks = links
-      .map(l => ({ title: (l.title || '').trim(), url: (l.url || '').trim() }))
+      .map(l => ({ title: (l.title || '').trim(), url: cleanUrl((l.url || '').trim()) }))
       .filter(l => l.url);
     const all = load(KEYS.sessions, []);
     const idx = all.findIndex(s => s.id === sess.id);
@@ -6590,6 +6616,14 @@ function renderSettings() {
     });
     wrap.querySelectorAll('[data-mat-url]').forEach(el => {
       el.oninput = (e) => { mats[parseInt(el.dataset.matUrl,10)].url = e.target.value; };
+      // 離開欄位（blur）時自動清理 tracking 參數（?si= ?usp= utm_* 等）
+      el.onchange = (e) => {
+        const cleaned = cleanUrl(e.target.value);
+        if (cleaned !== e.target.value) {
+          e.target.value = cleaned;
+          mats[parseInt(el.dataset.matUrl,10)].url = cleaned;
+        }
+      };
     });
     wrap.querySelectorAll('[data-mat-content]').forEach(el => {
       el.onblur = () => { mats[parseInt(el.dataset.matContent,10)].content = sanitizeColorHtml(el.innerHTML); };
@@ -6624,7 +6658,7 @@ function renderSettings() {
       .map(m => ({
         id: m.id || uid(),
         title: (m.title || '').trim(),
-        url: (m.url || '').trim(),
+        url: cleanUrl((m.url || '').trim()),
         content: sanitizeColorHtml(m.content || ''),
         createdAt: m.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
