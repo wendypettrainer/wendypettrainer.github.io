@@ -275,10 +275,11 @@
   .item-method-steps {
     color: var(--text-soft);
     margin-top: 4px;
-    white-space: pre-wrap;
     font-size: 13px;
-    line-height: 1.6;
+    line-height: 1.7;
   }
+  .item-method-steps b, .item-method-steps strong { color: var(--brown-dark); }
+  .item-method-steps span[style] { /* 保留訓練師上的顏色 */ }
   .item-petnote {
     margin-top: 8px;
     padding: 8px 10px;
@@ -493,7 +494,7 @@ function renderRecords(records) {
     const methodsHtml = methodDetails.map(md => `
       <div class="item-method">
         <div class="item-method-name">🎯 ${escapeHtml(md.name || '（未命名方法）')}</div>
-        ${md.steps ? `<div class="item-method-steps">${escapeHtml(md.steps)}</div>` : ''}
+        ${md.steps ? `<div class="item-method-steps">${md.steps}</div>` : ''}
       </div>`).join('');
     const noteHtml = petNote
       ? `<div class="item-petnote">💭 ${escapeHtml(petNote)}</div>`
