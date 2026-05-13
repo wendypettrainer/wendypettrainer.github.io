@@ -99,6 +99,45 @@
     border-bottom: 1px solid var(--border);
     letter-spacing: 0.3px;
   }
+  /* 可摺疊 section（首堂諮詢用） */
+  .section-collapsible {
+    padding: 0;
+    overflow: hidden;
+  }
+  .section-collapsible > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 14px 18px;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+  }
+  .section-collapsible > summary::-webkit-details-marker { display: none; }
+  .section-collapsible > summary:hover { background: rgba(192,138,94,0.05); }
+  .section-collapsible[open] > summary {
+    border-bottom: 1px solid var(--border);
+    background: rgba(192,138,94,0.04);
+  }
+  .section-collapsible .section-arrow {
+    font-size: 11px;
+    color: var(--text-soft);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .section-collapsible[open] > summary .section-arrow {
+    transform: rotate(90deg);
+  }
+  .section-collapsible .section-title {
+    color: var(--brown-dark);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .section-collapsible > .section-body {
+    padding: 14px 18px 16px;
+  }
   .qa-row {
     font-size: 14px;
     line-height: 1.7;
@@ -596,33 +635,44 @@ function renderReport(data) {
       </div>`;
   }
 
-  // 首堂諮詢
+  // 首堂諮詢（可摺疊）
   if (cfg.firstConsult !== false && data.firstConsult) {
     const fc = data.firstConsult;
     const fcRecords = renderRecords(fc.records);
-    // firstConsultReport 是 sanitize 過的 HTML（color editor 內容）
-    // 美化：在【段落】、列點符號前自動加換行（內容沒手動換行也能讀）
     const fcReportHtml = formatFirstConsultHtml((fc.firstConsultReport || '').trim());
     const fcHomework = (fc.homework || '').trim();
     html += `
-      <div class="section">
-        <h2>🎯 首堂諮詢報告 · ${escapeHtml(fmtDate(fc.date))}</h2>
-        ${fcReportHtml ? `<div class="first-consult-report">${fcReportHtml}</div>` : ''}
-        ${fcHomework ? `
-          <div class="homework" style="margin-top:14px">
-            <span class="homework-label">📝 飼主作業</span>
-            ${escapeHtml(fcHomework)}
-          </div>` : ''}
-        ${fcRecords ? `
-          <h3 style="margin:14px 0 8px; font-size:14px; color:var(--brown-dark);">🎯 訓練項目</h3>
-          ${fcRecords}` : ''}
-        ${renderMaterials(fc)}
-      </div>`;
+      <details class="section section-collapsible">
+        <summary class="section-summary">
+          <span class="section-arrow">▶</span>
+          <span class="section-title">🎯 首堂諮詢報告 · ${escapeHtml(fmtDate(fc.date))}</span>
+        </summary>
+        <div class="section-body">
+          ${fcReportHtml ? `<div class="first-consult-report">${fcReportHtml}</div>` : ''}
+          ${fcHomework ? `
+            <div class="homework" style="margin-top:14px">
+              <span class="homework-label">📝 飼主作業</span>
+              ${escapeHtml(fcHomework)}
+            </div>` : ''}
+          ${fcRecords ? `
+            <h3 style="margin:14px 0 8px; font-size:14px; color:var(--brown-dark);">🎯 訓練項目</h3>
+            ${fcRecords}` : ''}
+          ${renderMaterials(fc)}
+        </div>
+      </details>`;
   }
 
   // 每堂訓練紀錄（含已完成與預約中，排除強制結案）
   if (cfg.sessions !== false && Array.isArray(data.sessions) && data.sessions.length > 0) {
-    const visibleSessions = data.sessions.filter(s => s.status === 'done' || s.status === 'booked');
+    const visibleSessions = data.sessions
+      .filter(s => s.status === 'done' || s.status === 'booked')
+      .sort((a, b) => {
+        // 按「第 N 堂」順序排（家長看進度），無 seq 放最後
+        const seqA = parseInt(a.sessionSeq, 10) || 999;
+        const seqB = parseInt(b.sessionSeq, 10) || 999;
+        if (seqA !== seqB) return seqA - seqB;
+        return (a.date || '').localeCompare(b.date || '');
+      });
     if (visibleSessions.length > 0) {
       const doneCount = visibleSessions.filter(s => s.status === 'done').length;
       const bookedCount = visibleSessions.filter(s => s.status === 'booked').length;
