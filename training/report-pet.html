@@ -114,17 +114,50 @@
     font-size: 14px;
     line-height: 1.7;
   }
+  /* session-card 是 <details>：summary 永遠顯示，body 展開才看 */
   .session-card {
     background: var(--bg-soft);
     border-radius: 8px;
-    padding: 14px 16px;
     margin-bottom: 10px;
     border: 1px solid var(--border);
+    overflow: hidden;
   }
   .session-card.is-booked {
     background: #ffffff;
     border-style: dashed;
-    opacity: 0.85;
+  }
+  .session-card > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 16px;
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .session-card > summary::-webkit-details-marker { display: none; }
+  .session-card > summary:hover { background: rgba(192,138,94,0.06); }
+  .session-arrow {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--text-soft);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-right: 2px;
+  }
+  .session-card[open] > summary .session-arrow {
+    transform: rotate(90deg);
+  }
+  .session-card[open] > summary {
+    border-bottom: 1px solid var(--border);
+    background: rgba(192,138,94,0.04);
+  }
+  .session-card[open].is-booked > summary {
+    background: rgba(192,138,94,0.08);
+  }
+  .session-body {
+    padding: 14px 16px;
+  }
+  .session-loc {
+    color: var(--text-soft);
   }
   .booked-badge {
     background: #c08a5e;
@@ -132,18 +165,26 @@
     padding: 2px 8px;
     border-radius: 999px;
     font-size: 11px;
+    flex-shrink: 0;
+  }
+  .done-badge {
+    background: var(--good);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    flex-shrink: 0;
   }
   .booked-hint {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-soft);
-    margin-top: 6px;
     font-style: italic;
+    text-align: center;
+    padding: 8px 0;
   }
   .session-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
     font-size: 13px;
     color: var(--text-soft);
     gap: 8px;
@@ -463,27 +504,40 @@ function renderSession(s) {
   const seqStr = (seq && total) ? `第 ${seq} / ${total} 堂` : (seq ? `第 ${seq} 堂` : '');
   const isBooked = s.status === 'booked';
   const dateLabel = s.date ? fmtDate(s.date) : '待安排';
+
+  // 判斷是否有實質內容（避免空 session 渲染空白）
+  const hasRecords = Array.isArray(s.records) && s.records.length > 0;
+  const hasHomework = !!(s.homework && s.homework.trim());
+  const hasMaterials = (Array.isArray(s.attachedMaterials) && s.attachedMaterials.length > 0)
+                    || (Array.isArray(s.externalLinks) && s.externalLinks.length > 0);
+  const hasContent = hasRecords || hasHomework || hasMaterials;
+
+  const contentHtml = `
+    ${renderRecords(s.records)}
+    ${hasHomework ? `
+      <div class="homework">
+        <span class="homework-label">📝 本週飼主作業</span>
+        ${escapeHtml(s.homework)}
+      </div>` : ''}
+    ${renderMaterials(s)}
+  `;
+
   return `
-    <div class="session-card${isBooked ? ' is-booked' : ''}">
-      <div class="session-head">
+    <details class="session-card${isBooked ? ' is-booked' : ''}">
+      <summary class="session-head">
+        <span class="session-arrow">▶</span>
         <span class="date">📅 ${escapeHtml(dateLabel)}</span>
         <span>${escapeHtml(ctLab)}</span>
         ${seqStr ? `<span class="seq">${escapeHtml(seqStr)}</span>` : ''}
-        ${s.location ? `<span>📍 ${escapeHtml(s.location)}</span>` : ''}
-        ${isBooked ? `<span class="booked-badge">⏳ 預約中</span>` : ''}
+        ${s.location ? `<span class="session-loc">📍 ${escapeHtml(s.location)}</span>` : ''}
+        ${isBooked ? `<span class="booked-badge">⏳ 預約中</span>` : `<span class="done-badge">✓ 已完成</span>`}
+      </summary>
+      <div class="session-body">
+        ${hasContent
+          ? contentHtml
+          : `<div class="booked-hint">尚未上課，課後內容會更新到這裡。</div>`}
       </div>
-      ${isBooked ? `
-        <div class="booked-hint">尚未上課，課後內容會更新到這裡。</div>
-      ` : `
-        ${renderRecords(s.records)}
-        ${s.homework ? `
-          <div class="homework">
-            <span class="homework-label">📝 本週飼主作業</span>
-            ${escapeHtml(s.homework)}
-          </div>` : ''}
-        ${renderMaterials(s)}
-      `}
-    </div>`;
+    </details>`;
 }
 
 function renderBasic(notes) {
