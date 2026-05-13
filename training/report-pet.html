@@ -153,6 +153,14 @@
     font-size: 14px;
     line-height: 1.7;
   }
+  /* 全域：隱藏所有 <summary> 瀏覽器預設的 disclosure marker（▶/▼）
+     讓我們自己加的 .session-arrow / .section-arrow 才是唯一三角形 */
+  details > summary {
+    list-style: none;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::marker { content: ''; }
+
   /* session-card 是 <details>：summary 永遠顯示，body 展開才看 */
   .session-card {
     background: var(--bg-soft);
