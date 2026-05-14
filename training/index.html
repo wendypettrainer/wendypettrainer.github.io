@@ -433,6 +433,177 @@
   .stat-card.warn .stat-value { color: var(--work); }
   .stat-pct { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
 
+  /* 可點卡片（drill-down）*/
+  .stat-card.clickable {
+    cursor: pointer;
+    position: relative;
+    transition: box-shadow 150ms ease, transform 150ms ease;
+  }
+  .stat-card.clickable:hover {
+    box-shadow: 0 4px 14px rgba(61,47,31,0.12);
+    transform: translateY(-1px);
+  }
+  .stat-card.clickable::after {
+    content: '›';
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-size: 16px;
+    color: var(--text-soft);
+    opacity: 0.5;
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+  .stat-card.clickable:hover::after { opacity: 1; transform: translateX(2px); }
+
+  /* Drill-down Drawer */
+  .stats-drawer-overlay {
+    position: fixed; inset: 0;
+    background: rgba(40,28,15,0.4);
+    z-index: 90;
+    opacity: 1;
+    transition: opacity 200ms ease;
+  }
+  .stats-drawer-overlay.hidden { display: none; }
+  .stats-drawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 520px;
+    max-width: 100vw;
+    background: var(--bg, #faf6ef);
+    box-shadow: -8px 0 24px rgba(61,47,31,0.18);
+    z-index: 100;
+    display: flex; flex-direction: column;
+    transform: translateX(0);
+    transition: transform 220ms cubic-bezier(.2,.7,.3,1);
+  }
+  .stats-drawer.hidden { transform: translateX(100%); pointer-events: none; }
+  @media (max-width: 600px) {
+    .stats-drawer { width: 100vw; }
+  }
+  .stats-drawer-header {
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    flex-shrink: 0;
+    background: white;
+  }
+  .stats-drawer-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--brown-dark);
+  }
+  .stats-drawer-header .stats-drawer-subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-soft);
+    line-height: 1.5;
+  }
+  .stats-drawer-header .stats-drawer-mainvalue {
+    margin-top: 6px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--brown-dark);
+  }
+  .stats-drawer-close {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 30px; height: 30px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-soft);
+    flex-shrink: 0;
+  }
+  .stats-drawer-close:hover { background: rgba(0,0,0,0.05); color: var(--text); }
+  .stats-drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 18px;
+  }
+  .stats-drawer-footer {
+    flex-shrink: 0;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border);
+    background: white;
+    font-size: 13px;
+  }
+  .stats-drawer-footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-soft);
+  }
+  .stats-drawer-footer-row strong {
+    color: var(--brown-dark);
+    font-size: 15px;
+  }
+  .stats-drill-list { display: flex; flex-direction: column; gap: 6px; }
+  .stats-drill-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .stats-drill-row.clickable { cursor: pointer; }
+  .stats-drill-row.clickable:hover {
+    background: rgba(107,158,110,0.06);
+    border-color: rgba(107,158,110,0.3);
+  }
+  .stats-drill-row-main { flex: 1; min-width: 0; }
+  .stats-drill-row-title {
+    font-size: 13px;
+    color: var(--brown-dark);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .stats-drill-row-meta {
+    font-size: 11.5px;
+    color: var(--text-soft);
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+  .stats-drill-row-amount {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--brown-dark);
+    flex-shrink: 0;
+    text-align: right;
+    line-height: 1.4;
+  }
+  .stats-drill-row-amount.good { color: #4a7d4d; }
+  .stats-drill-row-amount.warn { color: var(--work); }
+  .stats-drill-row-amount .stats-drill-sub {
+    display: block;
+    font-size: 11px;
+    color: var(--text-soft);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+  .stats-drill-section-label {
+    font-size: 11px;
+    color: var(--text-soft);
+    margin: 10px 4px 4px;
+    text-transform: none;
+    letter-spacing: 0.02em;
+  }
+  .stats-drill-section-label:first-child { margin-top: 0; }
+  .stats-drill-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-soft);
+    background: rgba(107,158,110,0.04);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
   .card-menu {
     background: white;
     border-radius: 10px;
@@ -7263,6 +7434,92 @@ function renderCalendar() {
   });
 }
 
+/* ============== STATS DRAWER（卡片 drill-down）============== */
+let _statsDrawerEscBound = false;
+function _statsDrawerEscHandler(e) {
+  if (e.key === 'Escape') closeStatsDrawer();
+}
+function openStatsDrawer(opts) {
+  // opts: { title, mainValue, subtitle, sections:[{label, rows}], onRowClick, footer:{label, value} }
+  const overlay = document.getElementById('statsDrawerOverlay');
+  const drawer = document.getElementById('statsDrawer');
+  if (!overlay || !drawer) return;
+
+  document.getElementById('statsDrawerTitle').textContent = opts.title || '';
+  document.getElementById('statsDrawerMainValue').textContent = opts.mainValue || '';
+  document.getElementById('statsDrawerSubtitle').innerHTML = opts.subtitle || '';
+
+  const body = document.getElementById('statsDrawerBody');
+  const sections = opts.sections || [];
+  const hasRows = sections.some(s => s.rows && s.rows.length > 0);
+  if (!hasRows) {
+    body.innerHTML = `<div class="stats-drill-empty">${opts.emptyText || '期間內沒有資料 🎉'}</div>`;
+  } else {
+    body.innerHTML = sections.map(sec => {
+      if (!sec.rows || sec.rows.length === 0) return '';
+      const labelHtml = sec.label ? `<div class="stats-drill-section-label">${sec.label}</div>` : '';
+      const rowsHtml = sec.rows.map((r, idx) => {
+        const rowKey = sec.key ? `${sec.key}|${idx}` : `${idx}`;
+        const clickable = r.petId ? 'clickable' : '';
+        const amountClass = r.amountClass || '';
+        return `
+          <div class="stats-drill-row ${clickable}" data-row-key="${rowKey}" data-petid="${r.petId || ''}">
+            <div class="stats-drill-row-main">
+              <div class="stats-drill-row-title">${r.title}</div>
+              ${r.meta ? `<div class="stats-drill-row-meta">${r.meta}</div>` : ''}
+            </div>
+            <div class="stats-drill-row-amount ${amountClass}">
+              ${r.amount}
+              ${r.amountSub ? `<span class="stats-drill-sub">${r.amountSub}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+      return labelHtml + '<div class="stats-drill-list">' + rowsHtml + '</div>';
+    }).join('');
+    body.querySelectorAll('.stats-drill-row.clickable').forEach(el => {
+      el.onclick = () => {
+        const petId = el.dataset.petid;
+        if (petId) {
+          closeStatsDrawer();
+          go('sessions', { petId });
+        }
+      };
+    });
+  }
+
+  const footer = document.getElementById('statsDrawerFooter');
+  if (opts.footer && opts.footer.label) {
+    footer.innerHTML = `
+      <div class="stats-drawer-footer-row">
+        <span>${opts.footer.label}</span>
+        <strong>${opts.footer.value || ''}</strong>
+      </div>
+    `;
+    footer.style.display = '';
+  } else {
+    footer.innerHTML = '';
+    footer.style.display = 'none';
+  }
+
+  overlay.classList.remove('hidden');
+  drawer.classList.remove('hidden');
+  if (!_statsDrawerEscBound) {
+    document.addEventListener('keydown', _statsDrawerEscHandler);
+    _statsDrawerEscBound = true;
+  }
+}
+function closeStatsDrawer() {
+  const overlay = document.getElementById('statsDrawerOverlay');
+  const drawer = document.getElementById('statsDrawer');
+  if (overlay) overlay.classList.add('hidden');
+  if (drawer) drawer.classList.add('hidden');
+  if (_statsDrawerEscBound) {
+    document.removeEventListener('keydown', _statsDrawerEscHandler);
+    _statsDrawerEscBound = false;
+  }
+}
+
 /* ============== VIEW: STATS（呆帳統計）============== */
 function renderStats() {
   const main = document.getElementById('main');
@@ -7300,6 +7557,13 @@ function renderStats() {
   const closedDetails = [];
   const byType = {};
   const csvRows = [];  // L1-b: CSV 匯出每筆 booking 一行
+
+  // Drill-down 明細收集（每張卡片可點開的明細列表）
+  const drillData = {
+    total: [], received: [], refunded: [], balance: [],
+    recognized: [], deferred: [], receivable: [],
+    realized: [], unrealized: [], pending: [],
+  };
 
   for (const b of bookings) {
     const sessCount = b.sessionCount || 0;
@@ -7381,8 +7645,100 @@ function renderStats() {
       pendingCount: bSess.filter(s => s.status === 'booked').length + remaining,
       closedReasons: closedReasons.join('；'),
     });
+
+    // ===== Drill-down 明細 =====
+    const petIcon = pet.species === 'cat' ? '🐱' : '🐶';
+    const petLbl = pet.name
+      ? `${petIcon} ${escapeHtml(pet.name)}${pet.ownerName ? ' · ' + escapeHtml(pet.ownerName) : ''}`
+      : escapeHtml(pet.ownerName || '?');
+    const bDate = (b.createdAt || '').slice(0, 10);
+    const balanceAmt = total - summary.received + summary.refunded;
+
+    // 應收（合約）
+    drillData.total.push({
+      petId: b.petId, petLabel: petLbl, ctLab, bookingDate: bDate,
+      total, sessCount, balance: balanceAmt, received: summary.received,
+    });
+
+    // 實收 / 退費（拆 payments）
+    const _payments = getBookingPayments(b.id);
+    for (const p of _payments) {
+      if (p.type === 'in') {
+        drillData.received.push({ petId: b.petId, petLabel: petLbl, ctLab, date: p.date, amount: p.amount, note: p.note || '' });
+      } else if (p.type === 'refund') {
+        drillData.refunded.push({ petId: b.petId, petLabel: petLbl, ctLab, date: p.date, amount: p.amount, note: p.note || '' });
+      }
+    }
+
+    // 應收餘額
+    if (balanceAmt > 0) {
+      drillData.balance.push({
+        petId: b.petId, petLabel: petLbl, ctLab, bookingDate: bDate,
+        total, received: summary.received, refunded: summary.refunded,
+        balance: balanceAmt, sessCount, doneCount,
+      });
+    }
+
+    // 預收款（已收未上）
+    if (recog.deferredRev > 0) {
+      drillData.deferred.push({
+        petId: b.petId, petLabel: petLbl, ctLab,
+        deferred: recog.deferredRev, sessCount, doneCount,
+        netReceived: summary.received - summary.refunded,
+      });
+    }
+
+    // 已上未收（已上完但客戶沒付齊）
+    if (recog.receivable > 0) {
+      drillData.receivable.push({
+        petId: b.petId, petLabel: petLbl, ctLab,
+        receivable: recog.receivable, sessCount, doneCount,
+        netReceived: summary.received - summary.refunded, recognizedRev: recog.recognizedRev,
+      });
+    }
+
+    // sessions 級別
+    for (const s of bSess) {
+      const row = {
+        petId: b.petId, petLabel: petLbl, ctLab,
+        date: s.date || '', amount: pricePerSess,
+      };
+      if (s.status === 'done') {
+        drillData.recognized.push(row);
+        drillData.realized.push(row);
+      } else if (s.status === 'closed') {
+        drillData.unrealized.push(Object.assign({}, row, { reason: s.closeReason || '' }));
+      } else if (s.status === 'booked') {
+        const isOverdue = s.date && s.date < todayStrV;
+        drillData.pending.push(Object.assign({}, row, { isOverdue }));
+      }
+    }
+    // 沒對應 session 的剩餘堂數（舊資料未連結）→ 進行中（無日期）
+    if (remaining > 0) {
+      drillData.pending.push({
+        petId: b.petId, petLabel: petLbl, ctLab,
+        date: '', amount: pricePerSess * remaining,
+        isOverdue: false, isRemaining: true, remainingCount: remaining,
+      });
+    }
   }
   closedDetails.sort((a, b) => b.amount - a.amount);
+
+  // 排序 drill-down 列表
+  drillData.total.sort((a, b) => b.total - a.total);
+  drillData.received.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  drillData.refunded.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  drillData.balance.sort((a, b) => b.balance - a.balance);
+  drillData.recognized.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  drillData.realized.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  drillData.deferred.sort((a, b) => b.deferred - a.deferred);
+  drillData.receivable.sort((a, b) => b.receivable - a.receivable);
+  drillData.unrealized.sort((a, b) => b.amount - a.amount);
+  drillData.pending.sort((a, b) => {
+    // 待結案（overdue）優先，再來按日期由近至遠
+    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+    return (a.date || '9999').localeCompare(b.date || '9999');
+  });
 
   // 教室派案聚合（D7）
   const studioMap = {};   // studioName → { accrued, doneCount, bookingCount }
@@ -7439,40 +7795,44 @@ function renderStats() {
   `;
 
   const balance = totalRev - totalReceived + totalRefunded;
+  // 「應收餘額」對應的 drill-down key：超收時不可點（沒有 balance > 0 的 booking）
+  const balanceCard = balance > 0 ? 'balance' : '';
+  // 標記哪些卡片該為可點（有對應明細資料時）
+  const clickCls = (key, hasData) => hasData ? `clickable" data-stats-card="${key}` : '';
   const summaryGrid = `
     <div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">💰 金流（payments）</div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:14px">
-      <div class="stat-card">
+      <div class="stat-card ${clickCls('total', drillData.total.length > 0)}">
         <div class="stat-label">應收（合約）</div>
         <div class="stat-value">${fmtMoney(totalRev)}</div>
       </div>
-      <div class="stat-card good">
+      <div class="stat-card good ${clickCls('received', drillData.received.length > 0)}">
         <div class="stat-label">實收</div>
         <div class="stat-value">${fmtMoney(totalReceived)}</div>
         <div class="stat-pct">${pct(totalReceived, totalRev)}</div>
       </div>
-      <div class="stat-card warn">
+      <div class="stat-card warn ${clickCls('refunded', drillData.refunded.length > 0)}">
         <div class="stat-label">退費</div>
         <div class="stat-value">${fmtMoney(totalRefunded)}</div>
       </div>
-      <div class="stat-card ${balance > 0 ? 'warn' : 'good'}">
+      <div class="stat-card ${balance > 0 ? 'warn' : 'good'} ${clickCls(balanceCard, balanceCard === 'balance' && drillData.balance.length > 0)}">
         <div class="stat-label">${balance > 0 ? '應收餘額' : (balance < 0 ? '已超收' : '已結清')}</div>
         <div class="stat-value">${fmtMoney(Math.abs(balance))}</div>
       </div>
     </div>
     <div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">📒 收入認列（權責發生制）</div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:14px">
-      <div class="stat-card good">
+      <div class="stat-card good ${clickCls('recognized', drillData.recognized.length > 0)}">
         <div class="stat-label">已認列收入</div>
         <div class="stat-value">${fmtMoney(totalRecognized)}</div>
         <div class="stat-pct">${pct(totalRecognized, totalRev)} 履約率</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card ${clickCls('deferred', drillData.deferred.length > 0)}">
         <div class="stat-label">預收款</div>
         <div class="stat-value">${fmtMoney(totalDeferred)}</div>
         <div class="stat-pct" style="color:var(--text-soft)">已收未上的</div>
       </div>
-      <div class="stat-card ${totalReceivable > 0 ? 'warn' : ''}">
+      <div class="stat-card ${totalReceivable > 0 ? 'warn' : ''} ${clickCls('receivable', drillData.receivable.length > 0)}">
         <div class="stat-label">已上未收</div>
         <div class="stat-value">${fmtMoney(totalReceivable)}</div>
         <div class="stat-pct" style="color:var(--text-soft)">已上完但客戶沒付齊</div>
@@ -7480,17 +7840,17 @@ function renderStats() {
     </div>
     <div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">📋 課時履約（sessions）</div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:18px">
-      <div class="stat-card good">
+      <div class="stat-card good ${clickCls('realized', drillData.realized.length > 0)}">
         <div class="stat-label">已兌現</div>
         <div class="stat-value">${fmtMoney(realizedRev)}</div>
         <div class="stat-pct">${pct(realizedRev, totalRev)}</div>
       </div>
-      <div class="stat-card warn">
+      <div class="stat-card warn ${clickCls('unrealized', drillData.unrealized.length > 0)}">
         <div class="stat-label">未兌現（呆帳）</div>
         <div class="stat-value">${fmtMoney(unrealizedRev)}</div>
         <div class="stat-pct">${pct(unrealizedRev, totalRev)}</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card ${clickCls('pending', drillData.pending.length > 0)}">
         <div class="stat-label">進行中</div>
         <div class="stat-value">${fmtMoney(pendingRev + overdueRev)}</div>
         <div class="stat-pct" style="color:${overdueRev>0?'var(--work)':'var(--text-soft)'}">${overdueRev>0 ? '含 ' + fmtMoney(overdueRev) + ' 待結案' : '正常進度'}</div>
@@ -7618,8 +7978,22 @@ function renderStats() {
       • <b>收入認列（權責發生制）：</b>「已認列」= 已上完課對應的金額；「預收款」= 客戶已付但還沒上；「已上未收」= 已上完但客戶還沒付齊<br>
       • <b>課時履約：</b>「已兌現」= done 的堂數 × 單堂單價；「未兌現」= closed（強制結案）；「進行中」= 預約中 / 待安排 / 待結案<br>
       • <b>教室派案：</b>累計應付 = 該教室所有 done 課時 × 鐘點費；累計實付 = 教室付款紀錄總額；月份對帳用<br>
-      • 範圍切換按 booking 建立時間 / 教室付款收到日期 篩選
+      • 範圍切換按 booking 建立時間 / 教室付款收到日期 篩選<br>
+      • 💡 <b>點上方有「›」的卡片可看明細</b>
     </p>
+    <div id="statsDrawerOverlay" class="stats-drawer-overlay hidden"></div>
+    <aside id="statsDrawer" class="stats-drawer hidden" aria-label="明細抽屜">
+      <header class="stats-drawer-header">
+        <div style="flex:1; min-width:0">
+          <h3 id="statsDrawerTitle"></h3>
+          <div class="stats-drawer-mainvalue" id="statsDrawerMainValue"></div>
+          <div class="stats-drawer-subtitle" id="statsDrawerSubtitle"></div>
+        </div>
+        <button class="stats-drawer-close" id="statsDrawerCloseBtn" aria-label="關閉" title="關閉 (Esc)">✕</button>
+      </header>
+      <div class="stats-drawer-body" id="statsDrawerBody"></div>
+      <footer class="stats-drawer-footer" id="statsDrawerFooter"></footer>
+    </aside>
   `;
 
   document.getElementById('statsRange').onchange = (e) => {
@@ -7681,6 +8055,215 @@ function renderStats() {
   main.querySelectorAll('.card[data-petid]').forEach(el => {
     el.onclick = () => go('sessions', { petId: el.dataset.petid });
   });
+
+  // ===== 卡片 drill-down 點擊事件 =====
+  const fmtDateLocal = d => d ? d.slice(0, 10) : '—';
+  const buildDrawerOpts = (card) => {
+    if (card === 'total') {
+      return {
+        title: '應收（合約）明細',
+        mainValue: fmtMoney(totalRev),
+        subtitle: '所有合約總額（依當前時間範圍）。點任一列跳到該寵物課程頁。',
+        sections: [{
+          rows: drillData.total.map(r => ({
+            petId: r.petId,
+            title: r.petLabel,
+            meta: `${escapeHtml(r.ctLab)} · 共 ${r.sessCount} 堂${r.bookingDate ? ' · ' + r.bookingDate : ''}`,
+            amount: fmtMoney(r.total),
+            amountSub: r.balance > 0 ? `餘 ${fmtMoney(r.balance)}` : '已收齊',
+            amountClass: r.balance > 0 ? 'warn' : 'good',
+          })),
+        }],
+        footer: { label: `合計 ${drillData.total.length} 筆合約`, value: fmtMoney(totalRev) },
+      };
+    }
+    if (card === 'received') {
+      return {
+        title: '實收明細',
+        mainValue: fmtMoney(totalReceived),
+        subtitle: `${pct(totalReceived, totalRev)} 履約金流 · 每筆都是一次 payment 紀錄。`,
+        sections: [{
+          rows: drillData.received.map(r => ({
+            petId: r.petId,
+            title: `${fmtDateLocal(r.date)} · ${r.petLabel}`,
+            meta: `${escapeHtml(r.ctLab)}${r.note ? ' · ' + escapeHtml(r.note) : ''}`,
+            amount: fmtMoney(r.amount),
+            amountClass: 'good',
+          })),
+        }],
+        footer: { label: `${drillData.received.length} 筆收款`, value: fmtMoney(totalReceived) },
+      };
+    }
+    if (card === 'refunded') {
+      return {
+        title: '退費明細',
+        mainValue: fmtMoney(totalRefunded),
+        subtitle: '已退還客戶的款項。',
+        sections: [{
+          rows: drillData.refunded.map(r => ({
+            petId: r.petId,
+            title: `${fmtDateLocal(r.date)} · ${r.petLabel}`,
+            meta: `${escapeHtml(r.ctLab)}${r.note ? ' · ' + escapeHtml(r.note) : ''}`,
+            amount: fmtMoney(r.amount),
+            amountClass: 'warn',
+          })),
+        }],
+        footer: { label: `${drillData.refunded.length} 筆退費`, value: fmtMoney(totalRefunded) },
+      };
+    }
+    if (card === 'balance') {
+      return {
+        title: '應收餘額（未收齊合約）',
+        mainValue: fmtMoney(balance),
+        subtitle: '合約總額還沒收齊（含未上的課）。<b style="color:var(--brown-dark)">和「已上未收」差別</b>：這裡是整份合約剩多少沒收；「已上未收」只看「已上完的課」客戶該付但沒付的部分。',
+        sections: [{
+          rows: drillData.balance.map(r => ({
+            petId: r.petId,
+            title: r.petLabel,
+            meta: `${escapeHtml(r.ctLab)} · 已上 ${r.doneCount}/${r.sessCount} 堂 · 已收 ${fmtMoney(r.received)}/${fmtMoney(r.total)}`,
+            amount: fmtMoney(r.balance),
+            amountClass: 'warn',
+          })),
+        }],
+        footer: { label: `${drillData.balance.length} 筆未收齊`, value: fmtMoney(balance) },
+      };
+    }
+    if (card === 'recognized') {
+      return {
+        title: '已認列收入明細',
+        mainValue: fmtMoney(totalRecognized),
+        subtitle: '已上完課對應的金額（done 課時 × 單堂單價）。',
+        sections: [{
+          rows: drillData.recognized.map(r => ({
+            petId: r.petId,
+            title: `${fmtDateLocal(r.date)} · ${r.petLabel}`,
+            meta: escapeHtml(r.ctLab),
+            amount: fmtMoney(r.amount),
+            amountClass: 'good',
+          })),
+        }],
+        footer: { label: `${drillData.recognized.length} 堂已完成`, value: fmtMoney(totalRecognized) },
+      };
+    }
+    if (card === 'deferred') {
+      return {
+        title: '預收款明細',
+        mainValue: fmtMoney(totalDeferred),
+        subtitle: '客戶已付但還沒上完課的金額（淨實收 − 已認列）。',
+        sections: [{
+          rows: drillData.deferred.map(r => ({
+            petId: r.petId,
+            title: r.petLabel,
+            meta: `${escapeHtml(r.ctLab)} · 已上 ${r.doneCount}/${r.sessCount} 堂 · 淨實收 ${fmtMoney(r.netReceived)}`,
+            amount: fmtMoney(r.deferred),
+          })),
+        }],
+        footer: { label: `${drillData.deferred.length} 筆預收`, value: fmtMoney(totalDeferred) },
+      };
+    }
+    if (card === 'receivable') {
+      return {
+        title: '已上未收明細',
+        mainValue: fmtMoney(totalReceivable),
+        subtitle: '已上完課但客戶還沒付齊的金額。<b style="color:var(--brown-dark)">和「應收餘額」差別</b>：應收餘額 = 整份合約還沒收齊（含未上的課）；這裡只算「已上完的課」客戶該付但沒付的部分。',
+        sections: [{
+          rows: drillData.receivable.map(r => ({
+            petId: r.petId,
+            title: r.petLabel,
+            meta: `${escapeHtml(r.ctLab)} · 已上 ${r.doneCount}/${r.sessCount} 堂 · 已認列 ${fmtMoney(r.recognizedRev)} · 淨實收 ${fmtMoney(r.netReceived)}`,
+            amount: fmtMoney(r.receivable),
+            amountClass: 'warn',
+          })),
+        }],
+        footer: { label: `${drillData.receivable.length} 筆已上未收齊`, value: fmtMoney(totalReceivable) },
+      };
+    }
+    if (card === 'realized') {
+      return {
+        title: '已兌現課時',
+        mainValue: fmtMoney(realizedRev),
+        subtitle: `${drillData.realized.length} 堂 done × 單堂單價。`,
+        sections: [{
+          rows: drillData.realized.map(r => ({
+            petId: r.petId,
+            title: `${fmtDateLocal(r.date)} · ${r.petLabel}`,
+            meta: escapeHtml(r.ctLab),
+            amount: fmtMoney(r.amount),
+            amountClass: 'good',
+          })),
+        }],
+        footer: { label: `${drillData.realized.length} 堂已兌現`, value: fmtMoney(realizedRev) },
+      };
+    }
+    if (card === 'unrealized') {
+      return {
+        title: '未兌現（呆帳）明細',
+        mainValue: fmtMoney(unrealizedRev),
+        subtitle: '強制結案（closed）的課時 — 已收錢但客戶不會再來上的部分。',
+        sections: [{
+          rows: drillData.unrealized.map(r => ({
+            petId: r.petId,
+            title: `${fmtDateLocal(r.date)} · ${r.petLabel}`,
+            meta: `${escapeHtml(r.ctLab)}${r.reason ? ' · 原因：' + escapeHtml(r.reason) : ''}`,
+            amount: fmtMoney(r.amount),
+            amountClass: 'warn',
+          })),
+        }],
+        footer: { label: `${drillData.unrealized.length} 堂強制結案`, value: fmtMoney(unrealizedRev) },
+      };
+    }
+    if (card === 'pending') {
+      const overdueRows = drillData.pending.filter(r => r.isOverdue);
+      const upcomingRows = drillData.pending.filter(r => !r.isOverdue);
+      const sections = [];
+      if (overdueRows.length > 0) {
+        sections.push({
+          label: `⚠️ 待結案（已過上課日 ${overdueRows.length} 堂）`,
+          rows: overdueRows.map(r => ({
+            petId: r.petId,
+            title: `${fmtDateLocal(r.date)} · ${r.petLabel}`,
+            meta: escapeHtml(r.ctLab),
+            amount: fmtMoney(r.amount),
+            amountClass: 'warn',
+          })),
+        });
+      }
+      if (upcomingRows.length > 0) {
+        sections.push({
+          label: `📅 預約中 / 待安排（${upcomingRows.length} 堂）`,
+          rows: upcomingRows.map(r => ({
+            petId: r.petId,
+            title: r.isRemaining
+              ? `（剩 ${r.remainingCount} 堂未排日期） · ${r.petLabel}`
+              : `${fmtDateLocal(r.date)} · ${r.petLabel}`,
+            meta: escapeHtml(r.ctLab),
+            amount: fmtMoney(r.amount),
+          })),
+        });
+      }
+      return {
+        title: '進行中課時',
+        mainValue: fmtMoney(pendingRev + overdueRev),
+        subtitle: overdueRev > 0
+          ? `含 <b style="color:var(--work)">${fmtMoney(overdueRev)} 待結案</b>（已過上課日但還沒標記）。`
+          : '預約中 / 待安排的課時。',
+        sections,
+        footer: { label: `${drillData.pending.length} 堂進行中`, value: fmtMoney(pendingRev + overdueRev) },
+      };
+    }
+    return null;
+  };
+  main.querySelectorAll('.stat-card.clickable[data-stats-card]').forEach(el => {
+    el.onclick = () => {
+      const opts = buildDrawerOpts(el.dataset.statsCard);
+      if (opts) openStatsDrawer(opts);
+    };
+  });
+  const drawerOverlay = document.getElementById('statsDrawerOverlay');
+  if (drawerOverlay) drawerOverlay.onclick = closeStatsDrawer;
+  const drawerCloseBtn = document.getElementById('statsDrawerCloseBtn');
+  if (drawerCloseBtn) drawerCloseBtn.onclick = closeStatsDrawer;
+
   // 教室付款 binding
   main.querySelectorAll('[data-add-studio-pay]').forEach(btn => {
     btn.onclick = (e) => { e.stopPropagation(); openStudioPaymentForm(btn.dataset.addStudioPay, null); };
