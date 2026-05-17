@@ -403,8 +403,9 @@
     color: var(--brown-dark);
   }
   summary::-webkit-details-marker { display: none; }
-  summary::before { content: '▶ '; font-size: 10px; transition: transform 0.15s; display: inline-block; }
-  details[open] summary::before { content: '▼ '; }
+  /* 註：原本這裡有 summary::before { content: '▶ ' } 的全域規則，
+     但每個 <summary> 內部已經有自己的 <span class="session-arrow">▶</span> /
+     <span class="section-arrow">▶</span>，會造成兩個三角形。已移除。 */
 </style>
 </head>
 <body>

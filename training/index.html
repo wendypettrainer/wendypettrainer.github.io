@@ -1977,6 +1977,78 @@ function getPetSortKey(pet) {
   if (sessions.length) return sessions[0].date;
   return pet.createdAt ? pet.createdAt.slice(0, 10) : '';
 }
+
+// ===== 寵物列表排序 =====
+const PET_SORT_OPTIONS = [
+  { key: 'upcoming_asc',  label: '即將上課：近到遠' },
+  { key: 'activity_desc', label: '最近活動：新到舊' },
+  { key: 'balance_desc',  label: '應收餘額大→小' },
+  { key: 'name_asc',      label: '寵物名 A→Z' },
+];
+function getPetSortPref() {
+  const s = load(KEYS.settings, {});
+  return s.petSort || 'upcoming_asc';
+}
+function setPetSortPref(key) {
+  const s = load(KEYS.settings, {});
+  s.petSort = key;
+  save(KEYS.settings, s);
+}
+/** 該寵物「下一次未來課程」的日期（包括今天）。沒有未來課時回傳 null。 */
+function getPetUpcomingDate(petId) {
+  const today = todayStr();
+  const upcoming = load(KEYS.sessions, [])
+    .filter(s => s.petId === petId && s.status === 'booked' && s.date && s.date >= today)
+    .map(s => s.date)
+    .sort();
+  return upcoming.length ? upcoming[0] : null;
+}
+/** 該寵物所有 bookings 加總的「應收餘額」（含負餘額——已超收會抵消） */
+function getPetBalance(petId) {
+  const bookings = load(KEYS.bookings, []).filter(b => b.petId === petId);
+  let sum = 0;
+  for (const b of bookings) {
+    const summary = bookingPaymentSummary(b);
+    sum += summary.balance;
+  }
+  return sum;
+}
+/** 套用排序到寵物陣列（in-place）。回傳排序後陣列。 */
+function applyPetSort(pets, key) {
+  if (key === 'name_asc') {
+    return pets.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-Hant'));
+  }
+  if (key === 'balance_desc') {
+    const cache = new Map();
+    const bal = p => {
+      if (!cache.has(p.id)) cache.set(p.id, getPetBalance(p.id));
+      return cache.get(p.id);
+    };
+    return pets.sort((a, b) => {
+      const ba = bal(a), bb = bal(b);
+      if (bb !== ba) return bb - ba;  // 餘額大的優先
+      return (a.name || '').localeCompare(b.name || '', 'zh-Hant');
+    });
+  }
+  if (key === 'upcoming_asc') {
+    const cache = new Map();
+    const upc = p => {
+      if (!cache.has(p.id)) cache.set(p.id, getPetUpcomingDate(p.id));
+      return cache.get(p.id);
+    };
+    return pets.sort((a, b) => {
+      const ua = upc(a), ub = upc(b);
+      // 有未來課的優先（近到遠），沒有的排最後（fallback 最近活動新到舊）
+      if (ua && ub) return ua.localeCompare(ub);
+      if (ua && !ub) return -1;
+      if (!ua && ub) return 1;
+      return getPetSortKey(b).localeCompare(getPetSortKey(a));
+    });
+  }
+  // 預設：activity_desc（最近活動：新到舊，含未來預約）—保留原本邏輯
+  return pets.sort((a, b) => getPetSortKey(b).localeCompare(getPetSortKey(a)));
+}
+
 function petMatchesQuery(pet, q) {
   if (!q) return true;
   const lc = q.toLowerCase();
@@ -2301,7 +2373,17 @@ function renderPets() {
   }
   if (breedFilter) pets = pets.filter(p => (p.breed || '').trim() === breedFilter);
   if (state.petQuery.trim()) pets = pets.filter(p => petMatchesQuery(p, state.petQuery.trim()));
-  pets.sort((a, b) => getPetSortKey(b).localeCompare(getPetSortKey(a)));
+  const petSortKey = getPetSortPref();
+  applyPetSort(pets, petSortKey);
+
+  // 排序選單（只有 ≥1 隻寵物時才顯示）
+  const sortBar = pets.length === 0 ? '' : `
+    <div style="display:flex; justify-content:flex-end; align-items:center; gap:6px; margin:6px 4px 10px">
+      <label for="petSort" style="font-size:12px; color:var(--text-soft)">排序</label>
+      <select id="petSort" style="padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:white; font-size:13px; color:var(--text); font-family:inherit">
+        ${PET_SORT_OPTIONS.map(o => `<option value="${o.key}" ${o.key===petSortKey?'selected':''}>${o.label}</option>`).join('')}
+      </select>
+    </div>`;
 
   let listHtml;
   if (pets.length === 0) {
@@ -2359,7 +2441,7 @@ function renderPets() {
   // 明日課程提醒區塊
   const tomorrowHtml = buildTomorrowReminderHtml();
 
-  main.innerHTML = tomorrowHtml + tabs + sourceChips + breedChips + search + listHtml;
+  main.innerHTML = tomorrowHtml + tabs + sourceChips + breedChips + search + sortBar + listHtml;
 
   // 明日提醒按鈕
   bindTomorrowReminderHandlers(main);
@@ -2368,6 +2450,12 @@ function renderPets() {
   main.querySelectorAll('[data-pet-filter]').forEach(t => {
     t.onclick = () => { state.petFilter = t.dataset.petFilter; renderPets(); };
   });
+  // 排序 select
+  const sortSelect = document.getElementById('petSort');
+  if (sortSelect) sortSelect.onchange = () => {
+    setPetSortPref(sortSelect.value);
+    renderPets();
+  };
   // 來源 chip
   main.querySelectorAll('[data-source-filter]').forEach(t => {
     t.onclick = () => { state.petSourceFilter = t.dataset.sourceFilter; renderPets(); };
@@ -5713,6 +5801,13 @@ function exportPdf(sess, pet) {
       ${pet.ownerName ? ' · 飼主：' + escapeHtml(pet.ownerName) : ''}
     </div>
     <div class="session-meta">
+      ${(() => {
+        const ctLab = courseTypeLabel(sess);
+        const seqLab = sessionSeqLabel(sess);
+        return (ctLab || seqLab)
+          ? `<span>📋 ${escapeHtml(ctLab)}${ctLab && seqLab ? ' · ' : ''}${escapeHtml(seqLab)}</span>`
+          : '';
+      })()}
       <span>📅 ${fmtDate(sess.date)}</span>
       ${sess.location ? `<span>📍 ${escapeHtml(sess.location)}</span>` : ''}
       ${sess.duration ? `<span>⏱ ${sess.duration} 分鐘</span>` : ''}
@@ -6130,6 +6225,13 @@ async function shareToGist(sess, pet) {
     },
     session: {
       date: sess.date, location: sess.location, duration: sess.duration,
+      // 課程類型 + 堂數（給 report.html 顯示「📋 一對一 · 第 1 堂」之類的標籤）
+      courseType: sess.courseType || '',
+      sessionSeq: sess.sessionSeq || '',
+      sessionTotal: sess.sessionTotal || '',
+      groupSubType: sess.groupSubType || '',
+      groupSubTypeOther: sess.groupSubTypeOther || '',
+      courseTypeOther: sess.courseTypeOther || '',
       records: enrichedRecords, homework: sess.homework,
     },
     brand: 'Wendy 溫蒂．貓與狗訓練日常',

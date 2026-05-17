@@ -192,6 +192,35 @@ function fmtDate(s) {
   return `${y} 年 ${parseInt(m)} 月 ${parseInt(d)} 日`;
 }
 
+// 課程類型標籤（與 index.html courseTypeLabel 保持同步）
+function courseTypeLabel(b) {
+  switch (b && b.courseType) {
+    case 'firstConsult': return '首堂諮詢';
+    case 'group':
+      if (b.groupSubType === 'puppy') return '幼犬班';
+      if (b.groupSubType === 'youth') return '青少年犬班';
+      if (b.groupSubType === 'other') return (b.groupSubTypeOther || '').trim() || '團體班';
+      return '團體班';
+    case 'other':
+      return (b.courseTypeOther || '').trim() || '其他課程';
+    case 'oneOnOne':
+      return '一對一';
+    default:
+      return '';
+  }
+}
+// 堂數標籤（首堂諮詢不顯示）
+function sessionSeqLabel(s) {
+  if (!s) return '';
+  if (s.courseType === 'firstConsult') return '';
+  const seq = parseInt(s.sessionSeq, 10);
+  const total = parseInt(s.sessionTotal, 10);
+  if (!seq && !total) return '';
+  if (seq && total) return `第 ${seq} 堂 / 共 ${total} 堂`;
+  if (seq) return `第 ${seq} 堂`;
+  return '';
+}
+
 function ratingLabel(r) {
   if (r === 'good') return { cls: 'good', txt: '😊 表現好' };
   if (r === 'ok') return { cls: 'ok', txt: '😐 普通' };
@@ -297,6 +326,13 @@ function renderReport(data) {
         ${pet.ownerName ? ' · 飼主：' + escapeHtml(pet.ownerName) : ''}
       </div>
       <div class="session-meta">
+        ${(() => {
+          const ctLab = (typeof courseTypeLabel === 'function') ? courseTypeLabel(session) : '';
+          const seqLab = (typeof sessionSeqLabel === 'function') ? sessionSeqLabel(session) : '';
+          return (ctLab || seqLab)
+            ? `<span>📋 ${escapeHtml(ctLab)}${ctLab && seqLab ? ' · ' : ''}${escapeHtml(seqLab)}</span>`
+            : '';
+        })()}
         <span>📅 ${fmtDate(session.date)}</span>
         ${session.location ? `<span>📍 ${escapeHtml(session.location)}</span>` : ''}
         ${session.duration ? `<span>⏱ ${session.duration} 分鐘</span>` : ''}
