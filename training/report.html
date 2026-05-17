@@ -281,17 +281,13 @@ function renderReport(data) {
         }).join('');
         // 向下相容舊版 r.steps
         const legacySteps = (r.steps || '').trim();
+        // 注意：.item-steps / .item-petnote 都有 white-space: pre-wrap，
+        //       所以這裡不能用 multi-line template literal（否則縮排空白會被當成內容顯示）。
         const legacyHtml = (!methodDetails.length && legacySteps)
-          ? `<div class="item-steps">
-               <div class="item-label">📋 在家練習步驟</div>
-               ${escapeHtml(legacySteps)}
-             </div>`
+          ? `<div class="item-steps"><div class="item-label">📋 在家練習步驟</div>${escapeHtml(legacySteps)}</div>`
           : '';
         const noteHtml = petNote
-          ? `<div class="item-petnote">
-               <div class="item-label">💭 針對 ${escapeHtml(pet.name)} 的調整</div>
-               ${escapeHtml(petNote)}
-             </div>`
+          ? `<div class="item-petnote"><div class="item-label">💭 針對 ${escapeHtml(pet.name)} 的調整</div>${escapeHtml(petNote)}</div>`
           : '';
         return `
           <div class="item">
