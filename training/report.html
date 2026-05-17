@@ -301,9 +301,11 @@ function renderReport(data) {
           </div>`;
       }).join('');
 
-  const homeworkHtml = session.homework
-    ? `<h2>📝 本週飼主作業</h2>
-       <div class="homework">${escapeHtml(session.homework)}</div>`
+  // 判斷 homework 是否有實質內容：strip HTML tags + trim。
+  // 否則 contenteditable 留下的 <br> / <p></p> 會讓判斷誤判為「有內容」。
+  const homeworkText = (session.homework || '').replace(/<[^>]+>/g, '').trim();
+  const homeworkHtml = homeworkText
+    ? `<h2>📝 本週飼主作業</h2><div class="homework">${escapeHtml(session.homework)}</div>`
     : '';
 
   const genderTxt = pet.gender === 'male' ? '公' : pet.gender === 'female' ? '母' : '';

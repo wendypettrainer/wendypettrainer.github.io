@@ -556,7 +556,8 @@ function renderSession(s) {
 
   // 判斷是否有實質內容（避免空 session 渲染空白）
   const hasRecords = Array.isArray(s.records) && s.records.length > 0;
-  const hasHomework = !!(s.homework && s.homework.trim());
+  // strip HTML tags + trim：contenteditable 留下的 <br> / <p></p> 不算內容
+  const hasHomework = (s.homework || '').replace(/<[^>]+>/g, '').trim().length > 0;
   const hasMaterials = (Array.isArray(s.attachedMaterials) && s.attachedMaterials.length > 0)
                     || (Array.isArray(s.externalLinks) && s.externalLinks.length > 0);
   const hasContent = hasRecords || hasHomework || hasMaterials;
@@ -650,7 +651,9 @@ function renderReport(data) {
     const fc = data.firstConsult;
     const fcRecords = renderRecords(fc.records);
     const fcReportHtml = formatFirstConsultHtml((fc.firstConsultReport || '').trim());
-    const fcHomework = (fc.homework || '').trim();
+    // strip HTML tags + trim：避免空 contenteditable 殘留的 <br> 被誤判為有內容
+    const fcHomeworkText = (fc.homework || '').replace(/<[^>]+>/g, '').trim();
+    const fcHomework = fcHomeworkText ? (fc.homework || '').trim() : '';
     html += `
       <details class="section section-collapsible">
         <summary class="section-summary">
