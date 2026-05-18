@@ -178,6 +178,35 @@
     font-size: 11px;
     font-weight: 500;
     border: 1px solid var(--border);
+    /* iPhone 窄畫面 flex 擠壓時防止「4 堂」被切成兩行 */
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* 課程預約「每堂日期 / 時間」row：桌面 5 欄、行動 2 行 */
+  .session-row {
+    display: grid;
+    grid-template-columns: 56px 1fr 1fr 1fr 36px;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  /* 讓 input 可以被 grid track 壓縮，避免 iOS native date input 撐爆 row */
+  .session-row > * { min-width: 0; }
+  /* iPhone / 窄畫面：日期獨佔一行，時間 + 行事曆按鈕另一行；label 跨兩行垂直置中 */
+  @media (max-width: 480px) {
+    .session-row {
+      grid-template-columns: 56px 1fr 1fr 36px;
+      grid-template-areas:
+        "label date  date  date"
+        "label start end   cal";
+      row-gap: 4px;
+    }
+    .session-row > :nth-child(1) { grid-area: label; }
+    .session-row > :nth-child(2) { grid-area: date; }
+    .session-row > :nth-child(3) { grid-area: start; }
+    .session-row > :nth-child(4) { grid-area: end; }
+    .session-row > :nth-child(5) { grid-area: cal; }
   }
 
   .card-menu-btn {
@@ -4557,7 +4586,7 @@ function renderBooking() {
     const sessRows = b.sessions.map((s, i) => {
       const hasDate = !!(s.date || '').trim();
       return `
-      <div class="session-row" style="display:grid; grid-template-columns: 56px 1fr 1fr 1fr 36px; gap:6px; align-items:center; margin-bottom:8px;">
+      <div class="session-row">
         <div style="color:var(--text-soft); font-size:14px;">第 ${i+1} 堂</div>
         <input type="date" data-i="${i}" data-f="date" value="${escapeAttr(s.date||'')}">
         <input type="time" data-i="${i}" data-f="startTime" value="${escapeAttr(s.startTime||'')}">
