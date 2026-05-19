@@ -8092,20 +8092,39 @@ function renderStats() {
   const closedTotalCount = closedDetails.reduce((sum, d) => sum + d.closedCount, 0);
 
   const query = (settings.statsQuery || '').trim().toLowerCase();
+
+  // 會計頁 sub-tabs（拆分大頁面）
+  const STATS_TABS = [
+    { key: 'overview', label: '📊 總覽' },
+    { key: 'monthly',  label: '📅 月份' },
+    { key: 'byType',   label: '📋 類型' },
+    { key: 'studio',   label: '🏫 教室' },
+  ];
+  const activeStatsTab = STATS_TABS.find(t => t.key === settings.statsTab) ? settings.statsTab : 'overview';
+
   const header = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap">
       <div>
         <div style="font-size:18px; font-weight:600; color:var(--brown-dark)">📊 會計</div>
         <div style="font-size:12px; color:var(--text-soft); margin-top:2px">範圍內 ${bookings.length} 筆課程預約 · ${closedTotalCount} 堂強制結案</div>
       </div>
-      <select id="statsRange" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:white; font-family:inherit; color:var(--text)">
-        ${RANGE_OPTS.map(o => `<option value="${o.k}" ${o.k===range?'selected':''}>${o.l}</option>`).join('')}
-      </select>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+        <select id="statsRange" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:white; font-family:inherit; color:var(--text)">
+          ${RANGE_OPTS.map(o => `<option value="${o.k}" ${o.k===range?'selected':''}>${o.l}</option>`).join('')}
+        </select>
+        <button class="small-btn" id="exportStatsCsv" type="button" title="匯出範圍內所有 booking 的 CSV">📤 CSV</button>
+      </div>
     </div>
-    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap">
-      <input type="text" id="statsQuery" value="${escapeAttr(settings.statsQuery || '')}" placeholder="🔍 搜尋呆帳明細：寵物名 / 飼主 / 結案原因 / 課程類型" style="flex:1; min-width:220px; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-family:inherit; font-size:13px">
-      <button class="small-btn" id="exportStatsCsv" type="button">📤 匯出 CSV</button>
+    <div class="tabs" style="margin-bottom:14px">
+      ${STATS_TABS.map(t =>
+        `<button class="tab ${t.key===activeStatsTab?'active':''}" data-stats-tab="${t.key}" type="button">${t.label}</button>`
+      ).join('')}
     </div>
+  `;
+
+  // 搜尋（只在「總覽」tab 顯示，用於 filter 呆帳明細）
+  const searchInputHtml = `
+    <input type="text" id="statsQuery" value="${escapeAttr(settings.statsQuery || '')}" placeholder="🔍 搜尋呆帳明細：寵物名 / 飼主 / 結案原因 / 課程類型" style="width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-family:inherit; font-size:13px; margin-bottom:14px;">
   `;
 
   const balance = totalRev - totalReceived + totalRefunded;
@@ -8310,25 +8329,43 @@ function renderStats() {
     </div>
   `;
 
-  main.innerHTML = `
-    ${header}
+  // 各 tab 的內容
+  const overviewTabHtml = `
+    ${searchInputHtml}
     ${summaryGrid}
     <h3 style="color:var(--brown-dark); margin: 18px 0 10px; font-size:15px">⊘ 呆帳明細 <span style="color:var(--text-soft); font-weight:400; font-size:13px">（按金額由大到小，點卡片進寵物課程）</span></h3>
     ${closedHtml}
-    ${monthlySectionHtml}
-    ${byTypeRows.length > 0 ? `
-      <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 按課程類型</h3>
-      ${byTypeHtml}
-    ` : ''}
-    ${studioSectionHtml}
     <p style="margin-top:24px; font-size:12px; color:var(--text-soft); line-height:1.7">
       • <b>金流（合約 / payments）：</b>「應收」= 合約總額；「實收 / 退費」= 你在每筆 booking 記錄的 payments；「應收餘額」= 應收 − 實收 + 退費<br>
       • <b>收入認列（權責發生制）：</b>「已認列」= 已上完課對應的金額；「預收款」= 客戶已付但還沒上；「已上未收」= 已上完但客戶還沒付齊<br>
       • <b>課時履約：</b>「已兌現」= done 的堂數 × 單堂單價；「未兌現」= closed（強制結案）；「進行中」= 預約中 / 待安排 / 待結案<br>
-      • <b>教室派案：</b>累計應付 = 該教室所有 done 課時 × 鐘點費；累計實付 = 教室付款紀錄總額；月份對帳用<br>
-      • 範圍切換按 booking 建立時間 / 教室付款收到日期 篩選<br>
       • 💡 <b>點上方有「›」的卡片可看明細</b>
     </p>
+  `;
+  const monthlyTabHtml = monthlySectionHtml;
+  const byTypeTabHtml = byTypeRows.length > 0 ? `
+    <h3 style="color:var(--brown-dark); margin: 6px 0 10px; font-size:15px">📋 按課程類型</h3>
+    ${byTypeHtml}
+    <p style="margin-top:18px; font-size:12px; color:var(--text-soft); line-height:1.7">
+      • 「總收費」= 該類型所有合約的合計金額<br>
+      • 「呆帳率」= 該類型「未兌現（強制結案）」÷ 總收費
+    </p>
+  ` : '<div class="month-empty" style="margin-top:6px">期間內沒有課程類型統計</div>';
+  const studioTabHtml = studioNames.length > 0 ? `
+    ${studioSectionHtml}
+    <p style="margin-top:18px; font-size:12px; color:var(--text-soft); line-height:1.7">
+      • <b>累計應付</b>：該教室所有 done 課時 × 鐘點費（你還沒收到教室付款的部分）<br>
+      • <b>累計實付</b>：你已收到的教室付款紀錄總額<br>
+      • 月份對帳用：右側「應收餘額」表示教室還欠你多少
+    </p>
+  ` : '<div class="month-empty" style="margin-top:6px">期間內沒有教室派案紀錄</div>';
+
+  main.innerHTML = `
+    ${header}
+    ${activeStatsTab === 'overview' ? overviewTabHtml : ''}
+    ${activeStatsTab === 'monthly' ? monthlyTabHtml : ''}
+    ${activeStatsTab === 'byType' ? byTypeTabHtml : ''}
+    ${activeStatsTab === 'studio' ? studioTabHtml : ''}
     <div id="statsDrawerOverlay" class="stats-drawer-overlay hidden"></div>
     <aside id="statsDrawer" class="stats-drawer hidden" aria-label="明細抽屜">
       <header class="stats-drawer-header">
@@ -8350,6 +8387,15 @@ function renderStats() {
     save(KEYS.settings, s);
     renderStats();
   };
+  // 會計 sub-tabs 切換
+  main.querySelectorAll('[data-stats-tab]').forEach(btn => {
+    btn.onclick = () => {
+      const s = load(KEYS.settings, {});
+      s.statsTab = btn.dataset.statsTab;
+      save(KEYS.settings, s);
+      renderStats();
+    };
+  });
   const queryInput = document.getElementById('statsQuery');
   if (queryInput) queryInput.oninput = () => {
     const s = load(KEYS.settings, {});
