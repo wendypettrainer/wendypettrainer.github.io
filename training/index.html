@@ -462,6 +462,100 @@
   .stat-card.warn .stat-value { color: var(--work); }
   .stat-pct { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
 
+  /* 月份明細 - metric 切換 tabs */
+  .metric-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 6px 0 10px;
+  }
+  .metric-tab {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: white;
+    border-radius: 20px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text-soft);
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .metric-tab:hover {
+    background: rgba(192,138,94,0.06);
+    color: var(--brown-dark);
+  }
+  .metric-tab.active {
+    background: var(--brown-dark);
+    color: white;
+    border-color: var(--brown-dark);
+  }
+
+  /* 月份明細 - 月份列表 */
+  .month-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .month-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+    position: relative;
+  }
+  .month-row:hover {
+    background: rgba(107,158,110,0.05);
+    border-color: rgba(107,158,110,0.3);
+    transform: translateX(2px);
+  }
+  .month-row-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--brown-dark);
+    flex-shrink: 0;
+  }
+  .month-row-meta {
+    font-size: 11px;
+    color: var(--text-soft);
+    margin-top: 2px;
+    font-weight: 400;
+  }
+  .month-row-amount {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--brown-dark);
+    text-align: right;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .month-row-amount.good { color: #4a7d4d; }
+  .month-row-amount.warn { color: var(--work); }
+  .month-row-arrow {
+    color: var(--text-soft);
+    font-size: 16px;
+    flex-shrink: 0;
+    opacity: 0.5;
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+  .month-row:hover .month-row-arrow {
+    opacity: 1;
+    transform: translateX(2px);
+  }
+  .month-empty {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-soft);
+    background: rgba(107,158,110,0.04);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
   /* 可點卡片（drill-down）*/
   .stat-card.clickable {
     cursor: pointer;
@@ -7714,6 +7808,21 @@ function renderStats() {
     realized: [], unrealized: [], pending: [],
   };
 
+  // 月份明細：依 YYYY-MM 分組（4 種款項各自有日期定義）
+  // - received / refunded：按 payment.date
+  // - recognized：按 session.date（已完成課時）
+  // - contracts：按 booking.createdAt（合約簽訂日）
+  const monthData = {};  // monthData[ym] = { received, refunded, recognized, contracts, *Rows: [] }
+  const _ensureMonth = (ym) => {
+    if (!monthData[ym]) {
+      monthData[ym] = {
+        received: 0, refunded: 0, recognized: 0, contracts: 0,
+        receivedRows: [], refundedRows: [], recognizedRows: [], contractsRows: [],
+      };
+    }
+    return monthData[ym];
+  };
+
   for (const b of bookings) {
     const sessCount = b.sessionCount || 0;
     if (sessCount === 0) continue;
@@ -7809,13 +7918,35 @@ function renderStats() {
       total, sessCount, balance: balanceAmt, received: summary.received,
     });
 
+    // 月份明細：應收（合約簽訂月份）
+    if (bDate) {
+      const ym = bDate.slice(0, 7);
+      const md = _ensureMonth(ym);
+      md.contracts += total;
+      md.contractsRows.push({
+        petId: b.petId, petLabel: petLbl, ctLab,
+        amount: total, sessCount, bookingDate: bDate,
+      });
+    }
+
     // 實收 / 退費（拆 payments）
     const _payments = getBookingPayments(b.id);
     for (const p of _payments) {
+      const pYM = (p.date || '').slice(0, 7);
       if (p.type === 'in') {
         drillData.received.push({ petId: b.petId, petLabel: petLbl, ctLab, date: p.date, amount: p.amount, note: p.note || '' });
+        if (pYM) {
+          const md = _ensureMonth(pYM);
+          md.received += p.amount;
+          md.receivedRows.push({ petId: b.petId, petLabel: petLbl, ctLab, date: p.date, amount: p.amount, note: p.note || '' });
+        }
       } else if (p.type === 'refund') {
         drillData.refunded.push({ petId: b.petId, petLabel: petLbl, ctLab, date: p.date, amount: p.amount, note: p.note || '' });
+        if (pYM) {
+          const md = _ensureMonth(pYM);
+          md.refunded += p.amount;
+          md.refundedRows.push({ petId: b.petId, petLabel: petLbl, ctLab, date: p.date, amount: p.amount, note: p.note || '' });
+        }
       }
     }
 
@@ -7855,6 +7986,15 @@ function renderStats() {
       if (s.status === 'done') {
         drillData.recognized.push(row);
         drillData.realized.push(row);
+        // 月份明細：已認列收入（按 session.date 分組）
+        if (s.date) {
+          const md = _ensureMonth(s.date.slice(0, 7));
+          md.recognized += pricePerSess;
+          md.recognizedRows.push({
+            petId: b.petId, petLabel: petLbl, ctLab,
+            date: s.date, amount: pricePerSess,
+          });
+        }
       } else if (s.status === 'closed') {
         drillData.unrealized.push(Object.assign({}, row, { reason: s.closeReason || '' }));
       } else if (s.status === 'booked') {
@@ -7888,6 +8028,31 @@ function renderStats() {
     if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
     return (a.date || '9999').localeCompare(b.date || '9999');
   });
+
+  // 月份明細：排序月份內 rows + 取出排序後的月份列表（新到舊）
+  const monthList = Object.keys(monthData).sort((a, b) => b.localeCompare(a));  // YYYY-MM desc
+  for (const ym of monthList) {
+    const md = monthData[ym];
+    md.receivedRows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    md.refundedRows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    md.recognizedRows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    md.contractsRows.sort((a, b) => b.amount - a.amount);
+  }
+
+  // 月份明細 metric 設定（4 種款項各自 config）
+  const MONTHLY_METRICS = {
+    received:   { label: '實收',     amountClass: 'good', sumField: 'received',   rowsField: 'receivedRows',   subject: '收款' },
+    recognized: { label: '已認列',   amountClass: 'good', sumField: 'recognized', rowsField: 'recognizedRows', subject: 'done 課時' },
+    contracts:  { label: '應收（合約）', amountClass: '',  sumField: 'contracts',  rowsField: 'contractsRows',  subject: '合約' },
+    refunded:   { label: '退費',     amountClass: 'warn', sumField: 'refunded',   rowsField: 'refundedRows',   subject: '退費' },
+  };
+  const monthlyMetricKey = MONTHLY_METRICS[settings.statsMonthlyMetric] ? settings.statsMonthlyMetric : 'received';
+  const monthlyMetric = MONTHLY_METRICS[monthlyMetricKey];
+  // 月份 YYYY-MM → 「2026 年 5 月」label
+  const monthLabel = ym => {
+    const [y, m] = ym.split('-');
+    return `${y} 年 ${parseInt(m, 10)} 月`;
+  };
 
   // 教室派案聚合（D7）
   const studioMap = {};   // studioName → { accrued, doneCount, bookingCount }
@@ -8112,11 +8277,45 @@ function renderStats() {
     }).join('')}
   `;
 
+  // 月份明細 section（顯示已選 metric 的逐月金額）
+  const monthlyRowsHtml = monthList.length === 0
+    ? `<div class="month-empty">期間內沒有月份資料</div>`
+    : monthList.map(ym => {
+        const md = monthData[ym];
+        const val = md[monthlyMetric.sumField] || 0;
+        // 該 metric 該月份沒值就跳過（避免一堆 NT$ 0 列）
+        if (val <= 0 && monthlyMetric.sumField !== 'refunded') return '';
+        if (val === 0 && monthlyMetric.sumField === 'refunded') return '';
+        const cnt = (md[monthlyMetric.rowsField] || []).length;
+        return `
+          <div class="month-row" data-month="${ym}">
+            <div>
+              <div class="month-row-label">${monthLabel(ym)}</div>
+              <div class="month-row-meta">${cnt} 筆${monthlyMetric.subject}</div>
+            </div>
+            <div class="month-row-amount ${monthlyMetric.amountClass}">${fmtMoney(val)}</div>
+            <span class="month-row-arrow">›</span>
+          </div>`;
+      }).filter(Boolean).join('');
+  const monthlyAnyData = monthList.some(ym => (monthData[ym][monthlyMetric.sumField] || 0) > 0);
+  const monthlySectionHtml = `
+    <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📅 月份明細 <span style="color:var(--text-soft); font-weight:400; font-size:13px">（點月份看該月明細）</span></h3>
+    <div class="metric-tabs" id="monthlyMetricTabs">
+      ${Object.entries(MONTHLY_METRICS).map(([k, m]) =>
+        `<button class="metric-tab ${k===monthlyMetricKey?'active':''}" data-metric="${k}" type="button">${m.label}</button>`
+      ).join('')}
+    </div>
+    <div class="month-list">
+      ${monthlyAnyData ? monthlyRowsHtml : `<div class="month-empty">期間內沒有「${monthlyMetric.label}」的紀錄</div>`}
+    </div>
+  `;
+
   main.innerHTML = `
     ${header}
     ${summaryGrid}
     <h3 style="color:var(--brown-dark); margin: 18px 0 10px; font-size:15px">⊘ 呆帳明細 <span style="color:var(--text-soft); font-weight:400; font-size:13px">（按金額由大到小，點卡片進寵物課程）</span></h3>
     ${closedHtml}
+    ${monthlySectionHtml}
     ${byTypeRows.length > 0 ? `
       <h3 style="color:var(--brown-dark); margin: 24px 0 10px; font-size:15px">📋 按課程類型</h3>
       ${byTypeHtml}
@@ -8412,6 +8611,61 @@ function renderStats() {
   if (drawerOverlay) drawerOverlay.onclick = closeStatsDrawer;
   const drawerCloseBtn = document.getElementById('statsDrawerCloseBtn');
   if (drawerCloseBtn) drawerCloseBtn.onclick = closeStatsDrawer;
+
+  // 月份明細 - metric tab 切換
+  main.querySelectorAll('#monthlyMetricTabs .metric-tab').forEach(tab => {
+    tab.onclick = () => {
+      const s = load(KEYS.settings, {});
+      s.statsMonthlyMetric = tab.dataset.metric;
+      save(KEYS.settings, s);
+      renderStats();
+    };
+  });
+  // 月份明細 - 點月份 row 開抽屜（顯示該月明細）
+  main.querySelectorAll('.month-row[data-month]').forEach(row => {
+    row.onclick = () => {
+      const ym = row.dataset.month;
+      const md = monthData[ym];
+      if (!md) return;
+      const rows = md[monthlyMetric.rowsField] || [];
+      // 子標題：4 個 metrics 一覽（讓使用者一眼看全貌）
+      const subtitleParts = [
+        `<b>實收</b> ${fmtMoney(md.received)}`,
+        `<b>已認列</b> ${fmtMoney(md.recognized)}`,
+        `<b>應收</b> ${fmtMoney(md.contracts)}`,
+        md.refunded > 0 ? `<b style="color:var(--work)">退費</b> ${fmtMoney(md.refunded)}` : null,
+      ].filter(Boolean).join(' · ');
+      // 該 metric 的明細列
+      const sectionRows = rows.map(r => {
+        if (monthlyMetricKey === 'contracts') {
+          return {
+            petId: r.petId,
+            title: r.petLabel,
+            meta: `${escapeHtml(r.ctLab)} · 共 ${r.sessCount} 堂${r.bookingDate ? ' · ' + r.bookingDate : ''}`,
+            amount: fmtMoney(r.amount),
+            amountClass: monthlyMetric.amountClass,
+          };
+        }
+        return {
+          petId: r.petId,
+          title: `${(r.date || '').slice(0, 10) || '—'} · ${r.petLabel}`,
+          meta: `${escapeHtml(r.ctLab)}${r.note ? ' · ' + escapeHtml(r.note) : ''}`,
+          amount: fmtMoney(r.amount),
+          amountClass: monthlyMetric.amountClass,
+        };
+      });
+      openStatsDrawer({
+        title: `${monthLabel(ym)} · ${monthlyMetric.label}`,
+        mainValue: fmtMoney(md[monthlyMetric.sumField]),
+        subtitle: subtitleParts,
+        sections: sectionRows.length > 0
+          ? [{ rows: sectionRows }]
+          : [],
+        emptyText: `該月份沒有「${monthlyMetric.label}」紀錄 🎉`,
+        footer: { label: `${rows.length} 筆${monthlyMetric.subject}`, value: fmtMoney(md[monthlyMetric.sumField]) },
+      });
+    };
+  });
 
   // 教室付款 binding
   main.querySelectorAll('[data-add-studio-pay]').forEach(btn => {
