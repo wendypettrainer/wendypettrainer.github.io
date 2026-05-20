@@ -1695,7 +1695,17 @@ function attachPasteHandler(editorEl) {
     e.preventDefault();
     const html = e.clipboardData.getData('text/html');
     if (html) {
-      insertHtmlAtCursor(editorEl, html);
+      // 把來源的 block-* 外框拆掉，只貼內文。
+      // 色塊該由 toolbar 按鈕明確建立，不該從 paste 帶入（避免嵌套色塊）。
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      tmp.querySelectorAll('.block-step, .block-note, .block-tip').forEach(d => {
+        const p = d.parentNode;
+        if (!p) return;
+        while (d.firstChild) p.insertBefore(d.firstChild, d);
+        p.removeChild(d);
+      });
+      insertHtmlAtCursor(editorEl, tmp.innerHTML);
       return;
     }
     const text = e.clipboardData.getData('text/plain');
