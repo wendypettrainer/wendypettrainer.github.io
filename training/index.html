@@ -1556,9 +1556,9 @@ function applyColorToSelection(color, editorEl) {
   const range = sel.getRangeAt(0);
   if (range.collapsed) { showNotice('請先選取要上色的文字', 'err'); return; }
   if (!editorEl.contains(range.commonAncestorContainer)) { showNotice('請先選取要上色的文字', 'err'); return; }
-  const fragment = range.extractContents();
   if (color) {
-    // 上色：包一層 span（既有的內層 span 若同色會疊但不影響顯示）
+    // 上色：包一層 span
+    const fragment = range.extractContents();
     const span = document.createElement('span');
     span.style.color = color;
     span.style.fontWeight = '600';
@@ -1570,30 +1570,26 @@ function applyColorToSelection(color, editorEl) {
     newRange.collapse(false);
     sel.addRange(newRange);
   } else {
-    // 清色：遞迴清掉選取範圍內所有 span 的 color / font-weight
-    const tmp = document.createElement('div');
-    tmp.appendChild(fragment);
-    tmp.querySelectorAll('span').forEach(s => {
+    // 清色：in-place 修改——找出所有跟 selection 有交集的 color/weight span，清掉
+    // 避開 extractContents 的 fragment 邊界 bug
+    const candidates = editorEl.querySelectorAll('span[style]');
+    const toProcess = [];
+    candidates.forEach(s => {
+      if (range.intersectsNode(s)) toProcess.push(s);
+    });
+    toProcess.forEach(s => {
       s.style.removeProperty('color');
       s.style.removeProperty('font-weight');
       if (!s.getAttribute('style')) s.removeAttribute('style');
-      // 沒任何屬性的 span 就 unwrap（避免留下空殼 span）
+      // 沒任何屬性的 span 就 unwrap
       if (s.attributes.length === 0) {
         const parent = s.parentNode;
-        while (s.firstChild) parent.insertBefore(s.firstChild, s);
-        parent.removeChild(s);
+        if (parent) {
+          while (s.firstChild) parent.insertBefore(s.firstChild, s);
+          parent.removeChild(s);
+        }
       }
     });
-    // 把處理過的內容塞回 range
-    const newFragment = document.createDocumentFragment();
-    while (tmp.firstChild) newFragment.appendChild(tmp.firstChild);
-    range.insertNode(newFragment);
-    // 游標收到 range 結尾
-    sel.removeAllRanges();
-    const newRange = document.createRange();
-    newRange.setStart(range.endContainer, range.endOffset);
-    newRange.collapse(true);
-    sel.addRange(newRange);
   }
   editorEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
