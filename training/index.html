@@ -1607,7 +1607,11 @@ function legacyToBlocks(html) {
     if (!cur) return;
     const inner = cur.lines.join('<br>');
     if (cur.type === 'plain') result.push(inner);
-    else result.push(`<div class="block-${cur.type}">${inner}</div>`);
+    else {
+      result.push(`<div class="block-${cur.type}">${inner}</div>`);
+      // 在色塊之後加一個 <br> 當作游標停靠點，方便使用者在兩塊之間插入內容
+      result.push('<br>');
+    }
     cur = null;
   };
   const detectType = line => {
@@ -1763,7 +1767,7 @@ function bindColorToolbar(toolbarEl, editorEl) {
       if (type === 'step') inner = '▶ ';
       else if (type === 'note') inner = '⚠️ ';
       else if (type === 'tip') inner = '💡 ';
-      insertHtmlAtCursor(editorEl, `<div class="block-${type}">${inner}</div>`);
+      insertHtmlAtCursor(editorEl, `<div class="block-${type}">${inner}</div><br>`);
     };
   });
   // 拆除色塊：把游標所在的 .block-* 拆掉（保留內文）
@@ -7506,7 +7510,7 @@ function renderSettings() {
           e.preventDefault();
           const type = btn.dataset.block;
           const inner = type === 'step' ? '▶ ' : type === 'note' ? '⚠️ ' : '💡 ';
-          insertHtmlAtCursor(editor, `<div class="block-${type}">${inner}</div>`);
+          insertHtmlAtCursor(editor, `<div class="block-${type}">${inner}</div><br>`);
         };
       });
       // 拆除色塊按鈕
