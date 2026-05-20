@@ -1259,7 +1259,7 @@
     font-family: inherit; line-height: 1.2;
   }
   .color-toolbar button:hover { background: var(--header-bg); }
-  .color-toolbar button.tb-clear { color: #666; }
+  .color-toolbar button.tb-clear { color: #000; font-weight: 600; }
   .color-toolbar button.tb-red { color: #c97a4f; font-weight: 600; }
   .color-toolbar button.tb-green { color: #6b9e6e; font-weight: 600; }
   .color-toolbar button.tb-blue { color: #5a7a9e; font-weight: 600; }
@@ -1557,19 +1557,44 @@ function applyColorToSelection(color, editorEl) {
   if (range.collapsed) { showNotice('請先選取要上色的文字', 'err'); return; }
   if (!editorEl.contains(range.commonAncestorContainer)) { showNotice('請先選取要上色的文字', 'err'); return; }
   const fragment = range.extractContents();
-  const span = document.createElement('span');
   if (color) {
+    // 上色：包一層 span（既有的內層 span 若同色會疊但不影響顯示）
+    const span = document.createElement('span');
     span.style.color = color;
     span.style.fontWeight = '600';
+    span.appendChild(fragment);
+    range.insertNode(span);
+    sel.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.selectNodeContents(span);
+    newRange.collapse(false);
+    sel.addRange(newRange);
+  } else {
+    // 清色：遞迴清掉選取範圍內所有 span 的 color / font-weight
+    const tmp = document.createElement('div');
+    tmp.appendChild(fragment);
+    tmp.querySelectorAll('span').forEach(s => {
+      s.style.removeProperty('color');
+      s.style.removeProperty('font-weight');
+      if (!s.getAttribute('style')) s.removeAttribute('style');
+      // 沒任何屬性的 span 就 unwrap（避免留下空殼 span）
+      if (s.attributes.length === 0) {
+        const parent = s.parentNode;
+        while (s.firstChild) parent.insertBefore(s.firstChild, s);
+        parent.removeChild(s);
+      }
+    });
+    // 把處理過的內容塞回 range
+    const newFragment = document.createDocumentFragment();
+    while (tmp.firstChild) newFragment.appendChild(tmp.firstChild);
+    range.insertNode(newFragment);
+    // 游標收到 range 結尾
+    sel.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.setStart(range.endContainer, range.endOffset);
+    newRange.collapse(true);
+    sel.addRange(newRange);
   }
-  span.appendChild(fragment);
-  range.insertNode(span);
-  // 把游標放到 span 後
-  sel.removeAllRanges();
-  const newRange = document.createRange();
-  newRange.selectNodeContents(span);
-  newRange.collapse(false);
-  sel.addRange(newRange);
   editorEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
 // 把舊內容（free-form HTML 含 ▶ / 【注意事項】 / ⚠️ 重要提醒 markers）
@@ -1651,7 +1676,7 @@ function ensureColorHtml(s) {
 function colorToolbarHtml(idForBind = '') {
   const dataAttr = idForBind ? ` data-tb-for="${idForBind}"` : '';
   return `<div class="color-toolbar"${dataAttr}>
-    <button type="button" class="tb-clear" data-color="">清色</button>
+    <button type="button" class="tb-clear" data-color="">黑色</button>
     <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
     <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
     <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
@@ -7384,7 +7409,7 @@ function renderSettings() {
             <button class="small-btn danger" data-mdel="${i}_${j}">刪</button>
           </div>
           <div class="color-toolbar" data-mtb="${i}_${j}">
-            <button type="button" class="tb-clear" data-color="">清色</button>
+            <button type="button" class="tb-clear" data-color="">黑色</button>
             <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
             <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
             <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
@@ -9391,7 +9416,7 @@ function openTableEditor(initialTable, onSave) {
         🎨 <b>上色</b>：點 cell 進入編輯 → 選取要變色的字 → 按下方顏色按鈕。
       </p>
       <div class="color-toolbar" id="te_toolbar" style="margin-bottom:10px;">
-        <button type="button" class="tb-clear" data-color="">清色</button>
+        <button type="button" class="tb-clear" data-color="">黑色</button>
         <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
         <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
         <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
