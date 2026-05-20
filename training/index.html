@@ -6006,9 +6006,12 @@ function exportPdf(sess, pet) {
           const stepsHtml = m ? legacyToBlocks(ensureColorHtml(m.steps)) : '';
           const hasSteps = stepsHtml && stepsHtml.replace(/<[^>]+>/g, '').trim().length > 0;
           const tblHtml = m && m.table ? methodTableToHtml(m.table) : '';
+          // 方法找不到（被改名 / 刪除）→ 顯示警告而非空白
+          const missingWarn = !m ? `<div style="color:#c97a4f; font-size:10pt; padding:4pt 0">⚠️ 此方法已從訓練項目庫移除或改名，請到「設定」更新</div>` : '';
           return `
             <div class="item-method">
               <div class="item-label">🎯 方法：${escapeHtml(mn || '（未命名方法）')}</div>
+              ${missingWarn}
               ${hasSteps ? `<div class="item-method-steps">${stepsHtml}</div>` : ''}
               ${tblHtml ? `<div style="margin-top:6px">${tblHtml}</div>` : ''}
             </div>`;
@@ -6650,7 +6653,8 @@ async function shareToGist(sess, pet) {
     const checkedNames = r.methods || [];
     const methodDetails = checkedNames.map(mn => {
       const m = itMethods.find(im => im.name === mn);
-      return { name: mn, steps: (m && m.steps) || '' };
+      // missing: 訓練項目庫已查不到此方法（被改名或刪除）→ render 端會顯示警告
+      return { name: mn, steps: (m && m.steps) || '', missing: !m };
     });
     return { ...r, methodDetails };
   });
@@ -6791,7 +6795,7 @@ function buildParentReportPayload(pet) {
           const checkedNames = r.methods || [];
           const methodDetails = checkedNames.map(mn => {
             const m = itMethods.find(im => im.name === mn);
-            return { name: mn, steps: (m && m.steps) || '' };
+            return { name: mn, steps: (m && m.steps) || '', missing: !m };
           });
           return { ...r, methodDetails };
         }),
@@ -7542,14 +7546,74 @@ function renderSettings() {
       </div>
     `;
 
+    // 改名時自動掃 sessions：找用舊名的紀錄、prompt 詢問、批次更新
+    function migrateItemRename(oldName, newName) {
+      const sessions = load(KEYS.sessions, []);
+      let count = 0;
+      sessions.forEach(s => {
+        if (!Array.isArray(s.records)) return;
+        s.records.forEach(r => {
+          if (r.name === oldName) { r.name = newName; count++; }
+        });
+      });
+      return { sessions, count };
+    }
+    function migrateMethodRename(itemName, oldMethodName, newMethodName) {
+      const sessions = load(KEYS.sessions, []);
+      let count = 0;
+      sessions.forEach(s => {
+        if (!Array.isArray(s.records)) return;
+        s.records.forEach(r => {
+          if (r.name !== itemName) return;
+          if (!Array.isArray(r.methods)) return;
+          const idx = r.methods.indexOf(oldMethodName);
+          if (idx >= 0) { r.methods[idx] = newMethodName; count++; }
+        });
+      });
+      return { sessions, count };
+    }
+
     function updateItemField(i, field, value) {
       const cur = ensureItemShape(load(key, []));
-      cur[i][field] = (field === 'name') ? value.trim() : value;
+      if (field === 'name') {
+        const oldName = (cur[i].name || '').trim();
+        const newName = (value || '').trim();
+        if (oldName && newName && oldName !== newName) {
+          const { sessions, count } = migrateItemRename(oldName, newName);
+          if (count > 0) {
+            const ok = confirm(`偵測到「${oldName}」→「${newName}」改名。\n\n有 ${count} 筆既有課程紀錄使用舊名稱。\n要一起更新嗎？\n\n（不更新的話，那些舊紀錄之後產生 PDF / 分享連結時方法會顯示「⚠️ 找不到」）`);
+            if (ok) {
+              save(KEYS.sessions, sessions);
+              showNotice(`✓ 已同步更新 ${count} 筆課程紀錄`);
+            }
+          }
+        }
+        cur[i][field] = newName;
+      } else {
+        cur[i][field] = value;
+      }
       save(key, cur);
     }
     function updateMethodField(i, j, field, value) {
       const cur = ensureItemShape(load(key, []));
-      cur[i].methods[j][field] = (field === 'name') ? value.trim() : value;
+      if (field === 'name') {
+        const oldName = (cur[i].methods[j].name || '').trim();
+        const newName = (value || '').trim();
+        const itemName = (cur[i].name || '').trim();
+        if (oldName && newName && oldName !== newName && itemName) {
+          const { sessions, count } = migrateMethodRename(itemName, oldName, newName);
+          if (count > 0) {
+            const ok = confirm(`偵測到方法「${oldName}」→「${newName}」改名（在「${itemName}」下）。\n\n有 ${count} 筆既有課程紀錄使用舊名稱。\n要一起更新嗎？\n\n（不更新的話，那些舊紀錄之後產生 PDF / 分享連結時此方法會顯示「⚠️ 找不到」）`);
+            if (ok) {
+              save(KEYS.sessions, sessions);
+              showNotice(`✓ 已同步更新 ${count} 筆課程紀錄`);
+            }
+          }
+        }
+        cur[i].methods[j][field] = newName;
+      } else {
+        cur[i].methods[j][field] = value;
+      }
       save(key, cur);
     }
 

@@ -564,6 +564,7 @@ function renderRecords(records) {
     const methodsHtml = methodDetails.map(md => `
       <div class="item-method">
         <div class="item-method-name">🎯 ${escapeHtml(md.name || '（未命名方法）')}</div>
+        ${md.missing ? `<div style="color:#c97a4f; font-size:12px; margin-top:4px">⚠️ 此方法已從訓練項目庫移除或改名</div>` : ''}
         ${md.steps ? `<div class="item-method-steps">${legacyToBlocks(md.steps)}</div>` : ''}
       </div>`).join('');
     const noteHtml = petNote

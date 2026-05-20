@@ -332,9 +332,11 @@ function renderReport(data) {
         const methodDetails = Array.isArray(r.methodDetails) ? r.methodDetails : [];
         const methodsHtml = methodDetails.map(md => {
           const stepsTxt = (md.steps || '').trim();
+          const missingWarn = md.missing ? `<div style="color:#c97a4f; font-size:11px; margin-top:4px">⚠️ 此方法已從訓練項目庫移除或改名</div>` : '';
           return `
             <div class="item-method">
               <div class="item-label">🎯 方法：${escapeHtml(md.name || '（未命名方法）')}</div>
+              ${missingWarn}
               ${stepsTxt ? `<div class="item-method-steps">${legacyToBlocks(stepsTxt)}</div>` : ''}
             </div>`;
         }).join('');
