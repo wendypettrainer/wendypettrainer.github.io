@@ -1126,6 +1126,53 @@
     align-items: center;
     margin-bottom: 6px;
   }
+  /* 折疊：點 toggle 按鈕收合 .methods-wrap，預設收起 */
+  .item-toggle {
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-soft);
+    flex-shrink: 0;
+    transition: transform 150ms ease, background 120ms ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .item-toggle:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+  .item-edit-block[data-expanded="true"] .item-toggle { transform: rotate(90deg); }
+  .item-edit-block[data-expanded="false"] .methods-wrap { display: none; }
+  .item-edit-block[data-expanded="false"] { margin-bottom: 4px; padding: 8px 12px; }
+  .method-count {
+    font-size: 11px;
+    color: var(--text-soft);
+    background: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .item-list-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .item-list-toolbar input[type="search"] {
+    flex: 1;
+    min-width: 180px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .item-edit-block[data-hidden="true"] { display: none; }
   .item-edit-top input {
     flex: 1;
     padding: 6px 8px;
@@ -7467,12 +7514,20 @@ function renderSettings() {
         <p class="card-meta" style="margin-bottom:10px">
           • 每個訓練項目下可加多個「訓練方法」，每個方法有自己的步驟<br>
           • 上課時可勾選今天用了哪些方法<br>
-          • 飼主端會看到對應步驟當回家功課指引
+          • 飼主端會看到對應步驟當回家功課指引<br>
+          • <b>點 ▶ 展開項目來編輯</b>
         </p>
+        <div class="item-list-toolbar">
+          <input type="search" id="itemSearch" placeholder="🔍 搜尋訓練項目名稱">
+          <button class="small-btn" id="expandAllItems" type="button">展開全部</button>
+          <button class="small-btn" id="collapseAllItems" type="button">收起全部</button>
+        </div>
         ${list.map((it, i) => `
-          <div class="item-edit-block">
+          <div class="item-edit-block" data-expanded="false" data-i="${i}">
             <div class="item-edit-top">
+              <button class="item-toggle" data-toggle="${i}" type="button" title="展開/收起">▶</button>
               <input data-i="${i}" data-field="name" value="${escapeAttr(it.name)}" placeholder="訓練項目名稱">
+              <span class="method-count">${(it.methods || []).length} 方法</span>
               <button class="small-btn" data-up="${i}" ${i===0?'disabled':''}>↑</button>
               <button class="small-btn" data-down="${i}" ${i===list.length-1?'disabled':''}>↓</button>
               <button class="small-btn danger" data-del="${i}">刪</button>
@@ -7621,6 +7676,38 @@ function renderSettings() {
       cur.push({ name: '新項目', methods: [] });
       save(key, cur);
       renderItemEditor();
+    };
+    // ===== 折疊 / 展開 / 搜尋 =====
+    const allBlocks = () => document.querySelectorAll('#itemEditor .item-edit-block');
+    document.querySelectorAll('#itemEditor [data-toggle]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        const block = btn.closest('.item-edit-block');
+        const expanded = block.dataset.expanded === 'true';
+        block.dataset.expanded = expanded ? 'false' : 'true';
+      };
+    });
+    const expandAllBtn = document.getElementById('expandAllItems');
+    if (expandAllBtn) expandAllBtn.onclick = (e) => {
+      e.preventDefault();
+      allBlocks().forEach(b => b.dataset.expanded = 'true');
+    };
+    const collapseAllBtn = document.getElementById('collapseAllItems');
+    if (collapseAllBtn) collapseAllBtn.onclick = (e) => {
+      e.preventDefault();
+      allBlocks().forEach(b => b.dataset.expanded = 'false');
+    };
+    const searchInput = document.getElementById('itemSearch');
+    if (searchInput) searchInput.oninput = () => {
+      const q = searchInput.value.trim().toLowerCase();
+      allBlocks().forEach(b => {
+        const nameInput = b.querySelector('input[data-field="name"]');
+        const name = (nameInput && nameInput.value || '').toLowerCase();
+        const match = !q || name.includes(q);
+        b.dataset.hidden = match ? 'false' : 'true';
+        // 搜尋有命中時自動展開，方便直接看到內容
+        if (q && match) b.dataset.expanded = 'true';
+      });
     };
   }
   document.querySelectorAll('.tab').forEach(t => {
