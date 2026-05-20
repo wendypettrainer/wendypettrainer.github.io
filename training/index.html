@@ -1217,6 +1217,38 @@
   }
   .color-editor:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(139,111,71,0.15); }
   .color-editor:empty::before { content: attr(data-placeholder); color: var(--text-soft); }
+  /* 訓練項目色塊：步驟 / 注意事項 / 提示
+     編輯器與 app 內預覽共用同一套樣式（WYSIWYG）；
+     報告端（report.html / report-pet.html / 列印 PDF）有自己的 CSS。*/
+  .block-step,
+  .block-note,
+  .block-tip {
+    padding: 10px 12px;
+    margin: 8px 0;
+    border-radius: 6px;
+    border-left: 3px solid;
+    line-height: 1.7;
+  }
+  .block-step {
+    background: rgba(192,168,120,0.12);
+    border-left-color: #c0a878;
+  }
+  .block-note {
+    background: rgba(201,122,79,0.10);
+    border-left-color: #c97a4f;
+  }
+  .block-tip {
+    background: rgba(107,158,110,0.10);
+    border-left-color: #6b9e6e;
+  }
+  /* 編輯器內的色塊保持可編輯感（虛線邊框做視覺暗示） */
+  .color-editor .block-step,
+  .color-editor .block-note,
+  .color-editor .block-tip {
+    border-style: solid;
+    outline: 1px dashed rgba(0,0,0,0.06);
+  }
+
   .color-toolbar {
     display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px;
   }
@@ -1496,6 +1528,14 @@ function sanitizeColorHtml(html) {
         walk(child);
         return;
       }
+      // 保留我們的色塊 div（class="block-step" 等），剝掉其他屬性
+      if (tag === 'div' && /^block-(step|note|tip)$/.test(child.className || '')) {
+        const cls = child.className;
+        while (child.attributes.length > 0) child.removeAttribute(child.attributes[0].name);
+        child.className = cls;
+        walk(child);
+        return;
+      }
       // div / p → 取出內容、加 <br>，移除 div/p 標籤
       walk(child);
       const parent = child.parentNode;
@@ -1532,6 +1572,54 @@ function applyColorToSelection(color, editorEl) {
   sel.addRange(newRange);
   editorEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
+// 把舊內容（free-form HTML 含 ▶ / 【注意事項】 / ⚠️ 重要提醒 markers）
+// 轉成色塊結構（div.block-step / .block-note / .block-tip）。
+// 已含 block class 的內容會原封不動回傳（不破壞新內容）。
+function legacyToBlocks(html) {
+  if (!html) return '';
+  if (/<div\s+class="block-(step|note|tip)"/i.test(html)) return html;
+  const lines = String(html).split(/<br\s*\/?>/i);
+  const stripTags = s => s.replace(/<[^>]+>/g, '').trim();
+  const result = [];
+  let cur = null;  // { type: 'step'|'note'|'tip'|'plain', lines: [] }
+  const flush = () => {
+    if (!cur) return;
+    const inner = cur.lines.join('<br>');
+    if (cur.type === 'plain') result.push(inner);
+    else result.push(`<div class="block-${cur.type}">${inner}</div>`);
+    cur = null;
+  };
+  const detectType = line => {
+    const t = stripTags(line);
+    if (!t) return null;
+    if (/^▶/.test(t)) return 'step';
+    if (/^【注意事項】|^⚠️\s*注意|^注意事項\s*[:：]|^⚠️\s*重要|^【重要提醒】|^【注意】/.test(t)) return 'note';
+    if (/^💡|^【提示】|^【建議】|^提示\s*[:：]/.test(t)) return 'tip';
+    return null;
+  };
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    const t = detectType(trimmed);
+    if (t === 'step') {
+      // 連續 ▶ 合併到同一 block
+      if (cur && cur.type === 'step') cur.lines.push(trimmed);
+      else { flush(); cur = { type: 'step', lines: [trimmed] }; }
+    } else if (t === 'note' || t === 'tip') {
+      flush();
+      cur = { type: t, lines: [trimmed] };
+    } else if (cur && (cur.type === 'note' || cur.type === 'tip') && trimmed) {
+      // 進入 note/tip 後直到下一個 marker 都算 note/tip 內容
+      cur.lines.push(trimmed);
+    } else {
+      // 一般段落
+      if (cur && cur.type === 'plain') cur.lines.push(trimmed);
+      else { flush(); cur = { type: 'plain', lines: [trimmed] }; }
+    }
+  }
+  flush();
+  return result.join('');
+}
+
 // 純文字 → HTML（用於舊資料遷移：純文字 step 升級成 HTML）
 function plainTextToHtml(s) {
   if (!s) return '';
@@ -1567,6 +1655,10 @@ function colorToolbarHtml(idForBind = '') {
     <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
     <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
     <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
+    <span style="display:inline-block; width:1px; height:18px; background:var(--border); margin:0 4px; vertical-align:middle;"></span>
+    <button type="button" data-block="step" title="插入步驟色塊">+ 步驟</button>
+    <button type="button" data-block="note" title="插入注意事項色塊">+ 注意</button>
+    <button type="button" data-block="tip" title="插入提示色塊">+ 提示</button>
   </div>`;
 }
 // 共用：綁定 toolbar 跟 editor
@@ -1576,6 +1668,19 @@ function bindColorToolbar(toolbarEl, editorEl) {
     btn.onclick = (e) => {
       e.preventDefault();
       applyColorToSelection(btn.dataset.color, editorEl);
+    };
+  });
+  toolbarEl.querySelectorAll('button[data-block]').forEach(btn => {
+    btn.onmousedown = (e) => e.preventDefault();
+    btn.onclick = (e) => {
+      e.preventDefault();
+      const type = btn.dataset.block;
+      // 預填內容讓使用者直接看到結構（步驟用 ▶ + 占位字、其他先空）
+      let inner = '';
+      if (type === 'step') inner = '▶ ';
+      else if (type === 'note') inner = '⚠️ ';
+      else if (type === 'tip') inner = '💡 ';
+      insertHtmlAtCursor(editorEl, `<div class="block-${type}">${inner}</div>`);
     };
   });
 }
@@ -5741,7 +5846,8 @@ function exportPdf(sess, pet) {
         const ratingTxt = r.rating === 'good' ? '😊 表現好' : r.rating === 'ok' ? '😐 普通' : r.rating === 'work' ? '💪 需加強' : '已練習';
         const methodsHtml = checkedNames.map(mn => {
           const m = itMethods.find(im => im.name === mn);
-          const stepsHtml = m ? ensureColorHtml(m.steps) : '';
+          // 過 sanitize → 再過 legacyToBlocks（已是 block 結構則 no-op）
+          const stepsHtml = m ? legacyToBlocks(ensureColorHtml(m.steps)) : '';
           const hasSteps = stepsHtml && stepsHtml.replace(/<[^>]+>/g, '').trim().length > 0;
           const tblHtml = m && m.table ? methodTableToHtml(m.table) : '';
           return `
@@ -5874,6 +5980,19 @@ function exportPdf(sess, pet) {
     color: #6b5435;
     white-space: pre-wrap;
   }
+  /* 訓練項目色塊（PDF 列印用）*/
+  .block-step, .block-note, .block-tip {
+    padding: 6pt 8pt;
+    margin: 4pt 0;
+    border-radius: 4pt;
+    border-left: 3px solid;
+    white-space: normal;
+    page-break-inside: avoid;
+  }
+  .block-step { background: rgba(192,168,120,0.18); border-left-color: #c0a878; }
+  .block-note { background: rgba(201,122,79,0.12); border-left-color: #c97a4f; }
+  .block-tip  { background: rgba(107,158,110,0.12); border-left-color: #6b9e6e; }
+
   .item-petnote {
     background: rgba(192, 138, 94, 0.12);
     border-left: 3px solid #c08a5e;

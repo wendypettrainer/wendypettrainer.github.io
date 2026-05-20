@@ -288,6 +288,19 @@
   }
   .item-method-steps b, .item-method-steps strong { color: var(--brown-dark); }
   .item-method-steps span[style] { /* 保留訓練師上的顏色 */ }
+  /* 訓練項目色塊（步驟 / 注意 / 提示）*/
+  .block-step, .block-note, .block-tip {
+    padding: 8px 10px;
+    margin: 6px 0;
+    border-radius: 6px;
+    border-left: 3px solid;
+    white-space: normal;
+    line-height: 1.7;
+  }
+  .block-step { background: rgba(192,168,120,0.18); border-left-color: #c0a878; }
+  .block-note { background: rgba(201,122,79,0.10); border-left-color: #c97a4f; }
+  .block-tip  { background: rgba(107,158,110,0.10); border-left-color: #6b9e6e; }
+
   .item-petnote {
     margin-top: 8px;
     padding: 8px 10px;
@@ -447,6 +460,50 @@ function courseTypeLabel(s) {
     default: return '';
   }
 }
+// 把舊內容（含 ▶ / 【注意事項】 / ⚠️ 重要提醒 markers）轉成色塊結構
+// 已含 block class 就 no-op
+function legacyToBlocks(html) {
+  if (!html) return '';
+  if (/<div\s+class="block-(step|note|tip)"/i.test(html)) return html;
+  const stripTags = s => s.replace(/<[^>]+>/g, '').trim();
+  const lines = String(html).split(/<br\s*\/?>/i);
+  const out = [];
+  let cur = null;
+  const flush = () => {
+    if (!cur) return;
+    const inner = cur.lines.join('<br>');
+    if (cur.type === 'plain') out.push(inner);
+    else out.push('<div class="block-' + cur.type + '">' + inner + '</div>');
+    cur = null;
+  };
+  const detect = line => {
+    const t = stripTags(line);
+    if (!t) return null;
+    if (/^▶/.test(t)) return 'step';
+    if (/^【注意事項】|^⚠️\s*注意|^注意事項\s*[:：]|^⚠️\s*重要|^【重要提醒】|^【注意】/.test(t)) return 'note';
+    if (/^💡|^【提示】|^【建議】|^提示\s*[:：]/.test(t)) return 'tip';
+    return null;
+  };
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    const t = detect(trimmed);
+    if (t === 'step') {
+      if (cur && cur.type === 'step') cur.lines.push(trimmed);
+      else { flush(); cur = { type: 'step', lines: [trimmed] }; }
+    } else if (t === 'note' || t === 'tip') {
+      flush();
+      cur = { type: t, lines: [trimmed] };
+    } else if (cur && (cur.type === 'note' || cur.type === 'tip') && trimmed) {
+      cur.lines.push(trimmed);
+    } else {
+      if (cur && cur.type === 'plain') cur.lines.push(trimmed);
+      else { flush(); cur = { type: 'plain', lines: [trimmed] }; }
+    }
+  }
+  flush();
+  return out.join('');
+}
+
 // 美化首堂諮詢報告：在【段落標題】、列點符號前自動換行
 function formatFirstConsultHtml(html) {
   if (!html) return '';
@@ -503,7 +560,7 @@ function renderRecords(records) {
     const methodsHtml = methodDetails.map(md => `
       <div class="item-method">
         <div class="item-method-name">🎯 ${escapeHtml(md.name || '（未命名方法）')}</div>
-        ${md.steps ? `<div class="item-method-steps">${md.steps}</div>` : ''}
+        ${md.steps ? `<div class="item-method-steps">${legacyToBlocks(md.steps)}</div>` : ''}
       </div>`).join('');
     const noteHtml = petNote
       ? `<div class="item-petnote">💭 ${escapeHtml(petNote)}</div>`
