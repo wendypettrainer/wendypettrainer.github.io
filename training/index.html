@@ -7326,6 +7326,10 @@ function renderSettings() {
             <button type="button" class="tb-red" data-color="#c97a4f">A 紅</button>
             <button type="button" class="tb-green" data-color="#6b9e6e">A 綠</button>
             <button type="button" class="tb-blue" data-color="#5a7a9e">A 藍</button>
+            <span style="display:inline-block; width:1px; height:18px; background:var(--border); margin:0 4px; vertical-align:middle;"></span>
+            <button type="button" data-block="step" title="插入步驟色塊">+ 步驟</button>
+            <button type="button" data-block="note" title="插入注意事項色塊">+ 注意</button>
+            <button type="button" data-block="tip" title="插入提示色塊">+ 提示</button>
           </div>
           <div class="color-editor" contenteditable="true"
                data-i="${i}" data-j="${j}" data-mfield="steps"
@@ -7398,6 +7402,16 @@ function renderSettings() {
         btn.onclick = (e) => {
           e.preventDefault();
           applyColorToSelection(btn.dataset.color, editor);
+        };
+      });
+      // 色塊插入按鈕（+ 步驟 / + 注意 / + 提示）
+      tb.querySelectorAll('button[data-block]').forEach(btn => {
+        btn.onmousedown = (e) => e.preventDefault();
+        btn.onclick = (e) => {
+          e.preventDefault();
+          const type = btn.dataset.block;
+          const inner = type === 'step' ? '▶ ' : type === 'note' ? '⚠️ ' : '💡 ';
+          insertHtmlAtCursor(editor, `<div class="block-${type}">${inner}</div>`);
         };
       });
     });
