@@ -1583,6 +1583,25 @@ function applyColorToSelection(color, editorEl) {
   }
   editorEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
+// 確保每個 block-* 色塊後面有 <br>，當作游標停靠點。
+// 跟 legacyToBlocks 不同：這個函式對「已含色塊」的內容也會跑，補上既有的缺漏。
+function ensureBlockSpacing(html) {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const blocks = Array.from(tmp.querySelectorAll('div.block-step, div.block-note, div.block-tip'));
+  blocks.forEach(b => {
+    const next = b.nextSibling;
+    // 如果後面沒東西，或下一個不是 <br>（例如直接接另一個 block）→ 插入 <br>
+    if (!next || (next.nodeType === 1 && next.nodeName !== 'BR')) {
+      const br = document.createElement('br');
+      if (next) b.parentNode.insertBefore(br, next);
+      else b.parentNode.appendChild(br);
+    }
+  });
+  return tmp.innerHTML;
+}
+
 // 把舊內容（free-form HTML 含 ▶ / 【注意事項】 / ⚠️ 重要提醒 markers）
 // 轉成色塊結構（div.block-step / .block-note / .block-tip）。
 // 已含 block class 的內容會原封不動回傳（不破壞新內容）。
@@ -7414,8 +7433,8 @@ function renderSettings() {
       const tableInfo = tbl ? `（${tbl.headers.length} 欄 × ${tbl.rows.length} 列）` : '';
       const tableBtnLabel = tbl ? `📊 編輯表格 ${tableInfo}` : '📊 加入表格';
       // 開編輯器時，舊內容自動套色塊（▶/⚠️/💡 marker → block divs）。
-      // 已含 block 結構就 no-op；存檔時 sanitizer 會保留這些 block divs。
-      const stepsHtml = legacyToBlocks(ensureColorHtml(m.steps));
+      // ensureBlockSpacing 不管是否已有色塊都會跑，確保每塊後有 <br> 游標停靠點。
+      const stepsHtml = ensureBlockSpacing(legacyToBlocks(ensureColorHtml(m.steps)));
       return `
         <div class="method-block">
           <div class="method-top">
