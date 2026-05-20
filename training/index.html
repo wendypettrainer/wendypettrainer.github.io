@@ -1659,8 +1659,37 @@ function colorToolbarHtml(idForBind = '') {
     <button type="button" data-block="step" title="插入步驟色塊">+ 步驟</button>
     <button type="button" data-block="note" title="插入注意事項色塊">+ 注意</button>
     <button type="button" data-block="tip" title="插入提示色塊">+ 提示</button>
+    <button type="button" data-block-unwrap title="把游標所在的色塊拆掉（保留內文）" style="color:var(--work)">✕ 拆除</button>
   </div>`;
 }
+// 共用：把游標所在的 .block-* 祖先拆掉（保留內文）
+function unwrapBlockAtCursor(editorEl) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) {
+    showNotice('請先把游標點在要拆除的色塊裡', 'err');
+    return;
+  }
+  const range = sel.getRangeAt(0);
+  let node = range.commonAncestorContainer;
+  if (!editorEl.contains(node)) {
+    showNotice('請先把游標點在編輯區的色塊裡', 'err');
+    return;
+  }
+  if (node.nodeType === 3) node = node.parentNode;  // text → element
+  while (node && node !== editorEl) {
+    if (node.classList && /\bblock-(step|note|tip)\b/.test(node.className || '')) {
+      const parent = node.parentNode;
+      // 移出 children
+      while (node.firstChild) parent.insertBefore(node.firstChild, node);
+      parent.removeChild(node);
+      editorEl.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+    node = node.parentNode;
+  }
+  showNotice('游標不在色塊內，無法拆除', 'err');
+}
+
 // 共用：綁定 toolbar 跟 editor
 function bindColorToolbar(toolbarEl, editorEl) {
   toolbarEl.querySelectorAll('button[data-color]').forEach(btn => {
@@ -1681,6 +1710,14 @@ function bindColorToolbar(toolbarEl, editorEl) {
       else if (type === 'note') inner = '⚠️ ';
       else if (type === 'tip') inner = '💡 ';
       insertHtmlAtCursor(editorEl, `<div class="block-${type}">${inner}</div>`);
+    };
+  });
+  // 拆除色塊：把游標所在的 .block-* 拆掉（保留內文）
+  toolbarEl.querySelectorAll('button[data-block-unwrap]').forEach(btn => {
+    btn.onmousedown = (e) => e.preventDefault();
+    btn.onclick = (e) => {
+      e.preventDefault();
+      unwrapBlockAtCursor(editorEl);
     };
   });
 }
@@ -7314,7 +7351,9 @@ function renderSettings() {
       const tbl = normalizeTable(m.table);
       const tableInfo = tbl ? `（${tbl.headers.length} 欄 × ${tbl.rows.length} 列）` : '';
       const tableBtnLabel = tbl ? `📊 編輯表格 ${tableInfo}` : '📊 加入表格';
-      const stepsHtml = ensureColorHtml(m.steps);
+      // 開編輯器時，舊內容自動套色塊（▶/⚠️/💡 marker → block divs）。
+      // 已含 block 結構就 no-op；存檔時 sanitizer 會保留這些 block divs。
+      const stepsHtml = legacyToBlocks(ensureColorHtml(m.steps));
       return `
         <div class="method-block">
           <div class="method-top">
@@ -7330,6 +7369,7 @@ function renderSettings() {
             <button type="button" data-block="step" title="插入步驟色塊">+ 步驟</button>
             <button type="button" data-block="note" title="插入注意事項色塊">+ 注意</button>
             <button type="button" data-block="tip" title="插入提示色塊">+ 提示</button>
+            <button type="button" data-block-unwrap title="把游標所在的色塊拆掉（保留內文）" style="color:var(--work)">✕ 拆除</button>
           </div>
           <div class="color-editor" contenteditable="true"
                data-i="${i}" data-j="${j}" data-mfield="steps"
@@ -7412,6 +7452,14 @@ function renderSettings() {
           const type = btn.dataset.block;
           const inner = type === 'step' ? '▶ ' : type === 'note' ? '⚠️ ' : '💡 ';
           insertHtmlAtCursor(editor, `<div class="block-${type}">${inner}</div>`);
+        };
+      });
+      // 拆除色塊按鈕
+      tb.querySelectorAll('button[data-block-unwrap]').forEach(btn => {
+        btn.onmousedown = (e) => e.preventDefault();
+        btn.onclick = (e) => {
+          e.preventDefault();
+          unwrapBlockAtCursor(editor);
         };
       });
     });
