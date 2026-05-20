@@ -1662,6 +1662,28 @@ function colorToolbarHtml(idForBind = '') {
     <button type="button" data-block-unwrap title="把游標所在的色塊拆掉（保留內文）" style="color:var(--work)">✕ 拆除</button>
   </div>`;
 }
+// 共用：接管 contenteditable 的 paste 行為
+// - 富文字（含 HTML）：丟給 sanitizer，div/p 會自動轉 <br>，保留色塊與顏色 span
+// - 純文字：\n 轉 <br> 後插入
+// 避免不同來源（Notion / Word / 另一個編輯區）只貼進一行的問題
+function attachPasteHandler(editorEl) {
+  if (!editorEl || editorEl._pasteHandlerAttached) return;
+  editorEl._pasteHandlerAttached = true;
+  editorEl.addEventListener('paste', (e) => {
+    if (!e.clipboardData) return;
+    e.preventDefault();
+    const html = e.clipboardData.getData('text/html');
+    if (html) {
+      insertHtmlAtCursor(editorEl, html);
+      return;
+    }
+    const text = e.clipboardData.getData('text/plain');
+    if (!text) return;
+    const safe = text.split(/\r\n|\n|\r/).map(line => escapeHtml(line)).join('<br>');
+    insertHtmlAtCursor(editorEl, safe);
+  });
+}
+
 // 共用：把游標所在的 .block-* 祖先拆掉（保留內文）
 function unwrapBlockAtCursor(editorEl) {
   const sel = window.getSelection();
@@ -1692,6 +1714,7 @@ function unwrapBlockAtCursor(editorEl) {
 
 // 共用：綁定 toolbar 跟 editor
 function bindColorToolbar(toolbarEl, editorEl) {
+  attachPasteHandler(editorEl);
   toolbarEl.querySelectorAll('button[data-color]').forEach(btn => {
     btn.onmousedown = (e) => e.preventDefault();
     btn.onclick = (e) => {
@@ -7437,6 +7460,7 @@ function renderSettings() {
     document.querySelectorAll('#itemEditor .color-toolbar[data-mtb]').forEach(tb => {
       const [i, j] = tb.dataset.mtb.split('_').map(Number);
       const editor = tb.parentElement.querySelector('.color-editor[data-mfield="steps"]');
+      attachPasteHandler(editor);
       tb.querySelectorAll('button[data-color]').forEach(btn => {
         btn.onmousedown = (e) => e.preventDefault();
         btn.onclick = (e) => {
