@@ -4921,6 +4921,11 @@ function renderBooking() {
       inp.onchange = () => {
         const i = parseInt(inp.dataset.i, 10);
         b.sessions[i][inp.dataset.f] = inp.value;
+        // startTime 變動時自動帶 endTime = +1 小時（使用者要改時長可手動覆寫 endTime）
+        if (inp.dataset.f === 'startTime' && /^\d{2}:\d{2}$/.test(inp.value)) {
+          const [h, m] = inp.value.split(':').map(Number);
+          b.sessions[i].endTime = String((h + 1) % 24).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        }
         // 重繪以更新 📅 按鈕的 enabled 狀態（日期填了才能點）
         rerender();
       };
@@ -5131,6 +5136,10 @@ function renderFirstConsultSession(sess, pet) {
             ${sess.date
               ? fmtDate(sess.date)
               : `<span style="color:var(--work)">📅 請選日期：</span><input type="date" id="inlineDateInput" style="padding:4px 8px; border:1px solid var(--accent); border-radius:6px; font-family:inherit; font-size:13px; background:#fff8e7; margin-left:4px">`}
+            ${(() => {
+              const tr = getSessionTimeRange(sess);
+              return (tr.start && tr.end) ? ` · ⏱ ${escapeHtml(tr.start)}-${escapeHtml(tr.end)}` : '';
+            })()}
             ${sess.location ? ' · 📍 ' + escapeHtml(sess.location) : ''}
             ${sess.duration ? ' · ' + sess.duration + ' 分鐘' : ''}
             <br>📋 首堂諮詢
@@ -5376,6 +5385,10 @@ function renderSession() {
             ${sess.date
               ? fmtDate(sess.date)
               : `<span style="color:var(--work)">📅 請選日期：</span><input type="date" id="inlineDateInput" style="padding:4px 8px; border:1px solid var(--accent); border-radius:6px; font-family:inherit; font-size:13px; background:#fff8e7; margin-left:4px">`}
+            ${(() => {
+              const tr = getSessionTimeRange(sess);
+              return (tr.start && tr.end) ? ` · ⏱ ${escapeHtml(tr.start)}-${escapeHtml(tr.end)}` : '';
+            })()}
             ${sess.location ? ' · 📍 ' + escapeHtml(sess.location) : ''}
             ${sess.duration ? ' · ' + sess.duration + ' 分鐘' : ''}
           </div>
