@@ -5798,7 +5798,12 @@ function exportFirstConsultPdf(sess, pet) {
       font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
     }
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * {
+    box-sizing: border-box; margin: 0; padding: 0;
+    /* 強迫列印時保留背景色（Chrome 預設會剝掉，導致色塊只剩左邊線像「大引號」）*/
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   html, body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
                  "Noto Sans TC", "Heiti TC", sans-serif;
@@ -5993,7 +5998,12 @@ function exportPdf(sess, pet) {
       font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
     }
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * {
+    box-sizing: border-box; margin: 0; padding: 0;
+    /* 強迫列印時保留背景色（Chrome 預設會剝掉，導致色塊只剩左邊線像「大引號」）*/
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   html, body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
                  "Noto Sans TC", "Heiti TC", sans-serif;
@@ -6267,7 +6277,12 @@ function exportBookingPdf(booking, pet) {
       font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
     }
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * {
+    box-sizing: border-box; margin: 0; padding: 0;
+    /* 強迫列印時保留背景色（Chrome 預設會剝掉，導致色塊只剩左邊線像「大引號」）*/
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   html, body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
                  "Noto Sans TC", "Heiti TC", sans-serif;

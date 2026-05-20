@@ -19,7 +19,12 @@
     --ok: #c9a85a;
     --work: #c97a4f;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * {
+    box-sizing: border-box; margin: 0; padding: 0;
+    /* 強迫列印時保留背景色（避免色塊只剩左邊線像「大引號」）*/
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   html, body {
     background: var(--bg);
     color: var(--text);
