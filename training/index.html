@@ -1226,21 +1226,11 @@
     padding: 10px 12px;
     margin: 8px 0;
     border-radius: 6px;
-    border-left: 3px solid;
     line-height: 1.7;
   }
-  .block-step {
-    background: rgba(192,168,120,0.12);
-    border-left-color: #c0a878;
-  }
-  .block-note {
-    background: rgba(201,122,79,0.10);
-    border-left-color: #c97a4f;
-  }
-  .block-tip {
-    background: rgba(107,158,110,0.10);
-    border-left-color: #6b9e6e;
-  }
+  .block-step { background: rgba(192,168,120,0.12); }
+  .block-note { background: rgba(201,122,79,0.10); }
+  .block-tip  { background: rgba(107,158,110,0.10); }
   /* 編輯器內的色塊保持可編輯感（虛線邊框做視覺暗示） */
   .color-editor .block-step,
   .color-editor .block-note,
@@ -6090,13 +6080,12 @@ function exportPdf(sess, pet) {
     padding: 6pt 8pt;
     margin: 4pt 0;
     border-radius: 4pt;
-    border-left: 3px solid;
     white-space: normal;
     page-break-inside: avoid;
   }
-  .block-step { background: rgba(192,168,120,0.18); border-left-color: #c0a878; }
-  .block-note { background: rgba(201,122,79,0.12); border-left-color: #c97a4f; }
-  .block-tip  { background: rgba(107,158,110,0.12); border-left-color: #6b9e6e; }
+  .block-step { background: rgba(192,168,120,0.18); }
+  .block-note { background: rgba(201,122,79,0.12); }
+  .block-tip  { background: rgba(107,158,110,0.12); }
 
   .item-petnote {
     background: rgba(192, 138, 94, 0.12);
