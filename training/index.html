@@ -9362,14 +9362,50 @@ function normalizeNeutered(v) {
 
 let CSV_IMPORT_STATE = null;  // { rows, headers, mapping, batchSpecies }
 
+// 讀檔（支援 CSV / XLSX；CSV 自動偵測 UTF-8 / Big5）
+async function readSpreadsheetFile(file) {
+  const lname = (file.name || '').toLowerCase();
+  if (lname.endsWith('.xlsx') || lname.endsWith('.xls')) {
+    // Lazy load SheetJS（700KB，只在選 Excel 才載入）
+    if (!window.XLSX) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.sheetjs.com/0.20.3/package/dist/xlsx.full.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('SheetJS 載入失敗（網路問題？）'));
+        document.head.appendChild(s);
+      });
+    }
+    const buf = await file.arrayBuffer();
+    const wb = window.XLSX.read(buf, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    // sheet_to_json with header:1 → array of arrays，跟 CSV 一致
+    const rows = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false });
+    // 確保每個 cell 都是 string（不是 number / Date）
+    return rows.map(r => r.map(c => c == null ? '' : String(c)));
+  }
+  // CSV：UTF-8 → 看到 replacement char 就 fallback Big5
+  const buf = await file.arrayBuffer();
+  let text = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+  if (text.indexOf('�') >= 0) {
+    try { text = new TextDecoder('big5', { fatal: false }).decode(buf); }
+    catch (e) { /* TextDecoder 不支援 big5 就用 UTF-8 結果 */ }
+  }
+  return parseCsv(text);
+}
+
 function openCsvImport() {
   CSV_IMPORT_STATE = { rows: null, headers: null, mapping: {}, batchSpecies: 'dog' };
   const overlay = openModal(`
     <div class="modal" style="max-width:720px">
-      <h2>📥 從 CSV 匯入寵物</h2>
+      <h2>📥 從 CSV / Excel 匯入寵物</h2>
       <div class="field">
-        <label>選 CSV 檔（從 Google 表單 / SurveyCake 下載）</label>
-        <input id="csvFile" type="file" accept=".csv,text/csv" style="padding:8px;">
+        <label>選檔案（CSV / XLSX 都支援，可直接拖 Google 表單回覆 .xlsx 進來）</label>
+        <input id="csvFile" type="file" accept=".csv,.xlsx,.xls,text/csv" style="padding:8px;">
+        <p class="card-meta" style="font-size:12px; margin-top:6px">
+          • 系統會自動偵測編碼（UTF-8 / Big5），不用擔心 Excel 重存的亂碼<br>
+          • 已存在的寵物（同名 + 同飼主）會自動跳過，不會重複
+        </p>
       </div>
       <div id="csvImportContent"></div>
       <div class="modal-actions">
@@ -9382,10 +9418,9 @@ function openCsvImport() {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const rows = parseCsv(text);
-      if (rows.length < 2) {
-        showNotice('CSV 只有標題列，沒有資料', 'err');
+      const rows = await readSpreadsheetFile(file);
+      if (!rows || rows.length < 2) {
+        showNotice('檔案只有標題列或沒有資料', 'err');
         return;
       }
       CSV_IMPORT_STATE.headers = rows[0];
@@ -9397,7 +9432,7 @@ function openCsvImport() {
       });
       renderCsvMapping(overlay);
     } catch (err) {
-      showNotice('CSV 解析失敗：' + err.message, 'err');
+      showNotice('解析失敗：' + err.message, 'err');
     }
   };
 }
@@ -9498,35 +9533,58 @@ function renderCsvPreview(overlay) {
     showNotice('⚠️ 必須有一個欄位對應到「名字」', 'err');
     return;
   }
-  const previewPets = rows.slice(0, 3).map(r => csvRowToPet(r, headers, mapping, batchSpecies));
   const allPets = rows.map(r => csvRowToPet(r, headers, mapping, batchSpecies));
-  const validCount = allPets.filter(p => p.name).length;
-  const skippedCount = allPets.length - validCount;
+  // 分類：空白名 / 重複（既有）/ 新增
+  const blankCount = allPets.filter(p => !p.name).length;
+  const dupes = [];
+  const newcomers = [];
+  for (const p of allPets) {
+    if (!p.name) continue;
+    if (findExistingPet(p)) dupes.push(p);
+    else newcomers.push(p);
+  }
+  const validCount = newcomers.length;
 
-  const previewHtml = previewPets.map(p => `
+  // 預覽前 3 筆新增者
+  const previewPets = newcomers.slice(0, 3);
+  const previewHtml = previewPets.length === 0 ? '' : previewPets.map(p => `
     <div class="card" style="cursor:default; margin-bottom:8px;">
-      <div class="card-title">${speciesEmoji(p.species)} ${escapeHtml(p.name||'(空白名字、會被略過)')}</div>
+      <div class="card-title">${speciesEmoji(p.species)} ${escapeHtml(p.name)}</div>
       <div class="card-meta">${escapeHtml(petTagline(p))} · 飼主：${escapeHtml(p.ownerName||'—')}${p.ownerContact?' · '+escapeHtml(p.ownerContact):''}</div>
       ${p.notes ? `<div class="card-meta" style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--brown-light); white-space:pre-wrap; max-height:120px; overflow-y:auto;">${escapeHtml(p.notes)}</div>` : ''}
     </div>
   `).join('');
 
+  const dupesHtml = dupes.length === 0 ? '' : `
+    <details style="margin-top:8px; padding:8px 10px; background:rgba(192,138,94,0.08); border-radius:6px; font-size:13px">
+      <summary style="cursor:pointer; color:var(--brown-dark); font-weight:500">
+        ⏭ ${dupes.length} 筆會跳過（已存在）
+      </summary>
+      <ul style="margin:6px 0 0 18px; line-height:1.6; color:var(--text-soft); font-size:12px">
+        ${dupes.slice(0, 20).map(p => `<li>${escapeHtml(p.name)}${p.ownerName?` · 飼主 ${escapeHtml(p.ownerName)}`:''}</li>`).join('')}
+        ${dupes.length > 20 ? `<li>...還有 ${dupes.length - 20} 筆</li>` : ''}
+      </ul>
+    </details>
+  `;
+
   document.getElementById('csvImportContent').innerHTML = `
     <div class="notice" style="margin-bottom:12px">
-      準備匯入 <b>${validCount}</b> 隻寵物${skippedCount?`（${skippedCount} 筆名字空白會略過）`:''}。下方是前 3 筆預覽：
+      <b>${allPets.length}</b> 筆資料 → <b style="color:var(--good)">${validCount}</b> 筆新增${dupes.length?` · <b style="color:var(--work)">${dupes.length}</b> 筆重複跳過`:''}${blankCount?` · ${blankCount} 筆名字空白略過`:''}
     </div>
+    ${validCount > 0 ? `<div style="font-size:12px; color:var(--text-soft); margin-bottom:6px">前 ${Math.min(3, validCount)} 筆預覽：</div>` : ''}
     ${previewHtml}
+    ${dupesHtml}
     <div class="actions-row" style="margin-top:14px">
       <button class="btn ghost" id="csv_back">← 重新對應</button>
-      <button class="btn" id="csv_confirm">✓ 確認匯入 ${validCount} 筆</button>
+      <button class="btn" id="csv_confirm" ${validCount===0?'disabled':''}>${validCount > 0 ? `✓ 確認匯入 ${validCount} 筆新寵物` : '沒有新寵物可匯入'}</button>
     </div>
   `;
   document.getElementById('csv_back').onclick = () => renderCsvMapping(overlay);
-  document.getElementById('csv_confirm').onclick = () => {
-    const newPets = allPets.filter(p => p.name);
+  const confirmBtn = document.getElementById('csv_confirm');
+  if (confirmBtn && validCount > 0) confirmBtn.onclick = () => {
     const cur = load(KEYS.pets, []);
-    save(KEYS.pets, cur.concat(newPets));
-    showNotice(`✅ 已匯入 ${newPets.length} 隻寵物`);
+    save(KEYS.pets, cur.concat(newcomers));
+    showNotice(`✅ 已匯入 ${newcomers.length} 隻新寵物${dupes.length?`，${dupes.length} 筆重複已跳過`:''}`);
     overlay.remove();
     render();
   };
