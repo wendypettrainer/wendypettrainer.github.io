@@ -8012,11 +8012,11 @@ function renderCalendar() {
     sessionsByDate[s.date].push(s);
   }
 
-  // 月份 grid
+  // 月份 grid（週一起算：Mon=0, Tue=1, ..., Sun=6）
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0);
   const daysInMonth = lastDay.getDate();
-  const firstWeekday = firstDay.getDay();  // 0=Sun
+  const firstWeekday = (firstDay.getDay() + 6) % 7;  // Sun=0→6, Mon=1→0, ...
 
   const cells = [];
   for (let i = 0; i < firstWeekday; i++) cells.push(null);
@@ -8065,7 +8065,7 @@ function renderCalendar() {
 
   const weekHeader = `
     <div class="cal-week-header">
-      <div class="sun">日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div class="sat">六</div>
+      <div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div class="sat">六</div><div class="sun">日</div>
     </div>
   `;
 
