@@ -15,6 +15,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/zh-tw.js"></script>
 <style>
   :root {
     /* 北歐風 + 一點暖意：淡奶白 + 深炭 + 焦糖 accent */
@@ -9743,6 +9746,9 @@ function openTableEditor(initialTable, onSave) {
       <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
         <button class="small-btn" id="te_addrow">＋ 新增列</button>
         <button class="small-btn" id="te_addcol">＋ 新增欄</button>
+        <button class="small-btn" id="te_copy" title="把整個表格（含上色）暫存，可貼到另一個方法">📋 複製表格</button>
+        <button class="small-btn" id="te_paste" title="把上次複製的表格覆蓋目前表格">📥 貼上表格</button>
+        <button class="small-btn" id="te_tsv" title="複製成 Tab 分隔文字，可貼到 Excel / Google Sheets">📤 複製成 TSV</button>
         <button class="small-btn danger" id="te_clear">清空表格</button>
       </div>
       <div class="modal-actions">
@@ -9779,6 +9785,50 @@ function openTableEditor(initialTable, onSave) {
     t = emptyTable(3, 3);
     render();
   };
+  // 複製表格 → window 級暫存，跨 modal 可貼上
+  overlay.querySelector('#te_copy').onclick = () => {
+    syncFromDom();
+    window.__tableClipboard = JSON.parse(JSON.stringify(t));
+    showNotice(`已複製表格（${t.headers.length} 欄 × ${t.rows.length} 列），可在任一方法中貼上`, 'ok');
+  };
+  overlay.querySelector('#te_paste').onclick = () => {
+    const clip = window.__tableClipboard;
+    if (!clip || !clip.headers || !clip.rows) {
+      showNotice('剪貼簿是空的，請先在另一個表格按「複製表格」', 'err');
+      return;
+    }
+    if (!confirm(`覆蓋目前表格？\n（會載入剪貼簿的 ${clip.headers.length} 欄 × ${clip.rows.length} 列）`)) return;
+    t = JSON.parse(JSON.stringify(clip));
+    render();
+  };
+  // 複製成 TSV → 寫到系統剪貼簿，可直接貼到 Excel / Google Sheets
+  overlay.querySelector('#te_tsv').onclick = async () => {
+    syncFromDom();
+    const htmlToText = (h) => {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = h || '';
+      return (tmp.textContent || '').replace(/[\t\r\n]+/g, ' ').trim();
+    };
+    const lines = [];
+    lines.push(t.headers.map(htmlToText).join('\t'));
+    t.rows.forEach(r => lines.push(r.map(htmlToText).join('\t')));
+    const tsv = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(tsv);
+      showNotice('已複製為 TSV，可直接貼到 Excel / Google Sheets', 'ok');
+    } catch (e) {
+      // Fallback for non-HTTPS / older browsers
+      const ta = document.createElement('textarea');
+      ta.value = tsv;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showNotice('已複製為 TSV（fallback）', 'ok'); }
+      catch(_) { showNotice('複製失敗，請手動選取', 'err'); }
+      ta.remove();
+    }
+  };
   overlay.querySelector('#te_cancel').onclick = () => overlay.remove();
   overlay.querySelector('#te_save').onclick = () => {
     syncFromDom();
@@ -9806,8 +9856,45 @@ function render() {
   else if (state.view === 'calendar') renderCalendar();
 }
 
+/* ============== FLATPICKR：強制週一起算 ============== */
+function initFlatpickrOn(root) {
+  if (!window.flatpickr) return;
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll('input[type="date"]:not(.flatpickr-input)').forEach(el => {
+    try {
+      const baseLocale = (window.flatpickr.l10ns && window.flatpickr.l10ns.zh_tw) || {};
+      flatpickr(el, {
+        locale: Object.assign({}, baseLocale, { firstDayOfWeek: 1 }),
+        dateFormat: 'Y-m-d',
+        allowInput: true,
+        disableMobile: true, // iOS 也用 flatpickr，避免原生輪盤週日起算
+      });
+    } catch(e) { console.warn('flatpickr init failed', e); }
+  });
+}
+function startFlatpickrObserver() {
+  // 初始化現有的 date input
+  initFlatpickrOn(document);
+  // 監看後續動態插入的 date input（例如切換頁面後重新 render）
+  if (!window.MutationObserver) return;
+  const obs = new MutationObserver(muts => {
+    for (const m of muts) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (node.matches && node.matches('input[type="date"]')) {
+          initFlatpickrOn(node.parentNode || document);
+        } else if (node.querySelectorAll) {
+          initFlatpickrOn(node);
+        }
+      }
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+}
+
 initStorage();
 render();
+startFlatpickrObserver();
 refreshSyncDot();
 // 載入後背景同步（不阻塞 UI）
 if (syncEnabled()) {
