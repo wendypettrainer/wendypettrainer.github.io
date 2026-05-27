@@ -6121,6 +6121,9 @@ function exportPdf(sess, pet) {
     margin: 16pt 0 8pt;
     padding-bottom: 4pt;
     border-bottom: 2px solid #c9b693;
+    /* 標題不要單獨留在頁底，後面跟著的第一個 item 要黏在一起 */
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   .item {
@@ -6128,11 +6131,15 @@ function exportPdf(sess, pet) {
     border-radius: 8pt;
     padding: 10pt 12pt;
     margin-bottom: 8pt;
-    page-break-inside: avoid;
+    /* 不再強制整個 item 不切頁：項目很高時會把第一頁推空大半，反而醜 */
+    /* 真正需要不切的是色塊（.block-*）與方法（.item-method），它們各自有規則 */
   }
   .item-row {
     display: flex; justify-content: space-between;
     align-items: center; gap: 10pt;
+    /* 項目名稱要黏在後面的內容，避免名稱單獨在頁底 */
+    page-break-after: avoid;
+    break-after: avoid;
   }
   .item-name { font-weight: 500; flex: 1; }
   .rating {
@@ -6150,6 +6157,11 @@ function exportPdf(sess, pet) {
     border-radius: 6pt;
     margin-top: 6pt;
     font-size: 11pt;
+  }
+  /* 表格列、色塊不要被切兩半（細粒度保護，比保護整個 .item / .item-method 更不容易產生空白頁）*/
+  table tr, table thead {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
   .item-method-steps {
     margin-top: 4pt;
@@ -6185,6 +6197,9 @@ function exportPdf(sess, pet) {
     font-size: 9pt; color: #8b6f47;
     font-weight: 600; letter-spacing: 0.5px;
     margin-bottom: 3pt;
+    /* 「🎯 方法：xxx」標籤要黏住下方內容，不單獨留在頁底 */
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   .homework {
