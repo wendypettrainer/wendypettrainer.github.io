@@ -6011,7 +6011,15 @@ function exportPdf(sess, pet) {
         const methodsHtml = checkedNames.map(mn => {
           const m = itMethods.find(im => im.name === mn);
           // 過 sanitize → 再過 legacyToBlocks（已是 block 結構則 no-op）
-          const stepsHtml = m ? legacyToBlocks(ensureColorHtml(m.steps)) : '';
+          let stepsHtml = m ? legacyToBlocks(ensureColorHtml(m.steps)) : '';
+          // PDF 渲染前清掉編輯時累積的「視覺空白」：
+          //   (1) 連續 2+ <br> 收成 1 個
+          //   (2) 空的 <p></p>、<div></div>、<p><br></p>、<div><br></div> 整個移除
+          //   (3) 字串尾端的 trailing <br> 拿掉（讓 stepsHtml 結尾貼著 table）
+          stepsHtml = stepsHtml
+            .replace(/(<br\s*\/?>\s*){2,}/gi, '<br>')
+            .replace(/<(p|div)(?:\s[^>]*)?>\s*(?:<br\s*\/?>\s*)?<\/\1>/gi, '')
+            .replace(/(<br\s*\/?>\s*)+$/i, '');
           const hasSteps = stepsHtml && stepsHtml.replace(/<[^>]+>/g, '').trim().length > 0;
           const tblHtml = m && m.table ? methodTableToHtml(m.table) : '';
           // 方法找不到（被改名 / 刪除）→ 顯示警告而非空白
@@ -6179,7 +6187,8 @@ function exportPdf(sess, pet) {
   .item-method-steps {
     margin-top: 4pt;
     /* 不強制顏色，繼承 body 深色文字（跟編輯器一致） */
-    white-space: pre-wrap;
+    /* 不能用 pre-wrap：HTML 元素間的 \n 會被當成可見空白，撐出大空格 */
+    white-space: normal;
   }
   /* 訓練項目色塊（PDF 列印用）*/
   .block-step, .block-note, .block-tip {

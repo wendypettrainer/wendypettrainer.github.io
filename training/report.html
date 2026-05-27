@@ -123,7 +123,8 @@
   .item-method-steps {
     margin-top: 4px;
     /* 不強制顏色，繼承 body 預設文字色 */
-    white-space: pre-wrap;
+    /* pre-wrap 會把 HTML 元素間的 \n 渲染成可見空白，撐出大空格 → 改用 normal */
+    white-space: normal;
   }
   /* 訓練項目色塊（步驟 / 注意 / 提示）*/
   .block-step, .block-note, .block-tip {
