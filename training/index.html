@@ -6158,10 +6158,23 @@ function exportPdf(sess, pet) {
     margin-top: 6pt;
     font-size: 11pt;
   }
-  /* 表格列、色塊不要被切兩半（細粒度保護，比保護整個 .item / .item-method 更不容易產生空白頁）*/
-  table tr, table thead {
+  /* 表格：明確允許跨頁切，不要保留太多 widow/orphan 空間 */
+  table {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+  table tr {
+    /* 列不要切兩半 */
     page-break-inside: avoid;
     break-inside: avoid;
+  }
+  table thead {
+    /* 表頭跟著表體：避免表頭單獨留頁底 */
+    display: table-header-group;
+  }
+  /* 連續多個 <br> 在 PDF 會撐出空白（編輯時累積的） — 只保留第一個的視覺高度 */
+  br + br {
+    display: none;
   }
   .item-method-steps {
     margin-top: 4pt;
