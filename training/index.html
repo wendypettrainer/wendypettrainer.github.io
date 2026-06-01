@@ -1397,6 +1397,7 @@ const KEYS = {
   bookingTemplate: 'petcare.bookingTemplate',    // 帳戶 + 須知 + 預設值
   payments: 'petcare.payments',                  // 實際金流：收款 / 退費（per booking）
   studioPayments: 'petcare.studioPayments',      // 教室月結款（per studio + month）
+  studioRates: 'petcare.studioRates',            // 教室鐘點費表（per studio name → 4 種課程費率）
   materials: 'petcare.materials',                // 教材庫（給家長 PDF 附錄用）
   lineTemplate: 'petcare.lineTemplate',           // LINE 上課提醒訊息模板
   settings: 'petcare.settings',
@@ -1414,6 +1415,7 @@ const SYNCABLE_KEYS = new Set([
   'petcare.bookingTemplate',
   'petcare.payments',
   'petcare.studioPayments',
+  'petcare.studioRates',
   'petcare.materials',
   'petcare.lineTemplate',
 ]);
@@ -2058,6 +2060,7 @@ function initStorage() {
   if (!localStorage.getItem(KEYS.bookingTemplate)) _writeRaw(KEYS.bookingTemplate, DEFAULT_BOOKING_TEMPLATE);
   if (!localStorage.getItem(KEYS.payments)) _writeRaw(KEYS.payments, []);
   if (!localStorage.getItem(KEYS.studioPayments)) _writeRaw(KEYS.studioPayments, []);
+  if (!localStorage.getItem(KEYS.studioRates)) _writeRaw(KEYS.studioRates, {});
   if (!localStorage.getItem(KEYS.materials)) _writeRaw(KEYS.materials, []);
   if (!localStorage.getItem(KEYS.settings)) _writeRaw(KEYS.settings, {
     githubPat: '',
@@ -2075,6 +2078,8 @@ function initStorage() {
   _writeRaw(KEYS.materials, ensureMaterialShape(load(KEYS.materials, [])));
   // Migration: pet 補 source / studioName / studioRates（既有視為 direct）
   _writeRaw(KEYS.pets, ensurePetShape(load(KEYS.pets, [])));
+  // 一次性：把現有 pet.studioRates 反向 seed 到全域 studioRates map
+  migrateStudioRatesOnce();
   _writeRaw(KEYS.version, 3);
 }
 
@@ -2329,6 +2334,58 @@ function petTagline(p) {
     neuteredLabel(p.neutered),
     p.birth,
   ].filter(Boolean).join(' · ');
+}
+
+/* ============== STUDIO RATES (per-studio default + per-pet override) ============== */
+// 結構：load(KEYS.studioRates) → { [studioName: string]: { oneOnOne, group, firstConsult, other } }
+function getStudioRatesMap() {
+  const m = load(KEYS.studioRates, {});
+  return (m && typeof m === 'object') ? m : {};
+}
+function getStudioRate(studioName, courseType) {
+  if (!studioName) return 0;
+  const map = getStudioRatesMap();
+  const rec = map[studioName.trim()];
+  if (!rec || typeof rec !== 'object') return 0;
+  return Number(rec[courseType]) || 0;
+}
+// 鐘點費解析：pet 自己的 override 優先，沒值 fallback 到教室全域 map，最後 0
+function resolveStudioRate(pet, courseType) {
+  if (!pet || !courseType) return 0;
+  const own = Number(pet.studioRates && pet.studioRates[courseType]) || 0;
+  if (own > 0) return own;
+  return getStudioRate(pet.studioName, courseType);
+}
+// 列出所有「目前 in-use」的教室名稱（從 pets 撈 + 從 studioRates map 撈，去重）
+function listAllStudioNames() {
+  const set = new Set();
+  load(KEYS.pets, []).forEach(p => {
+    const n = (p.studioName || '').trim();
+    if (p.source === 'studio' && n) set.add(n);
+  });
+  Object.keys(getStudioRatesMap()).forEach(n => { if (n) set.add(n); });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+}
+// 一次性 migration：把現有 pet.studioRates 反向 seed 進全域 map（只填空欄，不覆蓋既有設定）
+function migrateStudioRatesOnce() {
+  const settings = load(KEYS.settings, {});
+  if (settings._studioRatesMigrated) return;
+  const map = getStudioRatesMap();
+  let touched = false;
+  load(KEYS.pets, []).forEach(p => {
+    if (p.source !== 'studio') return;
+    const name = (p.studioName || '').trim();
+    if (!name || !p.studioRates) return;
+    const rates = p.studioRates;
+    if (!map[name]) map[name] = { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 };
+    ['oneOnOne', 'group', 'firstConsult', 'other'].forEach(k => {
+      const v = Number(rates[k]) || 0;
+      if (v > 0 && !map[name][k]) { map[name][k] = v; touched = true; }
+    });
+  });
+  if (touched) save(KEYS.studioRates, map);
+  settings._studioRatesMigrated = true;
+  save(KEYS.settings, settings);
 }
 
 function getPet(id) { return load(KEYS.pets, []).find(p => p.id === id); }
@@ -2974,7 +3031,7 @@ function openPetForm(pet = null) {
           <input id="f_studioAddress" type="text" value="${escapeAttr(data.studioAddress || '')}" placeholder="開新預約時自動帶入此地址（覆蓋飼主地址）">
         </div>
         <div class="field">
-          <label>鐘點費（按課程類型，NT$ / 堂）</label>
+          <label>鐘點費 override（NT$ / 堂，留 0 用教室預設）</label>
           <div class="row2">
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">一對一</div><input id="f_rate_oneOnOne" type="number" min="0" step="1" value="${data.studioRates.oneOnOne || ''}" placeholder="0"></div>
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">團體班</div><input id="f_rate_group" type="number" min="0" step="1" value="${data.studioRates.group || ''}" placeholder="0"></div>
@@ -2983,7 +3040,7 @@ function openPetForm(pet = null) {
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">首堂諮詢</div><input id="f_rate_firstConsult" type="number" min="0" step="1" value="${data.studioRates.firstConsult || ''}" placeholder="0"></div>
             <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">其他</div><input id="f_rate_other" type="number" min="0" step="1" value="${data.studioRates.other || ''}" placeholder="0"></div>
           </div>
-          <p class="card-meta" style="margin-top:8px; font-size:12px">• 教室付給你的單堂鐘點費。新建課程預約時，會依據課程類型自動帶入對應金額。</p>
+          <p class="card-meta" style="margin-top:8px; font-size:12px">• 預設費率請到「<b>設定 → 🏫 教室鐘點費</b>」用教室名稱統一設定，所有同教室寵物會繼承。<br>• 這裡只填這隻寵物<b>特殊費率</b>（&gt; 0 會覆蓋教室預設）。</p>
         </div>
       </div>
       <div class="field">
@@ -4892,7 +4949,8 @@ function renderBooking() {
   // 新建 booking 時：地點優先用「飼主地址」（多數客戶到府上課），沒填才退到全域預設
   const isStudioPet = pet.source === 'studio';
   const defaultCourseType = 'oneOnOne';
-  const studioRate = (pet.studioRates && pet.studioRates[defaultCourseType]) || 0;
+  // 鐘點費 fallback：pet 自己的 override 優先，再來教室全域 map，最後 0
+  const studioRate = resolveStudioRate(pet, defaultCourseType);
   // 教室派案：地址優先用 pet.studioAddress；direct：用 pet.ownerAddress 或 default
   const initialLocation = isStudioPet
     ? ((pet.studioAddress && pet.studioAddress.trim()) || (pet.ownerAddress && pet.ownerAddress.trim()) || tpl.defaultLocation)
@@ -5014,7 +5072,15 @@ function renderBooking() {
 
       <div class="card" style="cursor:default">
         <h3 style="font-size:14px; color:var(--brown-dark); margin-bottom:10px;">${b.isStudioBooking ? '🏫 教室派案 — 鐘點費' : '費用'}</h3>
-        ${b.isStudioBooking ? `<p class="card-meta" style="margin:0 0 8px; font-size:12px">教室「${escapeHtml(b.studioNameSnapshot || pet.studioName || '')}」派案。鐘點費依課程類型自動帶入，可手動覆寫；交通費 / 優惠不適用。</p>` : ''}
+        ${b.isStudioBooking ? (() => {
+          const sName = b.studioNameSnapshot || pet.studioName || '';
+          const hasGlobalRate = sName && Object.values(getStudioRatesMap()[sName] || {}).some(v => Number(v) > 0);
+          const hasPetOverride = pet.studioRates && Object.values(pet.studioRates).some(v => Number(v) > 0);
+          const warn = (!hasGlobalRate && !hasPetOverride)
+            ? `<br><span style="color:var(--work);">⚠️ 教室「${escapeHtml(sName)}」尚未設定鐘點費。請到「設定 → 🏫 教室鐘點費」設定，或在寵物資料填 override。</span>`
+            : '';
+          return `<p class="card-meta" style="margin:0 0 8px; font-size:12px">教室「${escapeHtml(sName)}」派案。鐘點費依課程類型自動帶入，可手動覆寫；交通費 / 優惠不適用。${warn}</p>`;
+        })() : ''}
         <div style="display:grid; grid-template-columns: 1fr 100px 60px 1fr; gap:8px; align-items:center; margin-bottom:8px;">
           <div>${b.isStudioBooking ? '鐘點費' : '課程'}</div>
           <input id="bk_fee" type="number" min="0" value="${b.feePerClass}">
@@ -5154,8 +5220,8 @@ function renderBooking() {
         // 切到 group 而 groupSubType 是空字串時，預設選 puppy
         if (b.courseType === 'group' && !b.groupSubType) b.groupSubType = 'puppy';
         // 教室派案：切換 courseType 時自動更新鐘點費
-        if (b.isStudioBooking && pet.studioRates) {
-          b.feePerClass = pet.studioRates[b.courseType] || 0;
+        if (b.isStudioBooking) {
+          b.feePerClass = resolveStudioRate(pet, b.courseType);
         }
         rerender();
       };
@@ -7049,6 +7115,22 @@ function renderSettings() {
     </details>
 
     <details class="settings-section">
+    <summary>🏫 教室鐘點費</summary>
+    <div class="card" style="cursor:default">
+      <p class="card-meta" style="margin-bottom:12px">
+        • 設定每個教室的<b>鐘點費</b>，新增「教室派案」booking 時會自動帶入對應課程類型的費率。<br>
+        • 教室名稱會自動從「source = 教室派案」的寵物中撈出來；若想新增其他教室，可手動加入。<br>
+        • 寵物個人「編輯寵物資料」裡的鐘點費若有填（&gt; 0），會 <b>覆蓋</b> 教室預設值。
+      </p>
+      <div id="studioRatesList"></div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap;">
+        <input type="text" id="newStudioName" placeholder="新教室名稱（如：毛有所思）" style="flex:1; min-width:180px;">
+        <button class="small-btn" id="addStudioBtn">＋ 新增教室</button>
+      </div>
+    </div>
+    </details>
+
+    <details class="settings-section">
     <summary>課程預約樣板</summary>
     <div class="card" style="cursor:default">
       <p class="card-meta" style="margin-bottom:12px">
@@ -7514,6 +7596,70 @@ function renderSettings() {
       }
     };
   }
+  /* ============== 教室鐘點費 ============== */
+  function renderStudioRatesList() {
+    const list = document.getElementById('studioRatesList');
+    if (!list) return;
+    const names = listAllStudioNames();
+    const map = getStudioRatesMap();
+    if (names.length === 0) {
+      list.innerHTML = `<p class="card-meta" style="margin:0; color:var(--text-soft);">尚無教室。在「寵物列表 → 新增寵物 → 設為教室派案」加入第一隻教室派案寵物後，這裡會自動列出，或直接用下方欄位新增。</p>`;
+      return;
+    }
+    list.innerHTML = names.map(name => {
+      const r = map[name] || { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 };
+      return `
+        <div class="studio-rate-row" style="border:1px solid var(--brown-light); border-radius:8px; padding:10px 12px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px;">
+            <b style="font-size:14px;">🏫 ${escapeHtml(name)}</b>
+            <button class="small-btn danger" data-studio-del="${escapeAttr(name)}" title="刪除這個教室費率（不影響寵物）">移除</button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px;">
+            <div><div style="font-size:11px; color:var(--text-soft); margin-bottom:2px">一對一</div><input type="number" min="0" step="1" data-studio="${escapeAttr(name)}" data-ct="oneOnOne" value="${r.oneOnOne || ''}" placeholder="0"></div>
+            <div><div style="font-size:11px; color:var(--text-soft); margin-bottom:2px">團體班</div><input type="number" min="0" step="1" data-studio="${escapeAttr(name)}" data-ct="group" value="${r.group || ''}" placeholder="0"></div>
+            <div><div style="font-size:11px; color:var(--text-soft); margin-bottom:2px">首堂諮詢</div><input type="number" min="0" step="1" data-studio="${escapeAttr(name)}" data-ct="firstConsult" value="${r.firstConsult || ''}" placeholder="0"></div>
+            <div><div style="font-size:11px; color:var(--text-soft); margin-bottom:2px">其他</div><input type="number" min="0" step="1" data-studio="${escapeAttr(name)}" data-ct="other" value="${r.other || ''}" placeholder="0"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    // input → 即時存
+    list.querySelectorAll('input[data-studio]').forEach(inp => {
+      inp.oninput = () => {
+        const name = inp.dataset.studio;
+        const ct = inp.dataset.ct;
+        const v = Number(inp.value) || 0;
+        const m = getStudioRatesMap();
+        if (!m[name]) m[name] = { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 };
+        m[name][ct] = v;
+        save(KEYS.studioRates, m);
+      };
+    });
+    list.querySelectorAll('button[data-studio-del]').forEach(btn => {
+      btn.onclick = () => {
+        const name = btn.dataset.studioDel;
+        if (!confirm(`移除教室「${name}」的鐘點費設定？\n（不會刪到寵物，只是清掉這個教室的預設費率）`)) return;
+        const m = getStudioRatesMap();
+        delete m[name];
+        save(KEYS.studioRates, m);
+        renderStudioRatesList();
+      };
+    });
+  }
+  renderStudioRatesList();
+  const addBtn = document.getElementById('addStudioBtn');
+  if (addBtn) addBtn.onclick = () => {
+    const inp = document.getElementById('newStudioName');
+    const name = (inp.value || '').trim();
+    if (!name) { showNotice('請先輸入教室名稱', 'err'); return; }
+    const m = getStudioRatesMap();
+    if (m[name]) { showNotice('已存在這個教室', 'err'); return; }
+    m[name] = { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 };
+    save(KEYS.studioRates, m);
+    inp.value = '';
+    renderStudioRatesList();
+  };
+
   document.getElementById('s_pullNow').onclick = async () => {
     if (!syncEnabled()) { showNotice('請先開啟同步', 'err'); return; }
     showNotice('從雲端拉取⋯');
