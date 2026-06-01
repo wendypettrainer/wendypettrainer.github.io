@@ -3262,7 +3262,7 @@ function renderSessions() {
       <div id="petInfoToggle" style="display:flex; align-items:flex-start; justify-content:space-between; cursor:pointer; user-select:none; gap:8px">
         <div style="flex:1; min-width:0">
           ${pet.source === 'studio' ? `<div style="margin-bottom:4px"><span class="studio-badge" style="margin-left:0">🏫 ${escapeHtml(pet.studioName || '教室派案')}</span></div>` : ''}
-          <div class="card-meta" style="margin:0">${escapeHtml(petTagline(pet))}</div>
+          <div class="card-meta" style="margin:0"><b style="color:var(--brown-dark); font-weight:700">${escapeHtml(pet.name)}</b> · ${escapeHtml(petTagline(pet))}</div>
         </div>
         <span style="color:var(--text-soft); font-size:12px; flex-shrink:0; padding-top:2px">${petInfoCollapsed ? '▶ 展開' : '▼ 收起'}</span>
       </div>
