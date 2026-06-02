@@ -298,7 +298,8 @@
     padding: 8px 10px;
     margin: 6px 0;
     border-radius: 6px;
-    white-space: normal;
+    /* pre-line：保留色塊內部使用者輸入的 \n 換行（如多條 ⚠️），但折疊其他空白 */
+    white-space: pre-line;
     line-height: 1.7;
   }
   .block-step { background: rgba(192,168,120,0.18); }
