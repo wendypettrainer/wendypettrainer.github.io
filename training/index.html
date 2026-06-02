@@ -2011,7 +2011,11 @@ function load(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
-  } catch { return fallback; }
+  } catch (e) {
+    // 保險：parse 失敗時留 warning，避免靜默 fallback 把空陣列送上雲端
+    console.warn('[load] parse failed for', key, '— falling back to default. Raw length:', (localStorage.getItem(key)||'').length, 'Error:', e.message);
+    return fallback;
+  }
 }
 function _writeRaw(key, value) {
   // 直接寫，不觸發 sync（用於 pull 從雲端蓋本機）
@@ -2205,8 +2209,42 @@ async function pushToCloud() {
     // 推之前把 lastModified 蓋成現在，確保雲端有時間戳給其他裝置比較
     _writeRaw(KEYS.lastModified, new Date().toISOString());
     const payload = buildSyncPayload();
+    const newContent = JSON.stringify(payload, null, 2);
+
+    /* === 保險 1：size sanity check ===
+       拉雲端目前的 size 比對。如果這次要推的內容比雲端小 50% 以上，跳 confirm 防止意外大幅縮減（2026-06-02 災難等級）。 */
+    let proceed = true;
+    try {
+      const currentGist = await gistApi('GET', `/gists/${gistId}`);
+      const currentContent = currentGist?.files?.['data.json']?.content || '';
+      if (currentContent && newContent.length < currentContent.length * 0.5) {
+        const msg = `⚠️ 即將推上雲端的資料比雲端目前的內容少超過 50%：\n` +
+                    `  雲端目前：${currentContent.length.toLocaleString()} 字\n` +
+                    `  本機要推：${newContent.length.toLocaleString()} 字\n\n` +
+                    `這可能是資料異常縮減。確定要推上去蓋掉雲端嗎？\n` +
+                    `（若不確定請按取消，並聯絡開發者）`;
+        proceed = confirm(msg);
+        if (!proceed) {
+          setSyncStatus('error', '使用者取消推送（資料縮減超過 50%）');
+          console.warn('[sync] push cancelled: size shrink > 50%');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[sync] size check failed, proceeding anyway:', e.message);
+    }
+
+    /* === 保險 2：push 前自動保留上一份 payload 到本地備份 ===
+       如果雲端被誤蓋，至少本地有一份 backup 可以還原。 */
+    try {
+      _writeRaw('petcare._lastPushBackup', {
+        timestamp: new Date().toISOString(),
+        content: newContent,
+      });
+    } catch(e) { console.warn('[sync] backup write failed:', e.message); }
+
     await gistApi('PATCH', `/gists/${gistId}`, {
-      files: { 'data.json': { content: JSON.stringify(payload, null, 2) } },
+      files: { 'data.json': { content: newContent } },
     });
     updateSyncSettings({ syncLastTime: new Date().toISOString() });
     setSyncStatus('ok');
@@ -2383,9 +2421,10 @@ function migrateStudioRatesOnce() {
       if (v > 0 && !map[name][k]) { map[name][k] = v; touched = true; }
     });
   });
-  if (touched) save(KEYS.studioRates, map);
+  // 保險：migration 用 _writeRaw 不觸發 push，避免本機被誤認為「最新」造成 sync race
+  if (touched) _writeRaw(KEYS.studioRates, map);
   settings._studioRatesMigrated = true;
-  save(KEYS.settings, settings);
+  _writeRaw(KEYS.settings, settings);
 }
 
 function getPet(id) { return load(KEYS.pets, []).find(p => p.id === id); }
