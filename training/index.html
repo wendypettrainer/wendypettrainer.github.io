@@ -6246,10 +6246,9 @@ function exportPdf(sess, pet) {
     /* 表頭跟著表體：避免表頭單獨留頁底 */
     display: table-header-group;
   }
-  /* 連續多個 <br> 在 PDF 會撐出空白（編輯時累積的） — 只保留第一個的視覺高度 */
-  br + br {
-    display: none;
-  }
+  /* 註：曾經有 `br + br { display:none }` 規則，但 CSS 的 + 在 element 之間忽略 text node，
+     會把「<br>...文字...<br>」中後面的 <br> 也誤判為 sibling 而隱藏，導致兩段文字黏在一起。
+     多餘 <br> 的折疊改由 JS regex 預處理，這條 CSS 規則就拿掉。 */
   .item-method-steps {
     margin-top: 4pt;
     /* 不強制顏色，繼承 body 深色文字（跟編輯器一致） */
