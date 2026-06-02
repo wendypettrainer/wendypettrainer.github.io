@@ -846,8 +846,25 @@
   .tomorrow-info { flex: 1; min-width: 0; }
   .tomorrow-name { font-weight: 600; font-size: 14px; color: var(--brown-dark); }
   .tomorrow-meta { font-size: 12px; color: var(--text-soft); margin-top: 2px; }
-  .tomorrow-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .tomorrow-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
   .btn-sm { padding: 6px 10px !important; font-size: 12px !important; }
+  /* 「通知家長」LINE 按鈕：用 LINE 招牌綠 + 白字 + bolder，主要 action 視覺上跳出來 */
+  .btn-line-notify {
+    background: #06C755;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(6,199,85,0.3);
+    transition: background 0.15s, transform 0.05s;
+  }
+  .btn-line-notify:hover { background: #05B048; }
+  .btn-line-notify:active { transform: translateY(1px); }
 
   /* Forms */
   label { display: block; font-size: 13px; color: var(--text-soft); margin-bottom: 6px; }
@@ -2726,8 +2743,8 @@ function buildTomorrowReminderHtml() {
           <div class="tomorrow-meta">${escapeHtml(meta)}</div>
         </div>
         <div class="tomorrow-actions">
-          <button class="btn ghost btn-sm" data-act="copy-line" data-sid="${s.id}" title="複製 LINE 提醒訊息">📋 LINE</button>
-          <button class="btn ghost btn-sm" data-act="open-gcal" data-sid="${s.id}" title="加入 Google 行事曆">📅 行事曆</button>
+          <button class="btn-line-notify" data-act="copy-line" data-sid="${s.id}" title="複製 LINE 提醒訊息給家長">📲 通知家長</button>
+          <button class="btn ghost btn-sm" data-act="open-gcal" data-sid="${s.id}" title="加入 Google 行事曆">📅</button>
         </div>
       </div>`;
   }).join('');
@@ -7294,19 +7311,27 @@ function renderSettings() {
     <div id="itemEditor"></div>
     </details>
 
-    <details class="settings-section">
-    <summary>資料管理</summary>
+    <details class="settings-section" open>
+    <summary>📦 資料管理 / 本機備份</summary>
     <div class="card" style="cursor:default">
       <div class="actions-row">
-        <button class="btn ghost" id="exportData">匯出全部資料 (JSON)</button>
-        <button class="btn ghost" id="importData">匯入 JSON</button>
-        <button class="btn danger" id="resetItems">重設清單為預設</button>
+        <button class="btn" id="exportData">⬇ 下載備份檔 (JSON)</button>
+        <button class="btn ghost" id="importData">⬆ 從備份還原</button>
+        <button class="btn danger" id="resetItems">重設訓練項目為預設</button>
       </div>
-      <p class="card-meta" style="margin-top:10px">
+      ${(() => {
+        const last = (load(KEYS.settings, {}) || {}).lastBackupAt;
+        if (!last) return '<p class="card-meta" style="margin-top:10px; color:var(--work);">⚠️ 尚未做過本機備份。<b>建議現在就下載一份。</b></p>';
+        const days = Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
+        const color = days > 7 ? 'var(--work)' : 'var(--text-soft)';
+        const prefix = days > 7 ? '⚠️' : '✅';
+        return `<p class="card-meta" style="margin-top:10px; color:${color}">${prefix} 上次備份：${new Date(last).toLocaleString('zh-TW')} (${days===0?'今天':days+' 天前'})${days > 7 ? '，<b>建議下載新備份</b>' : ''}</p>`;
+      })()}
+      <p class="card-meta" style="margin-top:10px; line-height:1.6">
+        • <b>下載備份檔</b>：產生一份包含所有寵物 / 訓練項目 / bookings / sessions 的 JSON，存到電腦下載資料夾。建議**每週至少做一次**，雲端同步出包時這份就是救命稻草。<br>
+        • <b>從備份還原</b>：選一份備份 JSON 上傳，**會覆蓋本機資料**，覆蓋前會跳確認框顯示資料量讓你比對。<br>
         • <b>新增寵物</b>（手動 / Email 貼上 / CSV 匯入）已搬到「寵物列表」右下角的 ＋ 按鈕<br>
-        • 匯出 JSON 是備份用<br>
-        • 匯入 JSON 會覆蓋現有資料<br>
-        • 重設清單只會還原訓練項目，寵物與課程不受影響
+        • <b>重設訓練項目</b>只會還原訓練項目清單，寵物與課程不受影響
       </p>
     </div>
     </details>
@@ -8042,8 +8067,9 @@ function renderSettings() {
   };
 
   document.getElementById('exportData').onclick = () => {
+    // 包含所有 syncable 資料 + 時間戳
     const dump = {
-      version: 4,
+      version: 5,
       pets: load(KEYS.pets, []),
       sessions: load(KEYS.sessions, []),
       itemsCat: load(KEYS.itemsCat, []),
@@ -8052,16 +8078,26 @@ function renderSettings() {
       bookingTemplate: load(KEYS.bookingTemplate, {}),
       payments: load(KEYS.payments, []),
       studioPayments: load(KEYS.studioPayments, []),
+      studioRates: load(KEYS.studioRates, {}),
       materials: load(KEYS.materials, []),
+      lineTemplate: load(KEYS.lineTemplate, ''),
+      lastModified: load(KEYS.lastModified, ''),
       exportedAt: new Date().toISOString(),
     };
-    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+    const text = JSON.stringify(dump, null, 2);
+    const blob = new Blob([text], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `petcare-backup-${todayStr()}.json`;
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.download = `petcare-backup-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    // 記住最後一次匯出時間，方便提醒
+    const s = load(KEYS.settings, {});
+    s.lastBackupAt = new Date().toISOString();
+    _writeRaw(KEYS.settings, s);
+    showNotice(`已下載備份檔（${(text.length/1024).toFixed(1)} KB · ${dump.pets.length} 寵物 · ${dump.sessions.length} sessions）`, 'ok');
   };
   document.getElementById('importData').onclick = () => {
     const input = document.createElement('input');
@@ -8071,8 +8107,30 @@ function renderSettings() {
       const file = input.files[0];
       if (!file) return;
       try {
-        const data = JSON.parse(await file.text());
-        if (!confirm('匯入會覆蓋現有資料，確定？')) return;
+        const text = await file.text();
+        const data = JSON.parse(text);
+        // 比對 size：本機 vs 即將匯入
+        const currentSize = JSON.stringify({
+          pets: load(KEYS.pets, []),
+          sessions: load(KEYS.sessions, []),
+          itemsCat: load(KEYS.itemsCat, []),
+          itemsDog: load(KEYS.itemsDog, []),
+        }).length;
+        const incomingSize = text.length;
+        const petCount = (data.pets || []).length;
+        const sessionCount = (data.sessions || []).length;
+        let msg = `📥 即將匯入這份備份：\n` +
+                  `  寵物：${petCount} 隻\n` +
+                  `  Sessions：${sessionCount} 筆\n` +
+                  `  檔案大小：${(incomingSize/1024).toFixed(1)} KB\n` +
+                  `  本機目前資料：~${(currentSize/1024).toFixed(1)} KB\n`;
+        if (data.exportedAt) msg += `  備份時間：${new Date(data.exportedAt).toLocaleString('zh-TW')}\n`;
+        msg += `\n⚠️ 匯入會 **覆蓋** 現有本機資料，無法復原。確定？`;
+        // 保險：如果匯入資料比目前明顯少，多警告
+        if (currentSize > 0 && incomingSize < currentSize * 0.5) {
+          msg += `\n\n🚨 注意：匯入資料比目前少超過 50%。如不確定請取消。`;
+        }
+        if (!confirm(msg)) return;
         if (data.pets) save(KEYS.pets, data.pets);
         if (data.sessions) save(KEYS.sessions, data.sessions);
         if (data.itemsCat) save(KEYS.itemsCat, data.itemsCat);
@@ -8081,8 +8139,10 @@ function renderSettings() {
         if (data.bookingTemplate) save(KEYS.bookingTemplate, data.bookingTemplate);
         if (data.payments) save(KEYS.payments, data.payments);
         if (data.studioPayments) save(KEYS.studioPayments, data.studioPayments);
+        if (data.studioRates) save(KEYS.studioRates, data.studioRates);
         if (data.materials) save(KEYS.materials, data.materials);
-        showNotice('匯入完成');
+        if (data.lineTemplate) save(KEYS.lineTemplate, data.lineTemplate);
+        showNotice(`匯入完成（${petCount} 寵物 · ${sessionCount} sessions）`, 'ok');
         render();
       } catch (e) {
         showNotice('匯入失敗：' + e.message, 'err');
