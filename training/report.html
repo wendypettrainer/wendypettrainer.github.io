@@ -91,9 +91,9 @@
     border-bottom: 2px solid var(--brown-light);
   }
   .item {
-    /* 改邊框設計：白底 + 米色邊框（跨頁時不會有米黃 vs 頁緣白的斷層）*/
+    /* 改邊框設計：白底 + 中等棕邊框（跨頁時不會有米黃 vs 頁緣白的斷層）*/
     background: #ffffff;
-    border: 1px solid var(--brown-light);
+    border: 1.5px solid #a89272;
     border-radius: 10px;
     padding: 12px 14px;
     margin-bottom: 8px;
@@ -119,8 +119,8 @@
   .item-method {
     padding: 8px 10px;
     background: white;
-    /* 加細邊框讓多個方法在白色 .item 內仍能分辨 */
-    border: 1px solid rgba(192, 168, 120, 0.35);
+    /* 加細邊框讓多個方法在白色 .item 內仍能分辨。比 .item 邊框淡，視覺層次清楚 */
+    border: 1px solid #cfc1a3;
     border-radius: 6px;
     margin-top: 6px;
   }
