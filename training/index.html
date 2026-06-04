@@ -7739,9 +7739,22 @@ function renderSettings() {
 
   // Tab switching for item editor
   let currentTab = 'dog';
+  // 保留每個 tab 的「哪些 item index 是展開的」，避免每次 render 重畫都全部收起
+  const expandedByTab = { dog: new Set(), cat: new Set() };
   function renderItemEditor() {
     const key = currentTab === 'dog' ? KEYS.itemsDog : KEYS.itemsCat;
     const list = ensureItemShape(load(key, []));
+    // render 前先從 DOM snapshot 目前展開狀態到 set，再用 set 決定 render 後的 data-expanded
+    const editorRoot = document.getElementById('itemEditor');
+    if (editorRoot) {
+      editorRoot.querySelectorAll('.item-edit-block').forEach(b => {
+        const i = parseInt(b.dataset.i);
+        if (Number.isNaN(i)) return;
+        if (b.dataset.expanded === 'true') expandedByTab[currentTab].add(i);
+        else expandedByTab[currentTab].delete(i);
+      });
+    }
+    const expandedSet = expandedByTab[currentTab];
 
     function methodHtml(m, i, j) {
       const tbl = normalizeTable(m.table);
@@ -7792,7 +7805,7 @@ function renderSettings() {
           <button class="small-btn" id="collapseAllItems" type="button">收起全部</button>
         </div>
         ${list.map((it, i) => `
-          <div class="item-edit-block" data-expanded="false" data-i="${i}">
+          <div class="item-edit-block" data-expanded="${expandedSet.has(i) ? 'true' : 'false'}" data-i="${i}">
             <div class="item-edit-top">
               <button class="item-toggle" data-toggle="${i}" type="button" title="展開/收起">▶</button>
               <input data-i="${i}" data-field="name" value="${escapeAttr(it.name)}" placeholder="訓練項目名稱">
@@ -7934,6 +7947,15 @@ function renderSettings() {
         const cur = ensureItemShape(load(key, []));
         if (!confirm(`刪除「${cur[i].name}」整個項目？`)) return;
         cur.splice(i, 1);
+        // 同步維護 expandedSet：刪除 i 後，所有 > i 的索引都要往前推一格
+        const newSet = new Set();
+        expandedSet.forEach(idx => {
+          if (idx < i) newSet.add(idx);
+          else if (idx > i) newSet.add(idx - 1);
+          // idx === i 那個本來就被刪掉，不加進去
+        });
+        expandedSet.clear();
+        newSet.forEach(v => expandedSet.add(v));
         save(key, cur);
         renderItemEditor();
       };
@@ -7953,6 +7975,8 @@ function renderSettings() {
         const cur = ensureItemShape(load(key, []));
         cur[i].methods.push({ name: '', steps: '', table: null });
         save(key, cur);
+        // 按了新增方法後，當前項目應該保持展開（讓使用者看到新加的方法）
+        expandedSet.add(i);
         renderItemEditor();
       };
     });
@@ -7980,12 +8004,20 @@ function renderSettings() {
         renderItemEditor();
       };
     });
+    // 上下移動：交換 i 跟 j 的展開狀態
+    const swapExpanded = (a, b) => {
+      const aExp = expandedSet.has(a);
+      const bExp = expandedSet.has(b);
+      if (aExp) expandedSet.add(b); else expandedSet.delete(b);
+      if (bExp) expandedSet.add(a); else expandedSet.delete(a);
+    };
     document.querySelectorAll('[data-up]').forEach(btn => {
       btn.onclick = () => {
         const i = parseInt(btn.dataset.up);
         if (i === 0) return;
         const cur = ensureItemShape(load(key, []));
         [cur[i-1], cur[i]] = [cur[i], cur[i-1]];
+        swapExpanded(i, i-1);
         save(key, cur);
         renderItemEditor();
       };
@@ -7996,6 +8028,7 @@ function renderSettings() {
         const cur = ensureItemShape(load(key, []));
         if (i >= cur.length - 1) return;
         [cur[i+1], cur[i]] = [cur[i], cur[i+1]];
+        swapExpanded(i, i+1);
         save(key, cur);
         renderItemEditor();
       };
@@ -8003,10 +8036,13 @@ function renderSettings() {
     document.getElementById('addItem').onclick = () => {
       const cur = ensureItemShape(load(key, []));
       cur.push({ name: '新項目', methods: [] });
+      // 新項目自動展開，方便立刻填內容
+      expandedSet.add(cur.length - 1);
       save(key, cur);
       renderItemEditor();
     };
     // ===== 折疊 / 展開 / 搜尋 =====
+    // 注意：所有改變 data-expanded 的地方，要同步寫到 expandedSet，這樣下次 render 才會記住
     const allBlocks = () => document.querySelectorAll('#itemEditor .item-edit-block');
     document.querySelectorAll('#itemEditor [data-toggle]').forEach(btn => {
       btn.onclick = (e) => {
@@ -8014,17 +8050,29 @@ function renderSettings() {
         const block = btn.closest('.item-edit-block');
         const expanded = block.dataset.expanded === 'true';
         block.dataset.expanded = expanded ? 'false' : 'true';
+        const i = parseInt(block.dataset.i);
+        if (!Number.isNaN(i)) {
+          if (expanded) expandedSet.delete(i); else expandedSet.add(i);
+        }
       };
     });
     const expandAllBtn = document.getElementById('expandAllItems');
     if (expandAllBtn) expandAllBtn.onclick = (e) => {
       e.preventDefault();
-      allBlocks().forEach(b => b.dataset.expanded = 'true');
+      allBlocks().forEach(b => {
+        b.dataset.expanded = 'true';
+        const i = parseInt(b.dataset.i);
+        if (!Number.isNaN(i)) expandedSet.add(i);
+      });
     };
     const collapseAllBtn = document.getElementById('collapseAllItems');
     if (collapseAllBtn) collapseAllBtn.onclick = (e) => {
       e.preventDefault();
-      allBlocks().forEach(b => b.dataset.expanded = 'false');
+      allBlocks().forEach(b => {
+        b.dataset.expanded = 'false';
+        const i = parseInt(b.dataset.i);
+        if (!Number.isNaN(i)) expandedSet.delete(i);
+      });
     };
     const searchInput = document.getElementById('itemSearch');
     if (searchInput) searchInput.oninput = () => {
@@ -8035,7 +8083,11 @@ function renderSettings() {
         const match = !q || name.includes(q);
         b.dataset.hidden = match ? 'false' : 'true';
         // 搜尋有命中時自動展開，方便直接看到內容
-        if (q && match) b.dataset.expanded = 'true';
+        if (q && match) {
+          b.dataset.expanded = 'true';
+          const i = parseInt(b.dataset.i);
+          if (!Number.isNaN(i)) expandedSet.add(i);
+        }
       });
     };
   }
