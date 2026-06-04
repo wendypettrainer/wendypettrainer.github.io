@@ -6338,9 +6338,10 @@ function exportPdf(sess, pet) {
     margin-top: 2pt;
   }
   .item-label {
-    font-size: 9pt; color: #8b6f47;
-    font-weight: 600; letter-spacing: 0.5px;
-    margin-bottom: 3pt;
+    /* 12pt 比內文（11pt）略大、保持加粗，當作 sub-heading；之前用 9pt 比下方內文還小很怪 */
+    font-size: 12pt; color: #8b6f47;
+    font-weight: 700; letter-spacing: 0.3px;
+    margin-bottom: 4pt;
     /* 「🎯 方法：xxx」標籤要黏住下方內容，不單獨留在頁底 */
     page-break-after: avoid;
     break-after: avoid;
