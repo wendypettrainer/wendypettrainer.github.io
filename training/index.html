@@ -3120,18 +3120,21 @@ function openPetForm(pet = null) {
           <label>教室地址 override</label>
           <input id="f_studioAddress" type="text" value="${escapeAttr(data.studioAddress || '')}" placeholder="留空用教室預設（設定 → 🏫 教室資料）">
         </div>
-        <div class="field">
-          <label>鐘點費 override（NT$ / 堂，留 0 用教室預設）</label>
-          <div class="row2">
-            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">一對一</div><input id="f_rate_oneOnOne" type="number" min="0" step="1" value="${data.studioRates.oneOnOne || ''}" placeholder="0"></div>
-            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">團體班</div><input id="f_rate_group" type="number" min="0" step="1" value="${data.studioRates.group || ''}" placeholder="0"></div>
+        <details ${Object.values(data.studioRates).some(v => Number(v) > 0) ? 'open' : ''} style="margin-bottom:4px">
+          <summary style="cursor:pointer; font-size:13px; color:var(--text-soft); padding:4px 0; user-select:none">⚙️ 進階：鐘點費 override（同教室個案特殊費率）</summary>
+          <div class="field" style="margin-top:8px">
+            <label>鐘點費 override（NT$ / 堂，留 0 用教室預設）</label>
+            <div class="row2">
+              <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">一對一</div><input id="f_rate_oneOnOne" type="number" min="0" step="1" value="${data.studioRates.oneOnOne || ''}" placeholder="0"></div>
+              <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">團體班</div><input id="f_rate_group" type="number" min="0" step="1" value="${data.studioRates.group || ''}" placeholder="0"></div>
+            </div>
+            <div class="row2" style="margin-top:6px">
+              <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">首堂諮詢</div><input id="f_rate_firstConsult" type="number" min="0" step="1" value="${data.studioRates.firstConsult || ''}" placeholder="0"></div>
+              <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">其他</div><input id="f_rate_other" type="number" min="0" step="1" value="${data.studioRates.other || ''}" placeholder="0"></div>
+            </div>
+            <p class="card-meta" style="margin-top:8px; font-size:12px">• 預設費率與教室地址請到「<b>設定 → 🏫 教室資料</b>」用教室名稱統一設定，所有同教室寵物會繼承。<br>• 這裡只填這隻寵物<b>特殊費率</b>（&gt; 0 會覆蓋教室預設）。</p>
           </div>
-          <div class="row2" style="margin-top:6px">
-            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">首堂諮詢</div><input id="f_rate_firstConsult" type="number" min="0" step="1" value="${data.studioRates.firstConsult || ''}" placeholder="0"></div>
-            <div><div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">其他</div><input id="f_rate_other" type="number" min="0" step="1" value="${data.studioRates.other || ''}" placeholder="0"></div>
-          </div>
-          <p class="card-meta" style="margin-top:8px; font-size:12px">• 預設費率與教室地址請到「<b>設定 → 🏫 教室資料</b>」用教室名稱統一設定，所有同教室寵物會繼承。<br>• 這裡只填這隻寵物<b>特殊費率</b>（&gt; 0 會覆蓋教室預設）。</p>
-        </div>
+        </details>
       </div>
       <div class="field">
         <label>⚠️ 目前困擾行為（客戶想解決的問題）</label>
