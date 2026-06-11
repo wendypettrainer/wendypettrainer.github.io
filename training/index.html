@@ -48,7 +48,7 @@
     -webkit-font-smoothing: antialiased;
     font-weight: 400;
   }
-  .app { max-width: 720px; margin: 0 auto; padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 720px; margin: 0 auto; padding-bottom: 80px; }
   header.top {
     background: #ffffff;
     color: var(--text);
@@ -3371,9 +3371,10 @@ function renderSessions() {
   const petInfoCollapsed = _settings.petInfoCollapsed === true;
   // 永遠可見的 action bar（編輯 + 課程預約）— 從 collapse body 拿出來
   const petActionBar = `
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin:4px 4px 8px">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin:4px 4px 8px; align-items:center">
       <button class="small-btn" id="editPet">編輯寵物資料</button>
       <button class="small-btn" id="bookingBtn">📋 課程預約</button>
+      <button class="small-btn" id="fab" style="margin-left:auto; background:var(--accent-warm); color:#fff; border:none">＋ 新增紀錄</button>
     </div>
   `;
   // 把 notes 內 「【Q】A」 拆成 Q&A pairs，按 keyword 分到「狗狗基本」/「家長基本」
@@ -3562,7 +3563,7 @@ function renderSessions() {
 
   let body;
   if (sessions.length === 0) {
-    body = `<div class="empty"><h3>還沒有課程</h3><p>點右下角 ＋ 新增第一堂</p></div>`;
+    body = `<div class="empty"><h3>還沒有課程</h3><p>點右上「＋ 新增紀錄」建立第一堂</p></div>`;
   } else if (sortKey === 'upcoming_first') {
     // 4 段顯示：即將上課 / 待結案 / 已完成 / 已結案（呆帳）
     const parts = partitionSessions(sessions);
@@ -3625,7 +3626,7 @@ function renderSessions() {
     </details>
   `;
 
-  main.innerHTML = petActionBar + meta + petPaymentHtml + parentReportHtml + sortBar + body + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = petActionBar + meta + petPaymentHtml + parentReportHtml + sortBar + body;
   // 排序選單
   const sortSelect = document.getElementById('sessionSort');
   if (sortSelect) sortSelect.onchange = (e) => {
@@ -4943,16 +4944,19 @@ function renderBookings() {
   const bookings = getPetBookings(pet.id);
   const meta = `
     <div class="card" style="cursor:default; background:transparent; box-shadow:none; padding:8px 4px">
-      <div class="card-meta">
-        ${escapeHtml(petTagline(pet))} ·
-        飼主 ${escapeHtml(pet.ownerName || '—')}
-        ${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px">
+        <div class="card-meta" style="flex:1; min-width:0; margin:0">
+          ${escapeHtml(petTagline(pet))} ·
+          飼主 ${escapeHtml(pet.ownerName || '—')}
+          ${pet.ownerContact ? ' · ' + escapeHtml(pet.ownerContact) : ''}
+        </div>
+        <button class="small-btn" id="fab" style="flex-shrink:0; background:var(--accent-warm); color:#fff; border:none">＋ 新增預約</button>
       </div>
     </div>
   `;
   let body;
   if (bookings.length === 0) {
-    body = `<div class="empty"><h3>還沒有課程預約</h3><p>點右下角 ＋ 新增第一筆</p></div>`;
+    body = `<div class="empty"><h3>還沒有課程預約</h3><p>點右上「＋ 新增預約」建立第一筆</p></div>`;
   } else {
     body = bookings.map(b => {
       const firstDate = (b.sessions && b.sessions[0] && b.sessions[0].date) || '—';
@@ -4972,7 +4976,7 @@ function renderBookings() {
         </div>`;
     }).join('');
   }
-  main.innerHTML = meta + body + `<button class="fab" id="fab">＋</button>`;
+  main.innerHTML = meta + body;
   main.querySelectorAll('.card[data-id]').forEach(el => {
     el.onclick = (e) => {
       if (e.target.classList.contains('card-menu-btn')) return;
