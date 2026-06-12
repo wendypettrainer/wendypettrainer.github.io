@@ -1956,6 +1956,7 @@ function ensurePetShape(arr) {
       source: (p.source === 'studio') ? 'studio' : 'direct',
       studioName: typeof p.studioName === 'string' ? p.studioName : '',
       studioAddress: typeof p.studioAddress === 'string' ? p.studioAddress : '',
+      lineNotes: typeof p.lineNotes === 'string' ? p.lineNotes : '',  // LINE 對話重點（訓練師私人，不進分享 payload）
       studioRates: {
         oneOnOne: Number(incomingRates.oneOnOne) || 0,
         group: Number(incomingRates.group) || 0,
@@ -3042,7 +3043,7 @@ function openPetForm(pet = null) {
   const data = pet || {
     id: '', species: 'dog', name: '', breed: '', birth: '',
     gender: '', neutered: '',
-    ownerName: '', ownerContact: '', ownerAddress: '', notes: '',
+    ownerName: '', ownerContact: '', ownerAddress: '', notes: '', lineNotes: '',
     source: 'direct', studioName: '', studioAddress: '',
     studioRates: { oneOnOne: 0, group: 0, firstConsult: 0, other: 0 },
   };
@@ -3142,7 +3143,11 @@ function openPetForm(pet = null) {
       </div>
       <div class="field">
         <label>備註（個性 / 過敏 / 特殊狀況 / 健康 / 家庭環境⋯）</label>
-        <textarea id="f_notes">${escapeHtml(data.notes)}</textarea>
+        <textarea id="f_notes" style="min-height:180px">${escapeHtml(data.notes)}</textarea>
+      </div>
+      <div class="field">
+        <label>訓練師備註（私人，不進家長報告）</label>
+        <textarea id="f_lineNotes" style="min-height:120px" placeholder="例：6/12 家長說最近吠叫變頻繁、希望加強如廁⋯">${escapeHtml(data.lineNotes || '')}</textarea>
       </div>
       <div class="modal-actions">
         ${isEdit ? '<button class="btn danger" id="m_del">刪除</button>' : ''}
@@ -3192,6 +3197,7 @@ function openPetForm(pet = null) {
       ownerAddress: overlay.querySelector('#f_address').value.trim(),
       concerns: overlay.querySelector('#f_concerns').value.trim(),
       notes: overlay.querySelector('#f_notes').value.trim(),
+      lineNotes: overlay.querySelector('#f_lineNotes').value.trim(),
       source,
       studioName,
       studioAddress: overlay.querySelector('#f_studioAddress').value.trim(),
@@ -3452,6 +3458,13 @@ function renderSessions() {
           ${pet.source === 'studio' && resolveStudioAddress(pet) ? `<div class="info-row"><b>🏫 教室地址</b>：${escapeHtml(resolveStudioAddress(pet))}</div>` : ''}
           ${renderQA(categorized.owner)}
         </div>
+
+        ${pet.lineNotes ? `
+          <div class="info-group">
+            <h4>📝 訓練師備註（私人）</h4>
+            <div class="info-row" style="white-space:pre-wrap">${escapeHtml(pet.lineNotes)}</div>
+          </div>
+        ` : ''}
       </div>
     </div>
   `;
