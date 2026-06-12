@@ -8288,10 +8288,22 @@ function parseSurveyCakeEmail(text) {
   text = text.replace(/\[([^\]]+)\]\(mailto:[^)]+\)/g, '$1');
   // 2. 拆行、去空白、過濾空行
   const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-  // 3. 嚴格交替：偶數行=問題、奇數行=答案
+  // 3. 格式偵測：「問題：答案」同行格式 vs 上下交替格式
+  //    超過六成的行含全形/半形冒號 → 視為同行格式（手動整理過的內容、LINE 轉貼常見）
   const qa = [];
-  for (let i = 0; i < lines.length; i += 2) {
-    if (i + 1 < lines.length) qa.push([lines[i], lines[i + 1]]);
+  const colonRe = /^([^：:]+)[：:]\s*(.*)$/;
+  const colonCount = lines.filter(l => colonRe.test(l)).length;
+  if (lines.length > 0 && colonCount >= lines.length * 0.6) {
+    for (const line of lines) {
+      const m = line.match(colonRe);
+      if (m) qa.push([m[1].trim(), m[2].trim()]);
+      else qa.push([line, '']);  // 沒冒號的行 → 沒有答案的問題，最後會進備註
+    }
+  } else {
+    // 嚴格交替：偶數行=問題、奇數行=答案
+    for (let i = 0; i < lines.length; i += 2) {
+      if (i + 1 < lines.length) qa.push([lines[i], lines[i + 1]]);
+    }
   }
   if (qa.length === 0) return null;
 
@@ -8312,7 +8324,7 @@ function parseSurveyCakeEmail(text) {
     // 嚴格 regex：盡量綁問題的「主語」+「關鍵字」，避免命中含有相同字的其他問題
     if (/^(狗狗|貓貓|寵物)名稱$|^名字$/.test(q)) return 'name';
     if (/^(狗狗|貓貓|寵物)?品種$/.test(q)) return 'breed';
-    if (/^(狗狗|貓貓|寵物)?年齡|^狗狗年齡\/生日$|^生日$|^出生/.test(q)) return 'birth';
+    if (/^(狗狗|貓貓|寵物)?(年齡|年紀)|^狗狗年齡\/生日$|^生日$|^出生/.test(q)) return 'birth';
     if (/^性別$|^(狗狗|貓貓|寵物)性別$/.test(q)) return 'genderInfo';
     if (/^主要飼養人姓名$|^飼主姓名$|^姓名$/.test(q)) return 'ownerName';
     if (/^聯絡電話$|^電話$|^手機$|^聯繫電話$/.test(q)) return 'ownerContact';
