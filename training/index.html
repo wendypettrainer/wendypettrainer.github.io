@@ -8326,15 +8326,31 @@ function parseSurveyCakeEmail(text) {
     if (/^(狗狗|貓貓|寵物)?品種$/.test(q)) return 'breed';
     if (/^(狗狗|貓貓|寵物)?(年齡|年紀)|^狗狗年齡\/生日$|^生日$|^出生/.test(q)) return 'birth';
     if (/^性別$|^(狗狗|貓貓|寵物)性別$/.test(q)) return 'genderInfo';
-    if (/^主要飼養人姓名$|^飼主姓名$|^姓名$/.test(q)) return 'ownerName';
-    if (/^聯絡電話$|^電話$|^手機$|^聯繫電話$/.test(q)) return 'ownerContact';
+    if (/^主要飼養人姓名$|^飼主姓名$|^姓名$|^家長$|^家長姓名$|^飼主$|^主要飼養人$/.test(q)) return 'ownerName';
+    if (/^聯絡電話$|^電話$|^手機$|^聯繫電話$|^信箱$|^電子郵件$|^電子信箱$|^email$/i.test(q)) return 'ownerContact';
     if (/^居住地址$|^地址$|^住址$/.test(q)) return 'ownerAddress';
-    if (/困擾您的行為|^困擾行為$|請詳述目前.*困擾/.test(q)) return 'concerns';
+    if (/困擾您的行為|^困擾行為$|請詳述目前.*困擾|^主述$|^主訴$|^補充$/.test(q)) return 'concerns';
     return null;
   }
 
+  // 「主述」段落標題模式：標題行沒有答案時，吸收後面連續的無冒號行當困擾內容
+  let pendingConcerns = false;
   for (const [q, a] of qa) {
     const field = detectField(q);
+    if (pendingConcerns) {
+      if (!field && a === '') {
+        // 接續的主述內文行（如「1. 護食、吠叫⋯」）
+        result.concerns = result.concerns ? result.concerns + '\n' + q : q;
+        continue;
+      }
+      pendingConcerns = false;  // 遇到下一個正常 Q/A，結束吸收
+    }
+    if (field === 'concerns') {
+      // 困擾類欄位（困擾行為/主述/補充）全部合併，不是只取第一個
+      if (a === '') { pendingConcerns = true; continue; }  // 段落標題 → 吸收後續無冒號行
+      result.concerns = result.concerns ? result.concerns + '\n' + a : a;
+      continue;
+    }
     if (field === 'genderInfo') {
       // "男生（未結紮）" → gender + neutered (空值才填，避免覆蓋)
       if (!result.gender) {
