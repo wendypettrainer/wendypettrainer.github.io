@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>教室總覽報告 · Wendy 溫蒂．貓與狗訓練日常</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f3ed;
+    --bg-soft: #ede5d6;
+    --card: #ffffff;
+    --brown: #4a4138;
+    --brown-dark: #2c2620;
+    --brown-light: #b8ad9a;
+    --text: #2c2620;
+    --text-soft: #7a716a;
+    --border: #e0dcd4;
+    --accent: #c08a5e;
+    --accent-dark: #8b4d22;
+    --good: #6b9e6e;
+    --ok: #c9a85a;
+    --work: #c97a4f;
+  }
+  * {
+    box-sizing: border-box; margin: 0; padding: 0;
+    /* 強迫列印時保留背景色（避免色塊只剩左邊線像「大引號」）*/
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 16px 60px;
+  }
+  header.brand {
+    text-align: center;
+    padding: 32px 16px 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  header.brand img {
+    max-width: 200px;
+    width: 60%;
+    height: auto;
+  }
+  header.brand h1 {
+    color: var(--brown-dark);
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 12px;
+    letter-spacing: 0.5px;
+  }
+  header.brand .sub {
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-top: 8px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .pet-hero {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+  .pet-hero .name {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--brown-dark);
+    margin-bottom: 4px;
+  }
+  .pet-hero .meta {
+    font-size: 13px;
+    color: var(--text-soft);
+  }
+  .section {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+  }
+  .section h2 {
+    color: var(--brown-dark);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.3px;
+  }
+  /* 可摺疊 section（首堂諮詢用） */
+  .section-collapsible {
+    padding: 0;
+    overflow: hidden;
+  }
+  .section-collapsible > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 14px 18px;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+  }
+  .section-collapsible > summary::-webkit-details-marker { display: none; }
+  .section-collapsible > summary:hover { background: rgba(192,138,94,0.05); }
+  .section-collapsible[open] > summary {
+    border-bottom: 1px solid var(--border);
+    background: rgba(192,138,94,0.04);
+  }
+  .section-collapsible .section-arrow {
+    font-size: 11px;
+    color: var(--text-soft);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .section-collapsible[open] > summary .section-arrow {
+    transform: rotate(90deg);
+  }
+  .section-collapsible .section-title {
+    color: var(--brown-dark);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .section-collapsible > .section-body {
+    padding: 14px 18px 16px;
+  }
+  .qa-row {
+    font-size: 14px;
+    line-height: 1.7;
+    padding: 4px 0;
+  }
+  .qa-row b { color: var(--brown-dark); margin-right: 6px; }
+  .concerns-box {
+    background: rgba(192,138,94,0.08);
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  /* 全域：隱藏所有 <summary> 瀏覽器預設的 disclosure marker（▶/▼）
+     讓我們自己加的 .session-arrow / .section-arrow 才是唯一三角形 */
+  details > summary {
+    list-style: none;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::marker { content: ''; }
+
+  /* session-card 是 <details>：summary 永遠顯示，body 展開才看 */
+  .session-card {
+    background: var(--bg-soft);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .session-card.is-booked {
+    background: #ffffff;
+    border-style: dashed;
+  }
+  .session-card > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 16px;
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .session-card > summary::-webkit-details-marker { display: none; }
+  .session-card > summary:hover { background: rgba(192,138,94,0.06); }
+  .session-arrow {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--text-soft);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-right: 2px;
+  }
+  .session-card[open] > summary .session-arrow {
+    transform: rotate(90deg);
+  }
+  .session-card[open] > summary {
+    border-bottom: 1px solid var(--border);
+    background: rgba(192,138,94,0.04);
+  }
+  .session-card[open].is-booked > summary {
+    background: rgba(192,138,94,0.08);
+  }
+  .session-body {
+    padding: 14px 16px;
+  }
+  .session-loc {
+    color: var(--text-soft);
+  }
+  .booked-badge {
+    background: #c08a5e;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .done-badge {
+    background: var(--good);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .booked-hint {
+    font-size: 13px;
+    color: var(--text-soft);
+    font-style: italic;
+    text-align: center;
+    padding: 8px 0;
+  }
+  .session-head {
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    color: var(--text-soft);
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .session-head .date {
+    font-weight: 600;
+    color: var(--brown-dark);
+    font-size: 14px;
+  }
+  .session-head .seq {
+    background: var(--accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .item {
+    background: #ffffff;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+  }
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .item-name { font-weight: 500; flex: 1; font-size: 14px; }
+  .rating {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .rating.good { background: var(--good); color: white; }
+  .rating.ok { background: var(--ok); color: white; }
+  .rating.work { background: var(--work); color: white; }
+  .item-method {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+    font-size: 13px;
+  }
+  .item-method-name { font-weight: 500; color: var(--brown-dark); }
+  .item-method-steps {
+    /* 不強制顏色，繼承 body 預設文字色 */
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .item-method-steps b, .item-method-steps strong { color: var(--brown-dark); }
+  .item-method-steps span[style] { /* 保留訓練師上的顏色 */ }
+  /* 訓練項目色塊（步驟 / 注意 / 提示）*/
+  .block-step, .block-note, .block-tip {
+    padding: 8px 10px;
+    margin: 6px 0;
+    border-radius: 6px;
+    /* pre-line：保留色塊內部使用者輸入的 \n 換行（如多條 ⚠️），但折疊其他空白 */
+    white-space: pre-line;
+    line-height: 1.7;
+  }
+  .block-step { background: rgba(192,168,120,0.18); }
+  .block-note { background: rgba(201,122,79,0.10); }
+  .block-tip  { background: rgba(107,158,110,0.10); }
+
+  .item-petnote {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(192,138,94,0.08);
+    border-radius: 4px;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+  .homework {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(107,158,110,0.08);
+    border-left: 3px solid var(--good);
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .homework-label {
+    font-weight: 600;
+    color: var(--brown-dark);
+    font-size: 12px;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .material-link {
+    display: inline-block;
+    padding: 6px 12px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--accent-dark);
+    text-decoration: none;
+    font-size: 13px;
+    margin: 4px 6px 4px 0;
+  }
+  .material-link:hover { background: var(--accent); color: white; }
+  .material-card {
+    padding: 10px 12px;
+    background: #ffffff;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+  }
+  .material-title { font-weight: 600; color: var(--brown-dark); margin-bottom: 4px; }
+  .material-content { font-size: 13px; color: var(--text-soft); line-height: 1.6; }
+  .err {
+    background: var(--card);
+    border: 1px solid var(--work);
+    color: var(--work);
+    padding: 20px;
+    border-radius: 8px;
+    margin: 40px 0;
+    text-align: center;
+  }
+  .loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-soft);
+  }
+  .footer {
+    text-align: center;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-soft);
+    letter-spacing: 1px;
+  }
+  .first-consult-content {
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .first-consult-report {
+    font-size: 14px;
+    line-height: 1.85;
+  }
+  /* contenteditable 包行用 <div>，要顯示為 block */
+  .first-consult-report div { display: block; }
+  .first-consult-report p { margin: 8px 0; }
+  .first-consult-report b, .first-consult-report strong { color: var(--brown-dark); font-weight: 600; }
+  .first-consult-report ul, .first-consult-report ol { margin: 8px 0 8px 22px; }
+  .first-consult-report li { margin: 4px 0; }
+  /* 段落視覺呼吸：每個 block 元素之間有間距 */
+  .first-consult-report > div + div { margin-top: 4px; }
+  .first-consult-report table {
+    border-collapse: collapse;
+    margin: 10px 0;
+    width: 100%;
+    font-size: 13px;
+  }
+  .first-consult-report th, .first-consult-report td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .first-consult-report th { background: var(--bg-soft); font-weight: 600; }
+  /* 空行（只有 <br> 的 div）也保留高度 */
+  .first-consult-report div:empty,
+  .first-consult-report div:has(> br:only-child) {
+    height: 0.8em;
+  }
+  /* === 教室總覽：寵物列表層 === */
+  .studio-banner {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-soft);
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+  }
+  .pet-list-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .pet-list-card:hover {
+    background: rgba(192,138,94,0.05);
+    border-color: var(--accent);
+  }
+  .pet-list-card .pl-emoji { font-size: 26px; flex-shrink: 0; }
+  .pet-list-card .pl-main { flex: 1; min-width: 0; }
+  .pet-list-card .pl-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--brown-dark);
+  }
+  .pet-list-card .pl-meta {
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-top: 2px;
+  }
+  .pet-list-card .pl-stats {
+    text-align: right;
+    font-size: 12px;
+    color: var(--text-soft);
+    flex-shrink: 0;
+    line-height: 1.6;
+  }
+  .pet-list-card .pl-stats b { color: var(--brown-dark); font-size: 14px; }
+  .pet-list-card .pl-arrow { color: var(--brown-light); flex-shrink: 0; }
+  .back-btn {
+    display: inline-block;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: var(--brown-dark);
+    cursor: pointer;
+    margin-bottom: 14px;
+    user-select: none;
+  }
+  .back-btn:hover { background: rgba(192,138,94,0.1); }
+  .fas-notes {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(201,168,90,0.10);
+    border-left: 3px solid var(--ok);
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .fas-notes-label {
+    font-weight: 600;
+    color: var(--brown-dark);
+    font-size: 12px;
+    margin-bottom: 4px;
+    display: block;
+  }
+  @media print {
+    .back-btn { display: none; }
+    .pet-list-card { cursor: default; }
+  }
+  details { margin-bottom: 8px; }
+  summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    background: var(--bg-soft);
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 13px;
+    list-style: none;
+    color: var(--brown-dark);
+  }
+  summary::-webkit-details-marker { display: none; }
+  /* 註：原本這裡有 summary::before { content: '▶ ' } 的全域規則，
+     但每個 <summary> 內部已經有自己的 <span class="session-arrow">▶</span> /
+     <span class="section-arrow">▶</span>，會造成兩個三角形。已移除。 */
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="brand">
+    <img src="logo.png" alt="Wendy"
+         onerror="this.outerHTML='<h1>Wendy 溫蒂．貓與狗訓練日常</h1>'">
+    <div class="sub">Studio Overview Report</div>
+  </header>
+  <div id="content" class="loading">載入中⋯</div>
+</div>
+
+<script>
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[ch]);
+}
+function fmtDate(s) {
+  if (!s) return '';
+  return s.replace(/-/g, '/');
+}
+function ratingLabel(r) {
+  if (r === 'good') return { cls: 'good', txt: '良好' };
+  if (r === 'ok')   return { cls: 'ok',   txt: '尚可' };
+  if (r === 'work') return { cls: 'work', txt: '需要練習' };
+  return { cls: '', txt: '' };
+}
+function courseTypeLabel(s) {
+  switch (s && s.courseType) {
+    case 'firstConsult': return '首堂諮詢';
+    case 'group':
+      if (s.groupSubType === 'puppy') return '幼犬班';
+      if (s.groupSubType === 'youth') return '青少年犬班';
+      if (s.groupSubType === 'other') return (s.groupSubTypeOther || '').trim() || '團體班';
+      return '團體班';
+    case 'other': return (s.courseTypeOther || '').trim() || '其他課程';
+    case 'oneOnOne': return '一對一';
+    default: return '';
+  }
+}
+// 把舊內容（含 ▶ / 【注意事項】 / ⚠️ 重要提醒 markers）轉成色塊結構
+// 已含 block class 就 no-op
+function legacyToBlocks(html) {
+  if (!html) return '';
+  if (/<div\s+class="block-(step|note|tip)"/i.test(html)) return html;
+  const stripTags = s => s.replace(/<[^>]+>/g, '').trim();
+  const lines = String(html).split(/<br\s*\/?>/i);
+  const out = [];
+  let cur = null;
+  const flush = () => {
+    if (!cur) return;
+    const inner = cur.lines.join('<br>');
+    if (cur.type === 'plain') out.push(inner);
+    else out.push('<div class="block-' + cur.type + '">' + inner + '</div>');
+    cur = null;
+  };
+  const detect = line => {
+    const t = stripTags(line);
+    if (!t) return null;
+    if (/^▶/.test(t)) return 'step';
+    if (/^【注意事項】|^⚠️\s*注意|^注意事項\s*[:：]|^⚠️\s*重要|^【重要提醒】|^【注意】/.test(t)) return 'note';
+    if (/^💡|^【提示】|^【建議】|^提示\s*[:：]/.test(t)) return 'tip';
+    return null;
+  };
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    const t = detect(trimmed);
+    if (t === 'step') {
+      if (cur && cur.type === 'step') cur.lines.push(trimmed);
+      else { flush(); cur = { type: 'step', lines: [trimmed] }; }
+    } else if (t === 'note' || t === 'tip') {
+      flush();
+      cur = { type: t, lines: [trimmed] };
+    } else if (cur && (cur.type === 'note' || cur.type === 'tip') && trimmed) {
+      cur.lines.push(trimmed);
+    } else {
+      if (cur && cur.type === 'plain') cur.lines.push(trimmed);
+      else { flush(); cur = { type: 'plain', lines: [trimmed] }; }
+    }
+  }
+  flush();
+  return out.join('');
+}
+
+// 美化首堂諮詢報告：在【段落標題】、列點符號前自動換行
+function formatFirstConsultHtml(html) {
+  if (!html) return '';
+  return html
+    // 【XX】類段落標題前自動空一行
+    .replace(/(【)/g, '<br><br>$1')
+    // ▶ / ❶❷❸❹❺❻❼❽❾ / • 列點前換行
+    .replace(/([❶❷❸❹❺❻❼❽❾])/g, '<br>$1')
+    .replace(/(▶\s)/g, '<br>$1')
+    .replace(/([^>\s])(\s?•\s)/g, '$1<br>$2')
+    // 清開頭多餘的 <br>
+    .replace(/^(\s*<br>\s*)+/, '')
+    // 連續 <br> 最多 2 個
+    .replace(/(<br>\s*){3,}/g, '<br><br>');
+}
+
+function getGistId() {
+  const hash = window.location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  return params.get('gist') || '';
+}
+
+let STUDIO_DATA = null;
+
+async function loadReport() {
+  const id = getGistId();
+  const el = document.getElementById('content');
+  if (!id) {
+    el.innerHTML = `<div class="err">⚠️ 連結缺少 gist 參數</div>`;
+    return;
+  }
+  try {
+    const r = await fetch(`https://api.github.com/gists/${id}`);
+    if (!r.ok) throw new Error(`找不到報告 (${r.status})`);
+    const gist = await r.json();
+    const file = gist.files['studio-overview.json'];
+    if (!file) throw new Error('報告格式錯誤');
+    let content = file.content;
+    if (file.truncated && file.raw_url) {
+      const rr = await fetch(file.raw_url);
+      content = await rr.text();
+    }
+    const data = JSON.parse(content);
+    if (data.type !== 'studio-overview') throw new Error('報告格式錯誤');
+    STUDIO_DATA = data;
+    renderPetList();
+  } catch (e) {
+    el.innerHTML = `<div class="err">⚠️ 載入失敗<br><small>${escapeHtml(e.message)}</small><br><small style="color:var(--text-soft)">若連結曾經有效，可能是報告已被收回，請向訓練師確認。</small></div>`;
+  }
+}
+
+function renderRecords(records) {
+  if (!records || records.length === 0) return '';
+  return records.map(r => {
+    const lab = ratingLabel(r.rating);
+    const petNote = (r.petNote || '').trim();
+    const methodDetails = Array.isArray(r.methodDetails) ? r.methodDetails : [];
+    const methodsHtml = methodDetails.map(md => `
+      <div class="item-method">
+        <div class="item-method-name">🎯 ${escapeHtml(md.name || '（未命名方法）')}</div>
+        ${md.missing ? `<div style="color:#c97a4f; font-size:12px; margin-top:4px">⚠️ 此方法已從訓練項目庫移除或改名</div>` : ''}
+        ${md.steps ? `<div class="item-method-steps">${legacyToBlocks(md.steps)}</div>` : ''}
+      </div>`).join('');
+    const noteHtml = petNote
+      ? `<div class="item-petnote">💭 ${escapeHtml(petNote)}</div>`
+      : '';
+    return `
+      <div class="item">
+        <div class="item-row">
+          <span class="item-name">${escapeHtml(r.name)}</span>
+          ${lab.txt ? `<span class="rating ${lab.cls}">${lab.txt}</span>` : ''}
+        </div>
+        ${methodsHtml}
+        ${noteHtml}
+      </div>`;
+  }).join('');
+}
+
+function renderMaterials(s) {
+  const mats = s.attachedMaterials || [];
+  const links = s.externalLinks || [];
+  if (mats.length === 0 && links.length === 0) return '';
+  const matsHtml = mats.map(m => {
+    if (m.url && !m.content) {
+      return `<a class="material-link" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">▶ ${escapeHtml(m.title)}</a>`;
+    }
+    return `
+      <div class="material-card">
+        <div class="material-title">${escapeHtml(m.title)}</div>
+        ${m.url ? `<a class="material-link" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">▶ 觀看</a>` : ''}
+        ${m.content ? `<div class="material-content">${m.content}</div>` : ''}
+      </div>`;
+  }).join('');
+  const linksHtml = links.map(l =>
+    `<a class="material-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.title || l.url)}</a>`
+  ).join('');
+  return `
+    <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--border)">
+      <div style="font-size:12px; font-weight:600; color:var(--brown-dark); margin-bottom:6px">📎 相關教材 / 連結</div>
+      ${matsHtml}
+      ${linksHtml}
+    </div>`;
+}
+
+function renderSession(s) {
+  const ctLab = courseTypeLabel(s) || '訓練課';
+  const seq = parseInt(s.sessionSeq, 10);
+  const total = parseInt(s.sessionTotal, 10);
+  const seqStr = (seq && total) ? `第 ${seq} / ${total} 堂` : (seq ? `第 ${seq} 堂` : '');
+  const isBooked = s.status === 'booked';
+  const dateLabel = s.date ? fmtDate(s.date) : '待安排';
+
+  // 判斷是否有實質內容（避免空 session 渲染空白）
+  const hasRecords = Array.isArray(s.records) && s.records.length > 0;
+  // strip HTML tags + trim：contenteditable 留下的 <br> / <p></p> 不算內容
+  const hasHomework = (s.homework || '').replace(/<[^>]+>/g, '').trim().length > 0;
+  const fcReportHtml = formatFirstConsultHtml((s.firstConsultReport || '').trim());
+  const hasFcReport = fcReportHtml.replace(/<[^>]+>/g, '').trim().length > 0;
+  // fasNotes 是 sanitize 過的 HTML（含 inline color span），直接渲染
+  const hasFas = (s.fasNotes || '').replace(/<[^>]+>/g, '').trim().length > 0;
+  const hasContent = hasRecords || hasHomework || hasFcReport || hasFas;
+
+  const contentHtml = `
+    ${hasFcReport ? `<div class="first-consult-report">${fcReportHtml}</div>` : ''}
+    ${hasFas ? `
+      <div class="fas-notes">
+        <span class="fas-notes-label">🔍 FAS 觀察筆記</span>
+        <div>${s.fasNotes}</div>
+      </div>` : ''}
+    ${renderRecords(s.records)}
+    ${hasHomework ? `
+      <div class="homework">
+        <span class="homework-label">📝 本週飼主作業</span>
+        ${escapeHtml(s.homework)}
+      </div>` : ''}
+  `;
+
+  return `
+    <details class="session-card${isBooked ? ' is-booked' : ''}">
+      <summary class="session-head">
+        <span class="session-arrow">▶</span>
+        <span class="date">📅 ${escapeHtml(dateLabel)}</span>
+        <span>${escapeHtml(ctLab)}</span>
+        ${seqStr ? `<span class="seq">${escapeHtml(seqStr)}</span>` : ''}
+        ${s.location ? `<span class="session-loc">📍 ${escapeHtml(s.location)}</span>` : ''}
+        ${isBooked ? `<span class="booked-badge">⏳ 預約中</span>` : `<span class="done-badge">✓ 已完成</span>`}
+      </summary>
+      <div class="session-body">
+        ${hasContent
+          ? contentHtml
+          : `<div class="booked-hint">尚未上課，課後內容會更新到這裡。</div>`}
+      </div>
+    </details>`;
+}
+
+function renderBasic(notes) {
+  if (!notes) return '';
+  const lines = notes.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  return lines.map(line => {
+    const m = line.match(/^【([^】]+)】(.*)$/);
+    if (m) {
+      return `<div class="qa-row"><b>${escapeHtml(m[1])}：</b>${escapeHtml(m[2].trim())}</div>`;
+    }
+    return `<div class="qa-row">${escapeHtml(line)}</div>`;
+  }).join('');
+}
+
+/* === 教室總覽：頁首橫幅 + footer === */
+function bannerHtml() {
+  const ts = (STUDIO_DATA.generatedAt || '').replace('T', ' ').slice(0, 16);
+  return `<div class="studio-banner">🏫 教室專用 · 唯讀 · 資料更新時間：${escapeHtml(ts || '—')}</div>`;
+}
+function footerHtml() {
+  return `
+    <div class="footer">
+      Wendy 溫蒂．貓與狗訓練日常<br>
+      <span style="font-size:10px">資料更新時間：${escapeHtml(fmtDate((STUDIO_DATA.generatedAt || '').slice(0, 10)))}</span>
+    </div>`;
+}
+
+// 寵物列表統計：累計堂數（已完成）＋最近上課日
+function petStats(entry) {
+  const done = (entry.sessions || []).filter(s => s.status === 'done' && s.date);
+  const lastDate = done.length ? done.map(s => s.date).sort().slice(-1)[0] : '';
+  return { doneCount: done.length, lastDate };
+}
+
+/* === 第一層：寵物列表 === */
+function renderPetList() {
+  const el = document.getElementById('content');
+  el.classList.remove('loading');
+  document.title = '教室總覽報告 · Wendy 溫蒂．貓與狗訓練日常';
+
+  const pets = (STUDIO_DATA.pets || []).slice().sort((a, b) => {
+    // 最近上課日新→舊；沒上過課的排最後，按名字
+    const la = petStats(a).lastDate, lb = petStats(b).lastDate;
+    if (la !== lb) return lb.localeCompare(la);
+    return (a.pet.name || '').localeCompare(b.pet.name || '', 'zh-Hant');
+  });
+
+  const cards = pets.map(entry => {
+    const p = entry.pet || {};
+    const st = petStats(entry);
+    const idx = (STUDIO_DATA.pets || []).indexOf(entry);
+    const metaParts = [
+      p.breed || (p.species === 'cat' ? '貓' : '狗'),
+      p.ownerName ? '飼主：' + p.ownerName : '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="pet-list-card" data-idx="${idx}">
+        <span class="pl-emoji">${p.species === 'cat' ? '🐱' : '🐶'}</span>
+        <div class="pl-main">
+          <div class="pl-name">${escapeHtml(p.name || '')}</div>
+          <div class="pl-meta">${escapeHtml(metaParts)}</div>
+        </div>
+        <div class="pl-stats">
+          累計 <b>${st.doneCount}</b> 堂<br>
+          ${st.lastDate ? '最近上課 ' + escapeHtml(fmtDate(st.lastDate)) : '尚未上課'}
+        </div>
+        <span class="pl-arrow">▶</span>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    ${bannerHtml()}
+    ${pets.length
+      ? `<div style="font-size:13px; color:var(--text-soft); margin-bottom:10px">共 ${pets.length} 隻教室派案寵物，點寵物看上課明細。</div>${cards}`
+      : `<div class="err">目前沒有教室派案寵物的資料。</div>`}
+    ${footerHtml()}
+  `;
+  el.querySelectorAll('.pet-list-card').forEach(card => {
+    card.onclick = () => renderPetDetail(parseInt(card.dataset.idx, 10));
+  });
+  window.scrollTo(0, 0);
+}
+
+/* === 第二層：單隻寵物明細 === */
+function renderPetDetail(idx) {
+  const el = document.getElementById('content');
+  const entry = (STUDIO_DATA.pets || [])[idx];
+  if (!entry) { renderPetList(); return; }
+  const pet = entry.pet || {};
+
+  const genderTxt = pet.gender === 'male' ? '公' : pet.gender === 'female' ? '母' : '';
+  const neuteredTxt = pet.neutered === 'yes' ? '已絕育' : pet.neutered === 'no' ? '未絕育' : '';
+  const metaParts = [
+    pet.breed || (pet.species === 'cat' ? '貓' : '狗'),
+    genderTxt,
+    neuteredTxt,
+    pet.birth,
+  ].filter(Boolean).join(' · ');
+  const ownerParts = [
+    pet.ownerName ? '飼主：' + pet.ownerName : '',
+    pet.ownerContact || '',
+  ].filter(Boolean).join(' · ');
+
+  document.title = `${pet.name || '寵物'} · 教室總覽報告`;
+
+  let html = `
+    ${bannerHtml()}
+    <div class="back-btn" id="backToList">← 回寵物列表</div>
+    <div class="pet-hero">
+      <div class="name">${pet.species === 'cat' ? '🐱' : '🐶'} ${escapeHtml(pet.name || '')}</div>
+      <div class="meta">
+        ${escapeHtml(metaParts)}
+        ${ownerParts ? '<br>' + escapeHtml(ownerParts) : ''}
+      </div>
+    </div>`;
+
+  // 基本資料
+  if (pet.notes) {
+    html += `
+      <div class="section">
+        <h2>📋 基本資料</h2>
+        ${renderBasic(pet.notes)}
+      </div>`;
+  }
+
+  // 困擾行為
+  if (pet.concerns) {
+    html += `
+      <div class="section">
+        <h2>⚠️ 目前困擾行為</h2>
+        <div class="concerns-box">${escapeHtml(pet.concerns)}</div>
+      </div>`;
+  }
+
+  // 上課紀錄（payload 已排新→舊；含已完成與預約中，排除強制結案）
+  const visibleSessions = (entry.sessions || []).filter(s => s.status === 'done' || s.status === 'booked');
+  if (visibleSessions.length > 0) {
+    const doneCount = visibleSessions.filter(s => s.status === 'done').length;
+    const bookedCount = visibleSessions.filter(s => s.status === 'booked').length;
+    const counterStr = doneCount && bookedCount
+      ? `已完成 ${doneCount} 堂・預約中 ${bookedCount} 堂`
+      : doneCount ? `共 ${doneCount} 堂` : `預約中 ${bookedCount} 堂`;
+    html += `
+      <div class="section">
+        <h2>📒 上課紀錄（${counterStr}）</h2>
+        ${visibleSessions.map(renderSession).join('')}
+      </div>`;
+  } else {
+    html += `<div class="section"><div class="booked-hint">尚無上課紀錄。</div></div>`;
+  }
+
+  html += footerHtml();
+  el.innerHTML = html;
+  document.getElementById('backToList').onclick = renderPetList;
+  window.scrollTo(0, 0);
+}
+
+loadReport();
+</script>
+</body>
+</html>

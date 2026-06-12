@@ -7150,6 +7150,151 @@ async function pushParentReport(pet) {
   }
 }
 
+/* ============== 教室報告 (studio 唯讀總覽，固定 Gist) ============== */
+
+// 用 buildReportUrl 但檔名改 report-studio.html
+function buildStudioReportUrl(settings, gistId) {
+  return buildReportUrl(settings, gistId).replace('/report.html#', '/report-studio.html#');
+}
+
+// 組教室總覽 payload：只收 source === 'studio' 的寵物。
+// 過濾基準比照 buildParentReportPayload，再額外排除金額相關欄位。
+// 不出門：trainerNotes / lineNotes / 鐘點費(studioRates 與教室費率) / payments / studioPayments。
+// 有進去（2026-06-12 決議）：ownerName + ownerContact、fasNotes（教室看得到 FAS 原始觀察）。
+function buildStudioPayload() {
+  const studioPets = load(KEYS.pets, []).filter(p => p.source === 'studio');
+  const allSessions = load(KEYS.sessions, []);
+  const itemsCat = ensureItemShape(load(KEYS.itemsCat, []));
+  const itemsDog = ensureItemShape(load(KEYS.itemsDog, []));
+
+  const enrichSession = (s, itemMap) => ({
+    id: s.id,
+    date: s.date,
+    location: s.location || '',
+    duration: s.duration || 0,
+    status: s.status || 'done',
+    courseType: s.courseType || '',
+    groupSubType: s.groupSubType || '',
+    groupSubTypeOther: s.groupSubTypeOther || '',
+    courseTypeOther: s.courseTypeOther || '',
+    sessionSeq: s.sessionSeq || '',
+    sessionTotal: s.sessionTotal || '',
+    homework: s.homework || '',
+    firstConsultReport: s.firstConsultReport || '',
+    fasNotes: s.fasNotes || '',
+    records: (s.records || []).filter(r => r.selected !== false).map(r => {
+      const itMethods = itemMap[r.name] || [];
+      const methodDetails = (r.methods || []).map(mn => {
+        const m = itMethods.find(im => im.name === mn);
+        return { name: mn, steps: (m && m.steps) || '', missing: !m };
+      });
+      return { name: r.name, methods: r.methods || [], note: r.note || '', methodDetails };
+    }),
+  });
+
+  return {
+    type: 'studio-overview',
+    schema: 'wendy-studio-overview-v1',
+    generatedAt: new Date().toISOString(),
+    trainer: 'Wendy',
+    pets: studioPets.map(pet => {
+      const items = pet.species === 'cat' ? itemsCat : itemsDog;
+      const itemMap = {};
+      items.forEach(it => { itemMap[it.name] = it.methods || []; });
+      const sessions = allSessions
+        .filter(s => s.petId === pet.id)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))  // 新到舊
+        .map(s => enrichSession(s, itemMap));
+      return {
+        pet: {
+          name: pet.name,
+          species: pet.species,
+          breed: pet.breed || '',
+          gender: pet.gender || '',
+          neutered: pet.neutered || '',
+          birth: pet.birth || '',
+          ownerName: pet.ownerName || '',
+          ownerContact: pet.ownerContact || '',
+          studioName: pet.studioName || '',
+          concerns: pet.concerns || '',
+          notes: pet.notes || '',
+        },
+        sessions,
+      };
+    }),
+  };
+}
+
+// 更新（或建立）教室報告 Gist。固定 Gist：第一次 POST 存 id，之後 PATCH 同一個。
+async function pushStudioReport() {
+  const settings = load(KEYS.settings, {});
+  if (!settings.githubPat) {
+    showNotice('請先到設定填入 GitHub PAT', 'err');
+    return null;
+  }
+  const payload = buildStudioPayload();
+  const body = {
+    description: 'Wendy Studio Overview Report',
+    public: false,
+    files: { 'studio-overview.json': { content: JSON.stringify(payload, null, 2) } },
+  };
+  showNotice('更新教室報告中⋯');
+  try {
+    let gist;
+    if (settings.studioReportGistId) {
+      try {
+        gist = await gistApi('PATCH', `/gists/${settings.studioReportGistId}`, body);
+      } catch (e) {
+        // Gist 被刪 / PAT 失效等：問是否重建（會產生新連結，需重發教室）
+        const rebuild = confirm(
+          '更新失敗：' + e.message +
+          '\n\n可能是 Gist 已被刪除或 PAT 失效。\n要重建一個新的教室報告嗎？（會產生新連結，需要重新發給教室）'
+        );
+        if (!rebuild) { showNotice('已取消', 'err'); return null; }
+        gist = await gistApi('POST', '/gists', body);
+        updateSyncSettings({ studioReportGistId: gist.id });  // _writeRaw，不觸發 push
+      }
+    } else {
+      gist = await gistApi('POST', '/gists', body);
+      updateSyncSettings({ studioReportGistId: gist.id });  // _writeRaw，不觸發 push
+    }
+    showNotice(`✓ 教室報告已更新（${payload.pets.length} 隻寵物）`);
+    return { gistId: gist.id, reportUrl: buildStudioReportUrl(settings, gist.id) };
+  } catch (e) {
+    showNotice('更新失敗：' + e.message, 'err');
+    return null;
+  }
+}
+
+// 刪除教室報告 Gist（= 收回連結權限）
+async function deleteStudioReport() {
+  const settings = load(KEYS.settings, {});
+  if (!settings.studioReportGistId) { showNotice('目前沒有教室報告', 'err'); return false; }
+  if (!settings.githubPat) { showNotice('請先到設定填入 GitHub PAT', 'err'); return false; }
+  showNotice('刪除中⋯');
+  try {
+    // gistApi 會對空 body 做 r.json() 失敗，DELETE 204 無 body → 直接 fetch
+    const r = await fetch(`https://api.github.com/gists/${settings.studioReportGistId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${settings.githubPat}`,
+        'Accept': 'application/vnd.github+json',
+      },
+    });
+    // 404 視為已刪（目的已達成：連結失效），照樣清掉本機 id
+    if (!r.ok && r.status !== 404) {
+      const txt = await r.text().catch(() => '');
+      throw new Error(`GitHub ${r.status}: ${txt.slice(0, 120)}`);
+    }
+    updateSyncSettings({ studioReportGistId: '' });  // _writeRaw，不觸發 push
+    showNotice('✓ 教室報告已刪除，原連結已失效');
+    return true;
+  } catch (e) {
+    showNotice('刪除失敗：' + e.message, 'err');
+    return false;
+  }
+}
+
 function showShareModal(reportUrl, gistUrl) {
   const html = `
     <div class="modal">
@@ -7277,6 +7422,19 @@ function renderSettings() {
         <input type="text" id="newStudioName" placeholder="新教室名稱（如：毛有所思）" style="flex:1; min-width:180px;">
         <button class="small-btn" id="addStudioBtn">＋ 新增教室</button>
       </div>
+    </div>
+    </details>
+
+    <details class="settings-section">
+    <summary>教室報告（唯讀總覽連結）</summary>
+    <div class="card" style="cursor:default">
+      <p class="card-meta" style="margin-bottom:12px; line-height:1.6">
+        • 給配合教室一個<b>固定連結</b>，隨時查看所有教室派案寵物的基本資料與上課紀錄。<br>
+        • <b>唯讀、無帳號</b>。內容不會自動更新——改完紀錄後記得回來按「更新教室報告」。<br>
+        • 不含：私人筆記、鐘點費、任何金額 / 月結資訊。<br>
+        • 連結永遠不變（更新只換內容）；「刪除教室報告」會讓原連結立即失效。
+      </p>
+      <div id="studioReportDyn"></div>
     </div>
     </details>
 
@@ -7473,6 +7631,50 @@ function renderSettings() {
     });
     showNotice('設定已儲存');
   };
+
+  // 教室報告（唯讀總覽）：動態區塊，更新 / 刪除後原地重畫
+  function renderStudioReportBox() {
+    const box = document.getElementById('studioReportDyn');
+    if (!box) return;
+    const cur = load(KEYS.settings, {});
+    const gid = cur.studioReportGistId || '';
+    box.innerHTML = `
+      <div class="actions-row">
+        <button class="btn" id="studioReportPush">🔄 更新教室報告</button>
+        ${gid ? '<button class="btn danger" id="studioReportDelete">🗑 刪除教室報告</button>' : ''}
+      </div>
+      <div style="margin-top:12px">
+        ${gid ? `
+          <div class="card-meta" style="margin-bottom:6px">教室連結（貼給教室）：</div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <code style="font-size:11px; word-break:break-all; flex:1; min-width:200px; background:rgba(0,0,0,0.04); padding:6px 8px; border-radius:4px;">${escapeHtml(buildStudioReportUrl(cur, gid))}</code>
+            <button class="small-btn" id="studioReportCopy">📋 複製</button>
+          </div>
+        ` : '<p class="card-meta">尚未建立。按「更新教室報告」會建立連結。</p>'}
+      </div>
+    `;
+    document.getElementById('studioReportPush').onclick = async (e) => {
+      e.target.disabled = true;
+      const res = await pushStudioReport();
+      e.target.disabled = false;
+      if (res) renderStudioReportBox();
+    };
+    const delBtn = document.getElementById('studioReportDelete');
+    if (delBtn) delBtn.onclick = async (e) => {
+      if (!confirm('確定刪除教室報告？\n\n原連結會立即失效，教室將無法再開啟。\n（之後可以重建，但會是新連結，需重新發給教室）')) return;
+      e.target.disabled = true;
+      const ok = await deleteStudioReport();
+      e.target.disabled = false;
+      if (ok) renderStudioReportBox();
+    };
+    const copyBtn = document.getElementById('studioReportCopy');
+    if (copyBtn) copyBtn.onclick = () => {
+      copyToClipboard(buildStudioReportUrl(load(KEYS.settings, {}), load(KEYS.settings, {}).studioReportGistId || '')).then(ok => {
+        showNotice(ok ? '✓ 已複製教室連結' : '複製失敗，請手動選取', ok ? undefined : 'err');
+      });
+    };
+  }
+  renderStudioReportBox();
 
   // 課程預約樣板：儲存
   document.getElementById('bt_save').onclick = () => {
@@ -9639,6 +9841,79 @@ function renderStats() {
   });
 }
 
+/* === 匯入來源選擇器（Email / CSV 匯入預覽共用）=== */
+// 2026-06-12 決議：匯入預設來源改「教室派案」（主流案源），直接客戶手動切換。
+// 最常用教室：studio 寵物數最多的教室名 → 教室清單第一個 → 空字串
+function defaultStudioName() {
+  const counts = {};
+  load(KEYS.pets, []).forEach(p => {
+    if (p.source === 'studio' && (p.studioName || '').trim()) {
+      const n = p.studioName.trim();
+      counts[n] = (counts[n] || 0) + 1;
+    }
+  });
+  const byCount = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (byCount.length) return byCount[0][0];
+  const all = listAllStudioNames();
+  return all[0] || '';
+}
+
+function importSourceSelectorHtml(prefix, initial) {
+  const init = initial || { source: 'studio', studioName: defaultStudioName() };
+  const studios = listAllStudioNames();
+  const isKnown = studios.includes(init.studioName);
+  const opts = studios.map(n =>
+    `<option value="${escapeAttr(n)}" ${n === init.studioName ? 'selected' : ''}>🏫 ${escapeHtml(n)}</option>`
+  ).join('');
+  return `
+    <div class="field" style="margin-top:12px">
+      <label>客戶來源</label>
+      <div class="radio-group">
+        <label class="radio-opt"><input type="radio" name="${prefix}ImpSource" value="studio" ${init.source !== 'direct' ? 'checked' : ''}> 🏫 教室派案</label>
+        <label class="radio-opt"><input type="radio" name="${prefix}ImpSource" value="direct" ${init.source === 'direct' ? 'checked' : ''}> 直接客戶</label>
+      </div>
+      <div id="${prefix}ImpStudioBox" style="display:${init.source === 'direct' ? 'none' : 'flex'}; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px">
+        <select id="${prefix}ImpStudioSel" style="padding:6px 8px; border:1px solid var(--brown-light); border-radius:6px; font-size:13px; min-width:160px">
+          ${opts}
+          <option value="__custom" ${(!isKnown && init.studioName) || studios.length === 0 ? 'selected' : ''}>＋ 其他教室（手填）</option>
+        </select>
+        <input id="${prefix}ImpStudioCustom" type="text" placeholder="教室名稱"
+               value="${escapeAttr(isKnown ? '' : init.studioName)}"
+               style="display:${(!isKnown && init.studioName) || studios.length === 0 ? 'inline-block' : 'none'}; flex:1; min-width:140px; padding:6px 8px; border:1px solid var(--brown-light); border-radius:6px; font-size:13px">
+      </div>
+    </div>
+  `;
+}
+
+function bindImportSourceSelector(container, prefix, onChange) {
+  const box = container.querySelector(`#${prefix}ImpStudioBox`);
+  const sel = container.querySelector(`#${prefix}ImpStudioSel`);
+  const custom = container.querySelector(`#${prefix}ImpStudioCustom`);
+  container.querySelectorAll(`input[name="${prefix}ImpSource"]`).forEach(r => {
+    r.onchange = () => {
+      if (box) box.style.display = (r.value === 'direct' && r.checked) ? 'none' : 'flex';
+      if (onChange) onChange();
+    };
+  });
+  if (sel) sel.onchange = () => {
+    if (custom) custom.style.display = sel.value === '__custom' ? 'inline-block' : 'none';
+    if (onChange) onChange();
+  };
+  if (custom) custom.oninput = () => { if (onChange) onChange(); };
+}
+
+// 讀取選擇器目前值。studio 但教室名空白 → 顯示錯誤並回傳 null（比照寵物編輯表單必填規則）
+function readImportSource(container, prefix) {
+  const checked = container.querySelector(`input[name="${prefix}ImpSource"]:checked`);
+  const source = checked ? checked.value : 'studio';
+  if (source === 'direct') return { source: 'direct', studioName: '' };
+  const sel = container.querySelector(`#${prefix}ImpStudioSel`);
+  const custom = container.querySelector(`#${prefix}ImpStudioCustom`);
+  const name = (sel && sel.value !== '__custom') ? sel.value : ((custom && custom.value) || '').trim();
+  if (!name) { showNotice('教室派案請填教室名稱', 'err'); return null; }
+  return { source: 'studio', studioName: name };
+}
+
 function renderEmailPreview(overlay, p) {
   const speciesLabel = p.species === 'cat' ? '🐱 貓' : '🐶 狗';
   const genderLabel = p.gender === 'male' ? '公' : p.gender === 'female' ? '母' : '—';
@@ -9680,6 +9955,7 @@ function renderEmailPreview(overlay, p) {
         <div style="color:var(--text-soft)">⚠️ 困擾</div><div style="white-space:pre-wrap">${escapeHtml(p.concerns || '—')}</div>
         <div style="color:var(--text-soft)">📝 備註</div><div style="white-space:pre-wrap; font-size:11px; color:var(--text-soft); max-height:120px; overflow-y:auto; background:white; padding:6px; border-radius:4px">${escapeHtml(p.notes || '—')}</div>
       </div>
+      ${importSourceSelectorHtml('em')}
       ${warningHtml}
       <div class="actions-row" style="margin-top:14px">
         ${actionButtons}
@@ -9698,10 +9974,14 @@ function renderEmailPreview(overlay, p) {
     overlay.querySelector('#em_text').focus();
   };
 
+  bindImportSourceSelector(overlay, 'em');
+
   if (existing) {
     overlay.querySelector('#em_overwrite').onclick = () => {
-      // 覆蓋：保留 id 和 createdAt，其他欄位用解析結果
-      const updated = Object.assign({}, p, {
+      const srcInfo = readImportSource(overlay, 'em');
+      if (!srcInfo) return;
+      // 覆蓋：保留 id 和 createdAt，其他欄位用解析結果 + 來源選擇
+      const updated = Object.assign({}, p, srcInfo, {
         id: existing.id,
         createdAt: existing.createdAt || new Date().toISOString(),
       });
@@ -9712,7 +9992,9 @@ function renderEmailPreview(overlay, p) {
       render();
     };
     overlay.querySelector('#em_addnew').onclick = () => {
-      const newPet = Object.assign({}, p, {
+      const srcInfo = readImportSource(overlay, 'em');
+      if (!srcInfo) return;
+      const newPet = Object.assign({}, p, srcInfo, {
         id: uid(),
         createdAt: new Date().toISOString(),
       });
@@ -9725,7 +10007,9 @@ function renderEmailPreview(overlay, p) {
     };
   } else {
     overlay.querySelector('#em_save').onclick = () => {
-      const newPet = Object.assign({}, p, {
+      const srcInfo = readImportSource(overlay, 'em');
+      if (!srcInfo) return;
+      const newPet = Object.assign({}, p, srcInfo, {
         id: uid(),
         createdAt: new Date().toISOString(),
       });
@@ -9833,7 +10117,7 @@ function normalizeNeutered(v) {
   return '';
 }
 
-let CSV_IMPORT_STATE = null;  // { rows, headers, mapping, batchSpecies }
+let CSV_IMPORT_STATE = null;  // { rows, headers, mapping, batchSpecies, source, studioName }
 
 // 讀檔（支援 CSV / XLSX；CSV 自動偵測 UTF-8 / Big5）
 async function readSpreadsheetFile(file) {
@@ -9881,7 +10165,7 @@ async function readSpreadsheetFile(file) {
 }
 
 function openCsvImport() {
-  CSV_IMPORT_STATE = { rows: null, headers: null, mapping: {}, batchSpecies: 'dog' };
+  CSV_IMPORT_STATE = { rows: null, headers: null, mapping: {}, batchSpecies: 'dog', source: 'studio', studioName: defaultStudioName() };
   const overlay = openModal(`
     <div class="modal" style="max-width:720px">
       <h2>📥 從 CSV / Excel 匯入寵物</h2>
@@ -9956,6 +10240,8 @@ function renderCsvMapping(overlay) {
       </div>
     </div>
 
+    ${importSourceSelectorHtml('csv', { source: CSV_IMPORT_STATE.source, studioName: CSV_IMPORT_STATE.studioName })}
+
     <div class="field">
       <label>欄位對應（★ 為必填）</label>
       <table style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -9983,7 +10269,15 @@ function renderCsvMapping(overlay) {
   overlay.querySelectorAll('input[name="batchSpecies"]').forEach(r => {
     r.onchange = () => { CSV_IMPORT_STATE.batchSpecies = r.value; };
   });
-  document.getElementById('csv_preview').onclick = () => renderCsvPreview(overlay);
+  bindImportSourceSelector(overlay, 'csv');
+  document.getElementById('csv_preview').onclick = () => {
+    // 來源驗證 + 寫回 state（studio 必填教室名，比照寵物編輯表單）
+    const srcInfo = readImportSource(overlay, 'csv');
+    if (!srcInfo) return;
+    CSV_IMPORT_STATE.source = srcInfo.source;
+    CSV_IMPORT_STATE.studioName = srcInfo.studioName;
+    renderCsvPreview(overlay);
+  };
 }
 
 // 把一個 CSV 列轉成 pet 物件
@@ -10019,7 +10313,10 @@ function renderCsvPreview(overlay) {
     showNotice('⚠️ 必須有一個欄位對應到「名字」', 'err');
     return;
   }
-  const allPets = rows.map(r => csvRowToPet(r, headers, mapping, batchSpecies));
+  const allPets = rows.map(r => Object.assign(
+    csvRowToPet(r, headers, mapping, batchSpecies),
+    { source: CSV_IMPORT_STATE.source, studioName: CSV_IMPORT_STATE.studioName }
+  ));
   // 分類：空白名 / 重複（既有）/ 新增
   const blankCount = allPets.filter(p => !p.name).length;
   const dupes = [];
@@ -10059,7 +10356,8 @@ function renderCsvPreview(overlay) {
 
   document.getElementById('csvImportContent').innerHTML = `
     <div class="notice" style="margin-bottom:12px">
-      <b>${allPets.length}</b> 筆資料 → <b style="color:var(--good)">${validCount}</b> 筆新增${dupes.length?` · <b style="color:var(--work)">${dupes.length}</b> 筆重複跳過`:''}${blankCount?` · ${blankCount} 筆名字空白略過`:''}
+      <b>${allPets.length}</b> 筆資料 → <b style="color:var(--good)">${validCount}</b> 筆新增${dupes.length?` · <b style="color:var(--work)">${dupes.length}</b> 筆重複跳過`:''}${blankCount?` · ${blankCount} 筆名字空白略過`:''}<br>
+      <span style="font-size:12px; color:var(--text-soft)">來源：${CSV_IMPORT_STATE.source === 'studio' ? `🏫 教室派案（${escapeHtml(CSV_IMPORT_STATE.studioName)}）` : '直接客戶'}（整批套用，要改請按「← 重新對應」）</span>
     </div>
     ${validCount > 0 ? `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:12px; color:var(--text-soft)">
