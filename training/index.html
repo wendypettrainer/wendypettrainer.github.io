@@ -5595,6 +5595,28 @@ function renderFirstConsultSession(sess, pet) {
       </div>
     </div>
 
+    <details open class="card" style="cursor:default; padding:12px 14px; margin-bottom:10px">
+      <summary style="cursor:pointer; user-select:none; font-weight:600; color:var(--brown-dark); font-size:14px">🐶 寵物背景 <span style="font-weight:400; font-size:12px; color:var(--text-soft)">（點標題可收合）</span></summary>
+      <div style="margin-top:8px">
+        <div class="card-meta" style="margin:0 0 8px">
+          ${escapeHtml(petTagline(pet))}
+          ${pet.source === 'studio' && pet.studioName ? ` · 🏫 ${escapeHtml(pet.studioName)}` : ''}
+        </div>
+        ${pet.concerns ? `
+          <div style="margin-bottom:8px">
+            <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">⚠️ 主訴求</div>
+            <div style="white-space:pre-wrap; font-size:14px">${escapeHtml(pet.concerns)}</div>
+          </div>` : ''}
+        ${pet.lineNotes ? `
+          <div style="margin-bottom:8px">
+            <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">📝 訓練師備註（私人）</div>
+            <div style="white-space:pre-wrap; font-size:14px">${escapeHtml(pet.lineNotes)}</div>
+          </div>` : ''}
+        ${!pet.concerns && !pet.lineNotes ? `<div class="card-meta" style="margin:0 0 8px; color:var(--text-soft)">（主訴求、訓練師備註未填）</div>` : ''}
+        <button class="small-btn" id="fcEditPet">編輯寵物資料</button>
+      </div>
+    </details>
+
     <div class="fc-section-title">🔍 內部觀察 <span class="small">（不會出現在報告）</span></div>
     <div class="card" style="cursor:default">
       <div class="field">
@@ -5652,6 +5674,8 @@ function renderFirstConsultSession(sess, pet) {
     </div>
   `;
   document.getElementById('editSess').onclick = () => openSessionForm(sess);
+  const fcEditPetBtn = document.getElementById('fcEditPet');
+  if (fcEditPetBtn) fcEditPetBtn.onclick = () => openPetForm(pet);
   document.getElementById('attachBtn').onclick = () => openAttachmentForm(sess, () => renderSession());
   document.getElementById('toggleStatusBtn').onclick = () => {
     toggleSessionStatus(sess.id);
