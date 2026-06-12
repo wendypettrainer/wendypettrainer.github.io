@@ -3779,6 +3779,9 @@ function openSessionForm(session = null) {
     courseType: '', groupSubType: '', groupSubTypeOther: '', courseTypeOther: '',
     sessionSeq: '', sessionTotal: '',
   };
+  // 預約生的課（殼）：時長欄換成開始/結束時間，儲存時回寫預約
+  const isFromBooking = !!(session && session.sourceBookingId);
+  const bkTime = isFromBooking ? getSessionTimeRange(session) : { start: '', end: '' };
   // 把舊的 freeform location 對應到 radio：教室/家中 直接命中，其他都歸到「其他」+文字
   const presetLocs = ['教室', '家中'];
   const isPreset = presetLocs.includes(data.location);
@@ -3797,8 +3800,15 @@ function openSessionForm(session = null) {
           <input id="f_date" type="date" value="${data.date}">
         </div>
         <div class="field">
+          ${isFromBooking ? `
+          <label>上課時間（會同步回預約）</label>
+          <div style="display:flex; gap:6px; align-items:center">
+            <input id="f_startTime" type="time" value="${escapeAttr(bkTime.start)}" style="flex:1">
+            <span style="color:var(--text-soft)">–</span>
+            <input id="f_endTime" type="time" value="${escapeAttr(bkTime.end)}" style="flex:1">
+          </div>` : `
           <label>時長（分鐘）</label>
-          <input id="f_duration" type="number" value="${data.duration||''}" min="0">
+          <input id="f_duration" type="number" value="${data.duration||''}" min="0">`}
         </div>
       </div>
       <div class="field">
@@ -3891,11 +3901,25 @@ function openSessionForm(session = null) {
     const courseTypeOther = (overlay.querySelector('#f_courseTypeOther') || {}).value || '';
     const sessionSeq = (overlay.querySelector('#f_sessionSeq') || {}).value || '';
     const sessionTotal = (overlay.querySelector('#f_sessionTotal') || {}).value || '';
+    // 時長：手動課讀輸入欄；預約課由開始/結束時間自動算
+    let stVal = '', etVal = '', durationVal = 0;
+    if (isFromBooking) {
+      stVal = (overlay.querySelector('#f_startTime') || {}).value || '';
+      etVal = (overlay.querySelector('#f_endTime') || {}).value || '';
+      if (/^\d{2}:\d{2}$/.test(stVal) && /^\d{2}:\d{2}$/.test(etVal)) {
+        const [sh, sm] = stVal.split(':').map(Number);
+        const [eh, em] = etVal.split(':').map(Number);
+        const diff = (eh * 60 + em) - (sh * 60 + sm);
+        durationVal = diff > 0 ? diff : 0;
+      }
+    } else {
+      durationVal = parseInt((overlay.querySelector('#f_duration') || {}).value) || 0;
+    }
     const updated = {
       id: data.id || uid(),
       petId: data.petId,
       date,
-      duration: parseInt(overlay.querySelector('#f_duration').value) || 0,
+      duration: durationVal,
       location: finalLoc,
       courseType,
       groupSubType,
@@ -3928,10 +3952,34 @@ function openSessionForm(session = null) {
       sessions.push(updated);
     }
     save(KEYS.sessions, sessions);
+    // 預約生的課：日期 + 開始/結束時間回寫到預約的對應堂次（雙向同步）
+    // 防呆：預約被刪或堂次不存在 → 只存殼、不報錯
+    if (isFromBooking && typeof data.sourceIndex === 'number') {
+      const bookings = load(KEYS.bookings, []);
+      const b = bookings.find(x => x.id === data.sourceBookingId);
+      if (b && Array.isArray(b.sessions) && b.sessions[data.sourceIndex]) {
+        const bs = b.sessions[data.sourceIndex];
+        if (bs.date !== date || bs.startTime !== stVal || bs.endTime !== etVal) {
+          b.sessions[data.sourceIndex] = { ...bs, date, startTime: stVal, endTime: etVal };
+          save(KEYS.bookings, bookings);
+        }
+      }
+    }
     overlay.remove();
     if (isEdit) render();
     else go('session', { sessionId: updated.id });
   };
+  // 開始時間填了自動帶結束時間 = +1 小時（跟預約頁同邏輯，可手動覆寫）
+  {
+    const stInp = overlay.querySelector('#f_startTime');
+    const etInp = overlay.querySelector('#f_endTime');
+    if (stInp && etInp) stInp.onchange = () => {
+      if (/^\d{2}:\d{2}$/.test(stInp.value)) {
+        const [h, m] = stInp.value.split(':').map(Number);
+        etInp.value = String((h + 1) % 24).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+      }
+    };
+  }
   if (isEdit) {
     overlay.querySelector('#m_del').onclick = () => {
       if (!confirm('刪除這堂課的所有記錄？')) return;
@@ -4275,7 +4323,7 @@ function applyBookingShellSync(booking, plan) {
     const newCourseTypeOther = booking.courseTypeOther || '';
     const newLocation = booking.location || '';
     const newTotal = String(booking.sessionCount || 0);
-    const newDate = bs.date || '';
+    const newDate = bs.date || s.date || '';  // 預約日期空白時保留殼上既有日期（防止誤清）
     // 偵測是否真的有差異（避免不必要更新與 lastModified 抖動）
     const changed = (
       s.courseType !== newCourseType ||
