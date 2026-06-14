@@ -8735,6 +8735,15 @@ function renderCalendar() {
     sessionsByDate[s.date].push(s);
   }
 
+  // 同一天依上課開始時間排序（沒填時間沉到最後），與寵物課程列表一致
+  for (const arr of Object.values(sessionsByDate)) {
+    arr.sort((a, b) => {
+      const ta = getSessionTimeRange(a).start || '99:99';
+      const tb = getSessionTimeRange(b).start || '99:99';
+      return ta.localeCompare(tb);
+    });
+  }
+
   // 月份 grid（週一起算：Mon=0, Tue=1, ..., Sun=6）
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0);
