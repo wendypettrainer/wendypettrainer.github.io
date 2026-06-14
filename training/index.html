@@ -5650,6 +5650,11 @@ function renderFirstConsultSession(sess, pet) {
           ${escapeHtml(petTagline(pet))}
           ${pet.source === 'studio' && pet.studioName ? ` · 🏫 ${escapeHtml(pet.studioName)}` : ''}
         </div>
+        ${pet.notes ? `
+          <div style="margin-bottom:8px">
+            <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">📋 備註（個性 / 過敏 / 健康 / 家庭）</div>
+            <div style="white-space:pre-wrap; font-size:14px">${escapeHtml(pet.notes)}</div>
+          </div>` : ''}
         ${pet.concerns ? `
           <div style="margin-bottom:8px">
             <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">⚠️ 主訴求</div>
@@ -5660,7 +5665,7 @@ function renderFirstConsultSession(sess, pet) {
             <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">📝 訓練師備註（私人）</div>
             <div style="white-space:pre-wrap; font-size:14px">${escapeHtml(pet.lineNotes)}</div>
           </div>` : ''}
-        ${!pet.concerns && !pet.lineNotes ? `<div class="card-meta" style="margin:0 0 8px; color:var(--text-soft)">（主訴求、訓練師備註未填）</div>` : ''}
+        ${!pet.notes && !pet.concerns && !pet.lineNotes ? `<div class="card-meta" style="margin:0 0 8px; color:var(--text-soft)">（備註、主訴求、訓練師備註未填）</div>` : ''}
         <button class="small-btn" id="fcEditPet">編輯寵物資料</button>
       </div>
     </details>
