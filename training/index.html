@@ -5657,18 +5657,18 @@ function renderFirstConsultSession(sess, pet) {
             ${pet.ownerAddress ? `<div><b>📍 地址</b>：${escapeHtml(pet.ownerAddress)}</div>` : ''}
           </div>` : ''}
         ${pet.notes ? `
-          <div style="margin-bottom:8px">
-            <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">📋 備註（個性 / 過敏 / 健康 / 家庭）</div>
+          <div style="margin-bottom:8px; background:#f7f1e6; border-radius:8px; padding:8px 10px">
+            <div style="font-size:13px; font-weight:600; color:var(--brown-dark); margin-bottom:3px">📋 備註（個性 / 過敏 / 健康 / 家庭）</div>
             <div style="white-space:pre-wrap; font-size:14px">${escapeHtml(pet.notes)}</div>
           </div>` : ''}
         ${pet.concerns ? `
-          <div style="margin-bottom:8px">
-            <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">⚠️ 主訴求</div>
+          <div style="margin-bottom:8px; background:#f7f1e6; border-radius:8px; padding:8px 10px">
+            <div style="font-size:13px; font-weight:600; color:var(--brown-dark); margin-bottom:3px">⚠️ 主訴求</div>
             <div style="white-space:pre-wrap; font-size:14px">${escapeHtml(pet.concerns)}</div>
           </div>` : ''}
         ${pet.lineNotes ? `
-          <div style="margin-bottom:8px">
-            <div style="font-size:12px; color:var(--text-soft); margin-bottom:2px">📝 訓練師備註（私人）</div>
+          <div style="margin-bottom:8px; background:#f7f1e6; border-radius:8px; padding:8px 10px">
+            <div style="font-size:13px; font-weight:600; color:var(--brown-dark); margin-bottom:3px">📝 訓練師備註（私人）</div>
             <div style="white-space:pre-wrap; font-size:14px">${escapeHtml(pet.lineNotes)}</div>
           </div>` : ''}
         ${!pet.notes && !pet.concerns && !pet.lineNotes ? `<div class="card-meta" style="margin:0 0 8px; color:var(--text-soft)">（備註、主訴求、訓練師備註未填）</div>` : ''}
