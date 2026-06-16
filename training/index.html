@@ -4695,7 +4695,10 @@ function attachmentPdfHtml(sess) {
       </ul>
     </section>
   `;
-  return matsHtml + linksHtml + imagesHtml;
+  // 圖片自成一頁時，前一段內容末尾加引導，避免家長以為報告結束、不往下翻
+  const cueHtml = imageMats.length ? `
+    <div style="margin-top:22pt; text-align:center; color:#8b6f47; font-size:11pt; font-weight:600">↓ 課程介紹請見下一頁</div>` : '';
+  return matsHtml + linksHtml + cueHtml + imagesHtml;
 }
 
 /** session 已附加的教材 + 連結 數量摘要（給按鈕 label 用） */
