@@ -6111,6 +6111,7 @@ function exportFirstConsultPdf(sess, pet) {
 <meta charset="UTF-8">
 <title>${escapeHtml(titleStr)}</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
   @page {
     size: A4;
     margin: 16mm 14mm 20mm;
@@ -6139,8 +6140,8 @@ function exportFirstConsultPdf(sess, pet) {
     print-color-adjust: exact;
   }
   html, body {
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
-                 "Noto Sans TC", "Heiti TC", sans-serif;
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
+                 "Heiti TC", sans-serif;
     color: #3d2f1f;
     line-height: 1.65;
     background: white;
@@ -6232,7 +6233,11 @@ function exportFirstConsultPdf(sess, pet) {
   ${attachmentPdfHtml(sess)}
 
   <scr` + `ipt>
-    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
+    (function(){ var printed=false; function go(){ if(printed)return; printed=true; window.print(); }
+      window.addEventListener('load', function(){
+        if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function(){ setTimeout(go,200); }); setTimeout(go,4000); }
+        else { setTimeout(go,800); }
+      }); })();
   </scr` + `ipt>
 </body>
 </html>`;
@@ -6327,6 +6332,7 @@ function exportPdf(sess, pet) {
 <meta charset="UTF-8">
 <title>${escapeHtml(pet.name)}_${sess.date}</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
   @page {
     size: A4;
     margin: 16mm 14mm 20mm;
@@ -6355,8 +6361,8 @@ function exportPdf(sess, pet) {
     print-color-adjust: exact;
   }
   html, body {
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
-                 "Noto Sans TC", "Heiti TC", sans-serif;
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
+                 "Heiti TC", sans-serif;
     color: #3d2f1f;
     line-height: 1.6;
     background: white;
@@ -6587,7 +6593,11 @@ function exportPdf(sess, pet) {
   ${attachmentPdfHtml(sess)}
 
   <scr` + `ipt>
-    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
+    (function(){ var printed=false; function go(){ if(printed)return; printed=true; window.print(); }
+      window.addEventListener('load', function(){
+        if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function(){ setTimeout(go,200); }); setTimeout(go,4000); }
+        else { setTimeout(go,800); }
+      }); })();
   </scr` + `ipt>
 </body>
 </html>`;
@@ -6643,6 +6653,7 @@ function exportBookingPdf(booking, pet) {
 <meta charset="UTF-8">
 <title>${escapeHtml(titleStr)}</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
   @page {
     size: A4;
     margin: 16mm 14mm 20mm;
@@ -6671,8 +6682,8 @@ function exportBookingPdf(booking, pet) {
     print-color-adjust: exact;
   }
   html, body {
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
-                 "Noto Sans TC", "Heiti TC", sans-serif;
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei",
+                 "Heiti TC", sans-serif;
     color: #3d2f1f;
     line-height: 1.55;
     background: white;
@@ -6942,7 +6953,11 @@ function exportBookingPdf(booking, pet) {
   </section>
 
   <scr` + `ipt>
-    window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });
+    (function(){ var printed=false; function go(){ if(printed)return; printed=true; window.print(); }
+      window.addEventListener('load', function(){
+        if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function(){ setTimeout(go,200); }); setTimeout(go,4000); }
+        else { setTimeout(go,800); }
+      }); })();
   </scr` + `ipt>
 </body>
 </html>`;
