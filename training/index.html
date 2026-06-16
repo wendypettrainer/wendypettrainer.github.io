@@ -4558,6 +4558,7 @@ function ensureMaterialShape(arr) {
       id: m.id,
       title: m.title || '',
       url: typeof m.url === 'string' ? m.url : '',  // 外部連結（如 YT 影片 URL，可空）
+      imageUrl: typeof m.imageUrl === 'string' ? m.imageUrl : '',  // 圖片檔名 / URL（隨 App 部署的相對路徑，可空）
       content: ensureColorHtml(m.content || ''),     // HTML 文章內容（可空）
       createdAt: m.createdAt || new Date().toISOString(),
       updatedAt: m.updatedAt || m.createdAt || new Date().toISOString(),
@@ -4569,10 +4570,12 @@ function materialTypeLabel(m) {
   if (!m) return '';
   const hasContent = m.content && m.content.replace(/<[^>]+>/g, '').trim().length > 0;
   const hasUrl = m.url && m.url.trim();
-  if (hasContent && hasUrl) return '📝🔗';
-  if (hasContent) return '📝';
-  if (hasUrl) return '🔗';
-  return '';
+  const hasImage = m.imageUrl && m.imageUrl.trim();
+  const parts = [];
+  if (hasImage) parts.push('🖼');
+  if (hasContent) parts.push('📝');
+  if (hasUrl) parts.push('🔗');
+  return parts.join('');
 }
 function getAllMaterials() {
   return load(KEYS.materials, []).slice().sort((a, b) =>
@@ -4588,6 +4591,7 @@ function saveMaterial(material) {
   const now = new Date().toISOString();
   const final = Object.assign({}, material, {
     id: material.id || uid(),
+    imageUrl: (material.imageUrl || '').trim(),
     content: sanitizeColorHtml(material.content || ''),
     createdAt: material.createdAt || now,
     updatedAt: now,
@@ -4625,14 +4629,27 @@ function attachmentPdfHtml(sess) {
   const matMap = {};
   allMats.forEach(m => { matMap[m.id] = m; });
 
-  // 把 attached materials 拆兩堆：有 content 的進「文章附錄頁」、有 url 的進「連結 list」
+  // 把相對圖檔名解析成絕對 URL（報告開在 about:blank 的新視窗，相對路徑無法解析，比照 logo 做法）
+  const resolveAssetUrl = (u) => {
+    if (!u) return '';
+    if (/^(https?:|data:)/i.test(u)) return u;  // 已是絕對 / data URI
+    if (window.location.protocol.startsWith('http')) {
+      return window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + u.replace(/^\.?\//, '');
+    }
+    return u;  // file:// 本機：無法解析相對路徑（與 logo 行為一致）
+  };
+
+  // 把 attached materials 拆三堆：圖片進「整頁附錄圖」、有 content 的進「文章附錄頁」、有 url 的進「連結 list」
+  const imageMats = [];
   const articleMats = [];
   const linkEntries = [];
   for (const id of matIds) {
     const m = matMap[id];
     if (!m) continue;
+    const hasImage = m.imageUrl && m.imageUrl.trim();
     const hasContent = m.content && m.content.replace(/<[^>]+>/g, '').trim().length > 0;
     const hasUrl = m.url && m.url.trim();
+    if (hasImage) imageMats.push(m);
     if (hasContent) articleMats.push(m);
     if (hasUrl) linkEntries.push({ title: m.title || '', url: m.url });
   }
@@ -4646,7 +4663,17 @@ function attachmentPdfHtml(sess) {
     return true;
   });
 
-  if (articleMats.length === 0 && links.length === 0) return '';
+  if (imageMats.length === 0 && articleMats.length === 0 && links.length === 0) return '';
+
+  const imagesHtml = imageMats.map(m => {
+    const src = resolveAssetUrl((m.imageUrl || '').trim());
+    if (!src) return '';
+    return `
+    <section style="page-break-before:always; padding-top:6pt; text-align:center">
+      <img src="${escapeAttr(src)}" alt="${escapeAttr(m.title || '')}"
+           style="max-width:100%; max-height:250mm; height:auto; display:block; margin:0 auto">
+    </section>`;
+  }).join('');
 
   const matsHtml = articleMats.map(m => `
     <section style="page-break-before:always; padding-top:18pt">
@@ -4668,7 +4695,7 @@ function attachmentPdfHtml(sess) {
       </ul>
     </section>
   `;
-  return matsHtml + linksHtml;
+  return imagesHtml + matsHtml + linksHtml;
 }
 
 /** session 已附加的教材 + 連結 數量摘要（給按鈕 label 用） */
@@ -7886,6 +7913,10 @@ function renderSettings() {
           <label>外部連結 URL（純連結教材只填這欄，留空表示沒有連結）</label>
           <input type="url" data-mat-url="${i}" value="${escapeAttr(m.url||'')}" placeholder="https://youtu.be/...">
         </div>
+        <div class="field" style="margin-bottom:6px">
+          <label>🖼 圖片檔名（隨 App 部署的相對路徑，如 course-1on1.png；勾選後會整頁印進報告附錄）</label>
+          <input type="text" data-mat-image="${i}" value="${escapeAttr(m.imageUrl||'')}" placeholder="course-1on1.png">
+        </div>
         <div class="field" style="margin-bottom:0">
           <label>文章內容（純文章 / 連結 + 補充說明才填，留空表示純連結教材）</label>
           ${colorToolbarHtml('mat_' + i)}
@@ -7910,6 +7941,9 @@ function renderSettings() {
         }
       };
     });
+    wrap.querySelectorAll('[data-mat-image]').forEach(el => {
+      el.oninput = (e) => { mats[parseInt(el.dataset.matImage,10)].imageUrl = e.target.value.trim(); };
+    });
     wrap.querySelectorAll('[data-mat-content]').forEach(el => {
       el.onblur = () => { mats[parseInt(el.dataset.matContent,10)].content = sanitizeColorHtml(el.innerHTML); };
       el.oninput = () => { mats[parseInt(el.dataset.matContent,10)].content = el.innerHTML; };
@@ -7927,7 +7961,7 @@ function renderSettings() {
   renderMaterialsList();
   const matAddBtn = document.getElementById('mat_addMat');
   if (matAddBtn) matAddBtn.onclick = () => {
-    mats.push({ id: uid(), title: '', content: '', createdAt: new Date().toISOString() });
+    mats.push({ id: uid(), title: '', url: '', imageUrl: '', content: '', createdAt: new Date().toISOString() });
     renderMaterialsList();
   };
   const matSaveBtn = document.getElementById('mat_save');
@@ -7937,13 +7971,15 @@ function renderSettings() {
       .filter(m => {
         if (!(m.title || '').trim()) return false;
         const hasUrl = (m.url || '').trim();
+        const hasImage = (m.imageUrl || '').trim();
         const hasContent = sanitizeColorHtml(m.content || '').replace(/<[^>]+>/g, '').trim();
-        return hasUrl || hasContent;
+        return hasUrl || hasImage || hasContent;
       })
       .map(m => ({
         id: m.id || uid(),
         title: (m.title || '').trim(),
         url: cleanUrl((m.url || '').trim()),
+        imageUrl: (m.imageUrl || '').trim(),
         content: sanitizeColorHtml(m.content || ''),
         createdAt: m.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
