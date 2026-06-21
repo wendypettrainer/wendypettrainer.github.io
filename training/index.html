@@ -2054,6 +2054,10 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+// 報告頁版本號（破快取用）——GitHub Pages 無法設快取標頭，靠網址帶 ?v= 強制重抓。
+// ⚠️ 每次修改 report.html / report-pet.html / report-studio.html，都要把這個值改掉（例如換日期）。
+const REPORT_VER = '20260621';
+
 // 建構飼主檢視 URL，支援 user-page 模式（repo = user.github.io）+ 子目錄部署
 function buildReportUrl(settings, gistId) {
   const user = (settings.githubUser || '').trim();
@@ -2068,7 +2072,7 @@ function buildReportUrl(settings, gistId) {
   // 子目錄（例：'training'）
   const sub = (settings.pagesSubPath || '').replace(/^\/+|\/+$/g, '');
   if (sub) base = base + '/' + sub;
-  return `${base}/report.html#gist=${gistId}`;
+  return `${base}/report.html?v=${REPORT_VER}#gist=${gistId}`;
 }
 
 function initStorage() {
@@ -7103,7 +7107,7 @@ async function shareToGist(sess, pet) {
 
 // 用 buildReportUrl 但檔名改 report-pet.html
 function buildParentReportUrl(settings, gistId) {
-  return buildReportUrl(settings, gistId).replace('/report.html#', '/report-pet.html#');
+  return buildReportUrl(settings, gistId).replace('/report.html?', '/report-pet.html?');
 }
 
 // 組家長報告 payload。依 pet.parentReportConfig.sections 決定包含哪些 section。
@@ -7258,7 +7262,7 @@ async function pushParentReport(pet) {
 
 // 用 buildReportUrl 但檔名改 report-studio.html
 function buildStudioReportUrl(settings, gistId) {
-  return buildReportUrl(settings, gistId).replace('/report.html#', '/report-studio.html#');
+  return buildReportUrl(settings, gistId).replace('/report.html?', '/report-studio.html?');
 }
 
 // 組教室總覽 payload：只收 source === 'studio' 的寵物。
