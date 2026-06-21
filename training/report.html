@@ -191,6 +191,24 @@
     color: var(--text-soft);
   }
   .err { color: var(--work); }
+  /* ── 列印（PDF）分頁規則 · 策略 C ──
+     問題：頁尾塞不下整個色塊時，Chrome 為了不切壞圓角(border-radius)會把整塊
+           推到下一頁，留下頁尾大空白。
+     對策：長的「步驟」色塊在列印時拿掉圓角並允許跨頁切開，填滿版面；
+           短的提示/注意/個別調整方塊維持完整，不被切到只剩一兩行。
+     僅 @media print 生效，螢幕瀏覽外觀不變。*/
+  @media print {
+    .block-step {
+      break-inside: auto;   /* 允許長步驟色塊跨頁 */
+      border-radius: 0;     /* 移除圓角，Chrome 才肯從頁緣把長色塊切開 */
+    }
+    .block-note, .block-tip, .item-petnote {
+      break-inside: avoid;  /* 小方塊保持完整 */
+    }
+    /* 標題/項目名稱不要被單獨留在頁尾（孤兒標題）*/
+    h2 { break-after: avoid; }
+    .item-row { break-after: avoid; }
+  }
 </style>
 </head>
 <body>
