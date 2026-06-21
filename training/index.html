@@ -6369,6 +6369,11 @@ function exportPdf(sess, pet) {
 <meta charset="UTF-8">
 <title>${escapeHtml(pet.name)}_${sess.date}</title>
 <style>
+  /* ⚠️⚠️ 課堂報告「版面有兩份」，class 名稱相同、極易改錯邊：
+       (1) 這裡 = exportPdf()，按「列印/存PDF」當場生成的彈窗 → 這才是 PDF 的真正來源。
+       (2) /training/report.html = 分享給家長「線上檢視」的網頁（不是 PDF 來源）。
+     色塊分頁、版面樣式要調整，務必【兩份一起改】，否則只會修到其中一份。
+     2026-06-21 曾因只改 report.html、PDF 卻來自這裡，繞了很久才發現。 */
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
   @page {
     size: A4;
