@@ -199,8 +199,10 @@
      僅 @media print 生效，螢幕瀏覽外觀不變。*/
   @media print {
     .block-step {
-      break-inside: auto;   /* 允許長步驟色塊跨頁 */
-      border-radius: 0;     /* 移除圓角，Chrome 才肯從頁緣把長色塊切開 */
+      white-space: normal;  /* 關鍵：解除 pre-line 的「整塊不可切」；換行已改用 <br> */
+      break-inside: auto;   /* 允許長步驟色塊逐行跨頁 */
+      border-radius: 0;     /* 移除圓角，邊緣切開才不會留圓角缺口 */
+      orphans: 2; widows: 2;
     }
     .block-note, .block-tip, .item-petnote {
       break-inside: avoid;  /* 小方塊保持完整 */
@@ -260,9 +262,13 @@ function legacyToBlocks(html) {
   let cur = null;
   const flush = () => {
     if (!cur) return;
-    const inner = cur.lines.join('<br>');
-    if (cur.type === 'plain') out.push(inner);
-    else out.push('<div class="block-' + cur.type + '">' + inner + '</div>');
+    let inner = cur.lines.join('<br>');
+    if (cur.type === 'plain') { out.push(inner); cur = null; return; }
+    // 步驟色塊：把使用者輸入的換行（\n）轉成真正的 <br>。
+    // 搭配列印時 .block-step { white-space: normal }，長色塊才能逐行跨頁切開，
+    // 避免 pre-line 把整塊當成「不可切割的整體」→ 頁尾留大空白。
+    if (cur.type === 'step') inner = inner.replace(/\n/g, '<br>');
+    out.push('<div class="block-' + cur.type + '">' + inner + '</div>');
     cur = null;
   };
   const detect = line => {
