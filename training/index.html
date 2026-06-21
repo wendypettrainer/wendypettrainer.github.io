@@ -1683,9 +1683,12 @@ function legacyToBlocks(html) {
   let cur = null;  // { type: 'step'|'note'|'tip'|'plain', lines: [] }
   const flush = () => {
     if (!cur) return;
-    const inner = cur.lines.join('<br>');
+    let inner = cur.lines.join('<br>');
     if (cur.type === 'plain') result.push(inner);
     else {
+      // 把色塊內殘留的 \n 換行轉成 <br>，搭配列印 CSS 的 white-space:normal，
+      // 長色塊才能逐行跨頁切開、不會整塊跳頁留大空白。
+      inner = inner.replace(/\n/g, '<br>');
       result.push(`<div class="block-${cur.type}">${inner}</div>`);
       // 在色塊之後加一個 <br> 當作游標停靠點，方便使用者在兩塊之間插入內容
       result.push('<br>');
@@ -6508,9 +6511,12 @@ function exportPdf(sess, pet) {
     padding: 6pt 8pt;
     margin: 4pt 0;
     border-radius: 4pt;
-    /* pre-line：保留色塊內部使用者輸入的 \n 換行（如多條 ⚠️），但折疊其他空白 */
-    white-space: pre-line;
-    page-break-inside: avoid;
+    /* 換行已在 legacyToBlocks 轉成 <br>，故用 normal。
+       關鍵：pre-line + page-break-inside:avoid 會把整塊鎖成「不可切割」，
+       塞不下就整塊跳到下一頁、頁尾留大空白。改成可逐行跨頁切。 */
+    white-space: normal;
+    page-break-inside: auto;
+    break-inside: auto;
   }
   .block-step { background: rgba(192,168,120,0.18); }
   .block-note { background: rgba(201,122,79,0.12); }
