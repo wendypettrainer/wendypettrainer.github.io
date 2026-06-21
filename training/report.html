@@ -135,8 +135,9 @@
     padding: 8px 10px;
     margin: 6px 0;
     border-radius: 6px;
-    /* pre-line：保留色塊內部使用者輸入的 \n 換行（如多條 ⚠️），但折疊其他空白 */
-    white-space: pre-line;
+    /* 換行已在 JS 轉成 <br>，故用 normal：色塊才能逐行跨頁切開、不留頁尾大空白。
+       （pre-line 會讓整塊被當成不可切割整體 → 塞不下就整塊跳頁留白） */
+    white-space: normal;
     line-height: 1.7;
   }
   .block-step { background: rgba(192,168,120,0.18); }
@@ -198,14 +199,12 @@
            短的提示/注意/個別調整方塊維持完整，不被切到只剩一兩行。
      僅 @media print 生效，螢幕瀏覽外觀不變。*/
   @media print {
-    .block-step {
-      white-space: normal;  /* 關鍵：解除 pre-line 的「整塊不可切」；換行已改用 <br> */
-      break-inside: auto;   /* 允許長步驟色塊逐行跨頁 */
-      border-radius: 0;     /* 移除圓角，邊緣切開才不會留圓角缺口 */
+    /* 所有色塊統一：允許跨頁切開填滿版面、去圓角讓邊緣切口乾淨。
+       不再用 break-inside:avoid，否則大段色塊塞不下又會整塊跳頁留白。 */
+    .block-step, .block-note, .block-tip {
+      break-inside: auto;
+      border-radius: 0;
       orphans: 2; widows: 2;
-    }
-    .block-note, .block-tip, .item-petnote {
-      break-inside: avoid;  /* 小方塊保持完整 */
     }
     /* 標題/項目名稱不要被單獨留在頁尾（孤兒標題）*/
     h2 { break-after: avoid; }
@@ -264,10 +263,9 @@ function legacyToBlocks(html) {
     if (!cur) return;
     let inner = cur.lines.join('<br>');
     if (cur.type === 'plain') { out.push(inner); cur = null; return; }
-    // 步驟色塊：把使用者輸入的換行（\n）轉成真正的 <br>。
-    // 搭配列印時 .block-step { white-space: normal }，長色塊才能逐行跨頁切開，
-    // 避免 pre-line 把整塊當成「不可切割的整體」→ 頁尾留大空白。
-    if (cur.type === 'step') inner = inner.replace(/\n/g, '<br>');
+    // 所有色塊（步驟/注意/提示）：把使用者輸入的換行（\n）轉成真正的 <br>，
+    // 搭配 white-space:normal，長色塊才能逐行跨頁切開，避免整塊跳頁留大空白。
+    inner = inner.replace(/\n/g, '<br>');
     out.push('<div class="block-' + cur.type + '">' + inner + '</div>');
     cur = null;
   };
