@@ -4692,13 +4692,20 @@ function attachmentPdfHtml(sess) {
   const linksHtml = links.length === 0 ? '' : `
     <section style="margin-top:20pt; page-break-inside:avoid">
       <h2 style="color:#6b5435; font-size:14pt; margin:0 0 8pt; border-bottom:1.5pt solid #c9a85a; padding-bottom:4pt">🔗 相關資源連結</h2>
+      <div style="font-size:9.5pt; color:#8a7e6f; margin:0 0 8pt">📱 用手機或電腦開啟本報告，點選標題或網址即可直接前往觀看。</div>
       <ul style="font-size:11pt; line-height:1.5; color:#2d2620; padding-left:20pt; margin:0">
-        ${links.map(l => `
-          <li style="margin-bottom:6pt">
-            <b>${escapeHtml(l.title || l.url)}</b><br>
-            <span style="font-size:9pt; color:#8a7e6f; word-break:break-all">${escapeHtml(l.url)}</span>
-          </li>
-        `).join('')}
+        ${links.map(l => {
+          const u = (l.url || '').trim();
+          const ok = /^https?:\/\//i.test(u);   // 只把 http(s) 變成可點連結，擋掉 javascript: 等
+          const t = escapeHtml(l.title || u || '（未命名連結）');
+          const titleHtml = ok
+            ? '<a href="' + escapeAttr(u) + '" style="color:#6b5435; text-decoration:underline">' + t + '</a>'
+            : t;
+          const urlHtml = !u ? '' : (ok
+            ? '<br><a href="' + escapeAttr(u) + '" style="font-size:9pt; color:#8a7e6f; text-decoration:underline; word-break:break-all">' + escapeHtml(u) + '</a>'
+            : '<br><span style="font-size:9pt; color:#8a7e6f; word-break:break-all">' + escapeHtml(u) + '</span>');
+          return '<li style="margin-bottom:6pt"><b>' + titleHtml + '</b>' + urlHtml + '</li>';
+        }).join('')}
       </ul>
     </section>
   `;
